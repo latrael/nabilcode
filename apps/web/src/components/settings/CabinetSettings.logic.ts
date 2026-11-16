@@ -1,4 +1,4 @@
-import type { CabinetState, CabinetStatus } from "@t3tools/contracts";
+import type { CabinetAgentToolsOffReason, CabinetState, CabinetStatus } from "@t3tools/contracts";
 import { msg } from "gt-react";
 
 export type CabinetBadgeVariant = "success" | "warning" | "error" | "secondary";
@@ -20,3 +20,10 @@ export function cabinetStatusDetail(
   const who = status.via && status.author ? `${status.via}:${status.author}` : (status.via ?? "");
   return [status.version ? `v${status.version}` : "", who].filter(Boolean).join(" · ");
 }
+
+export const CABINET_AGENT_TOOLS_OFF_REASONS: Readonly<Record<CabinetAgentToolsOffReason, string>> =
+  {
+    disabled: msg("Off while Cabinet is off."),
+    "no-agent-token": msg("Off until you add an agent token."),
+    offline: msg("Off while Cabinet is unreachable."),
+  };

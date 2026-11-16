@@ -50,6 +50,7 @@ import {
 import { ProviderWorkspaceMissingError } from "../provider/Errors.ts";
 import * as ProviderInstallationGate from "../provider/ProviderInstallationGate.ts";
 import * as ProjectService from "../project/ProjectService.ts";
+import * as CabinetAgentContext from "../cabinet/CabinetAgentContext.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as ServerSettings from "../serverSettings.ts";
 import * as McpSessionRegistry from "../mcp/McpSessionRegistry.ts";
@@ -431,6 +432,9 @@ export const layerWithOptions = (
       /** Unreadable settings must preserve explicit browser-access opt-outs. */
       const serverSettings = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
       const projectService = yield* Effect.serviceOption(ProjectService.ProjectService);
+      const cabinetAgentContext = yield* Effect.serviceOption(
+        CabinetAgentContext.CabinetAgentContext,
+      );
       const eventSink = yield* EventSink.EventSinkV2;
       const commandOutput = yield* CommandOutputHub.CommandOutputHub;
       const promptSuggestionStore = yield* SubscriptionRef.make<
@@ -555,10 +559,9 @@ export const layerWithOptions = (
                   import("../mcp/McpInvocationContext.ts").McpCapability
                 >(["orchestration", "worktree", "pull-requests"]);
                 if (browserToolsAvailable) capabilities.add("preview");
-                const subagent = yield* projectionStore.getThread(threadId).pipe(
-                  Effect.map((thread) => thread.lineage.relationshipToParent === "subagent"),
-                  Effect.orElseSucceed(() => false),
-                );
+                const thread = yield* projectionStore.getThread(threadId).pipe(Effect.option);
+                const subagent =
+                  Option.isSome(thread) && thread.value.lineage.relationshipToParent === "subagent";
                 const existing = yield* mcpSessions.read(threadId);
                 if (existing !== undefined) {
                   // Reserve before async validation so release cannot revoke between validation and reservation.
@@ -594,6 +597,7 @@ export const layerWithOptions = (
                   capabilities,
                   subagent,
                 });
+                const projectId = Option.isSome(thread) ? thread.value.projectId : undefined;
                 yield* mcpSessions.set({
                   ...credential.config,
                   hasPendingWake: projectionStore
@@ -602,6 +606,14 @@ export const layerWithOptions = (
                       Effect.map(delegatedTaskWillWake),
                       Effect.orElseSucceed(() => false),
                     ),
+                  ...(Option.isNone(cabinetAgentContext)
+                    ? {}
+                    : {
+                        externalMcpServers: (agent: string) =>
+                          cabinetAgentContext.value.mcpServers({ threadId, projectId, agent }),
+                        firstTurnPriming: (tools: boolean) =>
+                          cabinetAgentContext.value.firstTurnPriming({ projectId, tools }),
+                      }),
                 });
                 reserveMcpCredential(threadId, credential.config.providerSessionId);
                 return { mcpCredentialId: credential.config.providerSessionId, issued: true };

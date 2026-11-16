@@ -56,6 +56,16 @@ export function createCabinetEnvironmentAtoms<R, E>(
       label: "environment-data:cabinet:capture",
       tag: WS_METHODS.cabinetCapture,
     }),
+    // Copies a project's README, AGENTS, CLAUDE and docs into Cabinet and links the project.
+    ingestProject: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:cabinet:ingest-project",
+      tag: WS_METHODS.cabinetIngestProject,
+    }),
+    // Drops the link only; Cabinet keeps everything it holds.
+    unlinkProject: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:cabinet:unlink-project",
+      tag: WS_METHODS.cabinetUnlinkProject,
+    }),
     // `{kind, id?, path?}` per change; `resync` means refetch. Rechunked so none is dropped.
     events: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:cabinet:events",

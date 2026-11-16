@@ -1363,10 +1363,27 @@ export type CabinetMcpTransport = typeof CabinetMcpTransport.Type;
 export const CabinetSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   baseUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed("http://127.0.0.1:4747"))),
+  /** The harness token. It may carry review scope, which Cabinet refuses on MCP, so agents never get it. */
   token: SettingsSecretValue.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   mcpTransport: CabinetMcpTransport.pipe(Schema.withDecodingDefault(Effect.succeed("http"))),
+  /** A plain token for agents' MCP tools over HTTP. */
+  agentToken: SettingsSecretValue.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /** The Cabinet CLI agents start for MCP over stdio. */
+  cliCommand: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed("cabinet"))),
 });
 export type CabinetSettings = typeof CabinetSettings.Type;
+
+export type CabinetAgentToolsOffReason = "disabled" | "no-agent-token" | "offline";
+
+/** Why agents get no Cabinet MCP tools, or null when they do. */
+export function cabinetAgentToolsOffReason(
+  settings: Pick<CabinetSettings, "enabled" | "mcpTransport" | "agentToken">,
+  reachable: boolean,
+): CabinetAgentToolsOffReason | null {
+  if (!settings.enabled) return "disabled";
+  if (settings.mcpTransport === "http" && settings.agentToken === "") return "no-agent-token";
+  return reachable ? null : "offline";
+}
 
 export const ServerSettings = Schema.Struct({
   // Null means unmigrated; empty is authoritative and must not resurrect cleared preferences.
@@ -1411,6 +1428,8 @@ export const ServerSettings = Schema.Struct({
         baseUrl: "http://127.0.0.1:4747",
         token: "",
         mcpTransport: "http" as const,
+        agentToken: "",
+        cliCommand: "cabinet",
       }),
     ),
   ),
@@ -1871,6 +1890,8 @@ export const ServerSettingsPatch = Schema.Struct({
       baseUrl: Schema.optionalKey(TrimmedString),
       token: Schema.optionalKey(SettingsSecretValue),
       mcpTransport: Schema.optionalKey(CabinetMcpTransport),
+      agentToken: Schema.optionalKey(SettingsSecretValue),
+      cliCommand: Schema.optionalKey(TrimmedString),
     }),
   ),
   speechModelId: Schema.optionalKey(Schema.String),

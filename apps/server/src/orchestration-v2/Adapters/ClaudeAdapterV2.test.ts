@@ -674,6 +674,13 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
     },
   } as const;
 
+  const CABINET_HTTP = {
+    transport: "http",
+    name: "cabinet",
+    url: "http://127.0.0.1:4749/mcp",
+    headers: { Authorization: "Bearer cab_agent", "X-Cabinet-Thread": "thread-claude-cabinet" },
+  } satisfies McpProviderSession.ExternalMcpServer;
+
   const mcpSessionFor = (
     threadId: ThreadId,
     authorizationHeader = "Bearer secret-claude-token",
@@ -729,6 +736,68 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
       }),
     );
     assert.notEqual(rotatedKey, initialKey);
+
+    // Turning Cabinet on, or changing its token or URL, must rebuild the live query too.
+    const cabinetKey = (server: McpProviderSession.ExternalMcpServer) =>
+      ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(
+        queryPolicy,
+        ClaudeAdapterV2.claudeMcpQueryOverrides({
+          mcpSession,
+          readOnlySandbox: false,
+          externalMcpServers: [server],
+        }),
+      );
+    const keys = [
+      initialKey,
+      cabinetKey(CABINET_HTTP),
+      cabinetKey({ ...CABINET_HTTP, headers: { Authorization: "Bearer rotated-agent-token" } }),
+      cabinetKey({ ...CABINET_HTTP, url: "http://127.0.0.1:4800/mcp" }),
+    ];
+    assert.equal(new Set(keys).size, keys.length);
+  });
+
+  it("adds external servers such as Cabinet, pre-approved outside read-only sandboxes", () => {
+    const mcpSession = mcpSessionFor(ThreadId.make("thread-claude-cabinet"));
+    assert.deepEqual(
+      ClaudeAdapterV2.claudeMcpQueryOverrides({
+        mcpSession,
+        readOnlySandbox: false,
+        externalMcpServers: [CABINET_HTTP],
+      }),
+      {
+        allowedTools: [ClaudeAdapterV2.CLAUDE_T3_MCP_TOOL_WILDCARD, "mcp__cabinet__*"],
+        mcpServers: {
+          ...T3_MCP_SERVERS,
+          cabinet: {
+            type: "http",
+            url: "http://127.0.0.1:4749/mcp",
+            headers: CABINET_HTTP.headers,
+          },
+        },
+      },
+    );
+    const stdio = ClaudeAdapterV2.claudeMcpQueryOverrides({
+      mcpSession,
+      readOnlySandbox: true,
+      externalMcpServers: [
+        {
+          transport: "stdio",
+          name: "cabinet",
+          command: "cabinet",
+          args: ["mcp", "--agent", "nabilinc-claude"],
+        },
+      ],
+    });
+    assert.deepEqual(stdio.mcpServers?.["cabinet"], {
+      type: "stdio",
+      command: "cabinet",
+      args: ["mcp", "--agent", "nabilinc-claude"],
+    });
+    assert.notInclude(stdio.allowedTools ?? [], "mcp__cabinet__*");
+    assert.notProperty(
+      ClaudeAdapterV2.claudeMcpQueryOverrides({ mcpSession, readOnlySandbox: false }).mcpServers,
+      "cabinet",
+    );
   });
 
   it("matches the read-only allowlist to the orchestrator toolkit annotations", () => {

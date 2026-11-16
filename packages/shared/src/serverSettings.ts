@@ -256,8 +256,9 @@ const knownProjectOverrideKeys = new Set(Object.keys(ProjectSettingsOverrides.fi
 
 function pickOverrideKeys(entry: ProjectSettingsOverrides | undefined, known: boolean) {
   return Object.fromEntries(
+    // An explicit undefined drops the key, which is how in-process callers clear a retained override.
     Object.entries<unknown>(entry ?? {}).filter(
-      ([key]) => knownProjectOverrideKeys.has(key) === known,
+      ([key, value]) => value !== undefined && knownProjectOverrideKeys.has(key) === known,
     ),
   );
 }

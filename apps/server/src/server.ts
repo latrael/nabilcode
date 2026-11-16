@@ -49,6 +49,8 @@ import * as NodePtyAdapter from "./terminal/NodePtyAdapter.ts";
 import * as PullRequestHttp from "./pullRequest/http.ts";
 import * as SpeechModelStore from "./speech/SpeechModelStore.ts";
 import * as SpeechService from "./speech/SpeechService.ts";
+import * as CabinetIngest from "./cabinet/CabinetIngest.ts";
+import * as CabinetAgentContext from "./cabinet/CabinetAgentContext.ts";
 import * as CabinetService from "./cabinet/CabinetService.ts";
 import * as CloudSpeech from "./speech/CloudSpeech.ts";
 import { speechHttpApiLayer } from "./speech/http.ts";
@@ -705,6 +707,8 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),
 ).pipe(
   Layer.provideMerge(layerOrchestrationApplication),
+  // Provider sessions read it to give agents Cabinet's MCP tools and first-turn priming.
+  Layer.provideMerge(CabinetAgentContext.layer.pipe(Layer.provide(CabinetService.layer))),
   Layer.provideMerge(RuntimeLayer.layerEventInfrastructure),
   Layer.provideMerge(Layer.merge(ProjectStore.layer, ThreadSearch.layer)),
   Layer.provideMerge(SecretCheck.layer),
@@ -1315,9 +1319,13 @@ const layerMakeServer = Layer.unwrap(
       // Route handlers take their services from here, so the asset route and the WebSocket share
       // this instance, and with it the one upstream event connection.
       Layer.provide(
-        CabinetService.layer.pipe(
-          Layer.provide(SecretResolver.layer),
-          Layer.provide(layerServerSettings),
+        CabinetIngest.layer.pipe(
+          Layer.provideMerge(
+            CabinetService.layer.pipe(
+              Layer.provide(SecretResolver.layer),
+              Layer.provide(layerServerSettings),
+            ),
+          ),
         ),
       ),
       Layer.provide(CloudLink.layer.pipe(Layer.provideMerge(ConnectReachability.layer))),

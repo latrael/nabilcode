@@ -289,12 +289,17 @@ describe("CodexAdapterV2 runtime policy", () => {
         modelSelection,
         hasT3Mcp: true,
         appContext,
+        primingText: "## Cabinet project: Reading corner",
       });
       assert.deepEqual(withT3.additionalContext?.["mcp_app_todos_list_todos_item-1"], {
         kind: "untrusted",
         value: "Filtered to overdue",
       });
       assert.isDefined(withT3.additionalContext?.["t3_code_runtime"]);
+      assert.deepEqual(withT3.additionalContext?.["t3_code_priming"], {
+        kind: "application",
+        value: "## Cabinet project: Reading corner",
+      });
     }),
   );
 });
@@ -2118,6 +2123,15 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         endpoint: "http://127.0.0.1:43123/mcp",
         authorizationHeader: "Bearer secret-codex-token",
         browserToolsAvailable: true,
+        externalMcpServers: (agent) =>
+          Effect.succeed([
+            {
+              transport: "http",
+              name: "cabinet",
+              url: "http://127.0.0.1:4749/mcp",
+              headers: { Authorization: "Bearer cab_agent", "X-Cabinet-Agent": agent },
+            },
+          ]),
       });
       const requests: Array<unknown> = [];
       yield* makeCodexReplayHarness(
@@ -2156,6 +2170,10 @@ describe("CodexAdapterV2 post-settle continuation", () => {
               http_headers: { Authorization: "Bearer secret-codex-token" },
               enabled_tools: ["t3_thread_wait", "delegate_task"],
               omit_tools_from: ["code_mode", "deferred"],
+            },
+            "mcp_servers.cabinet": {
+              url: "http://127.0.0.1:4749/mcp",
+              http_headers: { Authorization: "Bearer cab_agent", "X-Cabinet-Agent": "codex" },
             },
           },
         },

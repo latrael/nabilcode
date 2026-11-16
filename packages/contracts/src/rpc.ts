@@ -371,6 +371,13 @@ import {
   CabinetUpdateItemInput,
 } from "./cabinet.ts";
 import {
+  CabinetIngestError,
+  CabinetIngestProjectInput,
+  CabinetIngestProjectResult,
+  CabinetUnlinkProjectInput,
+  CabinetUnlinkProjectResult,
+} from "./cabinetIngest.ts";
+import {
   ScheduledTaskDeleteInput,
   ScheduledTaskDeleteResult,
   ScheduledTaskError,
@@ -527,6 +534,8 @@ export const WS_METHODS = {
   cabinetUpdateItem: "cabinet.updateItem",
   cabinetAddToProject: "cabinet.addToProject",
   cabinetCapture: "cabinet.capture",
+  cabinetIngestProject: "cabinet.ingestProject",
+  cabinetUnlinkProject: "cabinet.unlinkProject",
   cabinetSubscribeEvents: "cabinet.subscribeEvents",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
@@ -918,6 +927,18 @@ const WsCabinetCaptureRpc = Rpc.make(WS_METHODS.cabinetCapture, {
   payload: CabinetCaptureInput,
   success: CabinetCaptureResult,
   error: CabinetRpcError,
+});
+
+const WsCabinetIngestProjectRpc = Rpc.make(WS_METHODS.cabinetIngestProject, {
+  payload: CabinetIngestProjectInput,
+  success: CabinetIngestProjectResult,
+  error: Schema.Union([CabinetError, CabinetIngestError, EnvironmentAuthorizationError]),
+});
+
+const WsCabinetUnlinkProjectRpc = Rpc.make(WS_METHODS.cabinetUnlinkProject, {
+  payload: CabinetUnlinkProjectInput,
+  success: CabinetUnlinkProjectResult,
+  error: Schema.Union([CabinetIngestError, EnvironmentAuthorizationError]),
 });
 
 const WsCabinetSubscribeEventsRpc = Rpc.make(WS_METHODS.cabinetSubscribeEvents, {
@@ -2176,6 +2197,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsCabinetUpdateItemRpc,
   WsCabinetAddToProjectRpc,
   WsCabinetCaptureRpc,
+  WsCabinetIngestProjectRpc,
+  WsCabinetUnlinkProjectRpc,
   WsCabinetSubscribeEventsRpc,
   WsPeerLinksLinkRpc,
   WsPeerLinksUnlinkRpc,

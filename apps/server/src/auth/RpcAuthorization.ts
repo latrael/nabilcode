@@ -104,6 +104,8 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.cabinetUpdateItem]: AuthOrchestrationOperateScope,
   [WS_METHODS.cabinetAddToProject]: AuthOrchestrationOperateScope,
   [WS_METHODS.cabinetCapture]: AuthOrchestrationOperateScope,
+  [WS_METHODS.cabinetIngestProject]: AuthOrchestrationOperateScope,
+  [WS_METHODS.cabinetUnlinkProject]: AuthOrchestrationOperateScope,
   // Tries a base URL and token with the saved token's reach, so only those who edit settings may.
   [WS_METHODS.cabinetTestConnection]: AuthSettingsWriteScope,
   [WS_METHODS.serverUpdateSettings]: AuthSettingsWriteScope,

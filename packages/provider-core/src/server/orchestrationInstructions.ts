@@ -58,10 +58,13 @@ export function t3AcpPromptWithInstructions(input: {
   readonly prompt: string;
   readonly state: T3AcpInstructionState;
   readonly previousState?: T3AcpInstructionState;
+  /** First-turn context from outside T3, such as the thread's Cabinet project. */
+  readonly priming?: string;
 }): string {
   // Native slash commands must remain at the start of the prompt.
   if (input.prompt.trimStart().startsWith("/")) return input.prompt;
   if (
+    input.priming === undefined &&
     input.previousState?.interactionMode === input.state.interactionMode &&
     input.previousState.hasT3Mcp === input.state.hasT3Mcp
   ) {
@@ -78,6 +81,7 @@ export function t3AcpPromptWithInstructions(input: {
           T3_CODE_ACP_MCP_FALLBACK_INSTRUCTIONS,
         ]
       : []),
+    ...(input.priming === undefined ? [] : [input.priming]),
   ];
   return `<t3_code_instructions>\n${instructions.join("\n\n")}\n</t3_code_instructions>\n\n<user_request>\n${input.prompt}\n</user_request>`;
 }

@@ -2147,6 +2147,8 @@ export function makeClaudeQueryOptions(input: {
   readonly supportedDialogKinds?: ClaudeQueryOptions["supportedDialogKinds"];
   readonly allowDangerouslySkipPermissions?: boolean;
   readonly appendSystemPromptFileText?: string;
+  /** First-turn context from outside T3, such as the thread's Cabinet project. */
+  readonly primingText?: string;
   // Flag settings, because a user's settings.json env beats the process env in Claude Code.
   readonly toolSearchOverride?: "true";
 }): ClaudeAgentSdkQueryOptions {
@@ -2291,6 +2293,7 @@ export function makeClaudeQueryOptions(input: {
             : T3_CODE_ORCHESTRATION_INSTRUCTIONS +
               CLAUDE_BACKGROUND_WAIT_INSTRUCTIONS +
               CLAUDE_SEND_TO_USER_INSTRUCTIONS),
+        ...(input.primingText === undefined ? [] : [input.primingText]),
         ...launchAppendSystemPrompt,
       ].join("\n\n"),
     },
@@ -2421,6 +2424,8 @@ export function claudeMcpQueryOverrides(input: {
   readonly mcpSession: McpProviderSession.McpProviderSessionConfig | undefined;
   readonly readOnlySandbox: boolean;
   readonly allowedTools?: ReadonlyArray<string>;
+  /** Servers such as Cabinet; their tools are pre-approved outside read-only sandboxes. */
+  readonly externalMcpServers?: ReadonlyArray<McpProviderSession.ExternalMcpServer>;
 }): {
   readonly allowedTools?: ReadonlyArray<string>;
   readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
@@ -2429,9 +2434,10 @@ export function claudeMcpQueryOverrides(input: {
   if (session === undefined) {
     return input.allowedTools === undefined ? {} : { allowedTools: input.allowedTools };
   }
+  const external = input.externalMcpServers ?? [];
   const mcpAllowedTools = input.readOnlySandbox
     ? CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS
-    : [CLAUDE_T3_MCP_TOOL_WILDCARD];
+    : [CLAUDE_T3_MCP_TOOL_WILDCARD, ...external.map((server) => `mcp__${server.name}__*`)];
   return {
     allowedTools: Array.from(new Set([...(input.allowedTools ?? []), ...mcpAllowedTools])),
     mcpServers: {
@@ -2443,6 +2449,14 @@ export function claudeMcpQueryOverrides(input: {
         },
         timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
       },
+      ...Object.fromEntries(
+        external.map((server) => [
+          server.name,
+          server.transport === "http"
+            ? { type: "http" as const, url: server.url, headers: { ...server.headers } }
+            : { type: "stdio" as const, command: server.command, args: [...server.args] },
+        ]),
+      ),
     },
   };
 }
@@ -12546,6 +12560,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           queryPolicy: Effect.Success<ReturnType<typeof queryPolicyForTurn>>,
         ) {
           const mcpSession = yield* mcpSessions.read(turnInput.threadId);
+          const externalMcpServers = yield* McpProviderSession.readExternalMcpServers(
+            mcpSession,
+            "claude",
+          );
           // Claude Code defers its goal Stop hook only for its own background tasks, so a goal
           // re-prompts in a loop while T3 work that will wake this thread is still running.
           const onStop: HookCallback = () =>
@@ -12558,6 +12576,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             );
           const mcpOverrides = claudeMcpQueryOverrides({
             mcpSession,
+            externalMcpServers,
             readOnlySandbox:
               sandboxPolicyKindForClaudeRuntimePolicy(turnInput.runtimePolicy) === "readOnly",
             ...(queryPolicy.allowedTools === undefined
@@ -12659,7 +12678,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           }
 
           // Read before closing the live process so a bad path leaves it running.
-          const [appendSystemPromptFileText, toolSearchOverride] = yield* Effect.all(
+          const [appendSystemPromptFileText, toolSearchOverride, primingText] = yield* Effect.all(
             [
               readClaudeAppendSystemPromptFile({
                 settings: adapterOptions.settings,
@@ -12668,6 +12687,11 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 path,
               }),
               resolveToolSearchOverride(turnInput.runtimePolicy.cwd, launchArgSettings),
+              McpProviderSession.readFirstTurnPriming(
+                mcpSession,
+                turnInput,
+                Effect.succeed(externalMcpServers.length > 0),
+              ),
             ],
             { concurrency: "unbounded" },
           );
@@ -12733,6 +12757,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             supportedDialogKinds: ["resume_return"],
             ...(appendSystemPromptFileText === undefined ? {} : { appendSystemPromptFileText }),
             ...(toolSearchOverride === undefined ? {} : { toolSearchOverride }),
+            ...(primingText === undefined ? {} : { primingText }),
           });
           const resolvedTurnCwd = yield* fileSystem
             .realPath(turnInput.runtimePolicy.cwd ?? ".")

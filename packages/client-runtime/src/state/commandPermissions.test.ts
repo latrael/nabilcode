@@ -205,6 +205,8 @@ describe("command permissions", () => {
     WS_METHODS.cabinetUpdateItem,
     WS_METHODS.cabinetAddToProject,
     WS_METHODS.cabinetCapture,
+    WS_METHODS.cabinetIngestProject,
+    WS_METHODS.cabinetUnlinkProject,
   ])("uses the target grant for both availability and execution of %s", (method) =>
     Effect.gen(function* () {
       const registry = yield* setup;

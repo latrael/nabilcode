@@ -78,6 +78,8 @@ const RPC_AGGREGATES = {
   [WS_METHODS.cabinetUpdateItem]: "cabinet",
   [WS_METHODS.cabinetAddToProject]: "cabinet",
   [WS_METHODS.cabinetCapture]: "cabinet",
+  [WS_METHODS.cabinetIngestProject]: "cabinet",
+  [WS_METHODS.cabinetUnlinkProject]: "cabinet",
   [WS_METHODS.cabinetSubscribeEvents]: "cabinet",
   [WS_METHODS.peerLinksLink]: "peerLinks",
   [WS_METHODS.peerLinksUnlink]: "peerLinks",

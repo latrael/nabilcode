@@ -75,6 +75,7 @@ import { makeAcpMcpOverAcpBridge, type AcpMcpOverAcpBridge } from "./mcpOverAcpB
 import { mcpToolPresentation } from "@t3tools/provider-core/server/mcpToolPresentation";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
+import { acpExternalMcpServers } from "./externalMcpServers.ts";
 import {
   applyAcpAgentTerminalUpdate,
   acpContentBlockDisplayText,
@@ -912,6 +913,7 @@ function acpMcpContext(
   self: SelfInvocation,
   mcpOverHttp: boolean | undefined,
   deferMcpTools: boolean | undefined,
+  external: ReadonlyArray<EffectAcpSchema.McpServer> = [],
 ): AcpMcpContext {
   if (session === undefined) {
     return { servers: [], acpServers: [], httpServers: [] };
@@ -919,6 +921,7 @@ function acpMcpContext(
   // codex-acp 1.2.0 and pi-acp drop injected HTTP servers, so HTTP is opt-in per flavor.
   return {
     servers: [
+      ...(mcpOverHttp === true ? [] : external),
       {
         name: "t3-code",
         command: self.command,
@@ -930,10 +933,11 @@ function acpMcpContext(
         ],
       },
     ],
-    acpServers: [{ type: "acp", name: "t3-code", serverId: "t3-code" }],
+    acpServers: [{ type: "acp", name: "t3-code", serverId: "t3-code" }, ...external],
     httpServers:
       mcpOverHttp === true
         ? [
+            ...external,
             {
               type: "http",
               name: "t3-code",
@@ -1827,14 +1831,24 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
   const host = yield* ProviderHost.ProviderHost;
   const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
   const { flavor, selfInvocation: self } = options;
+  const readExternalMcpServers = (
+    session: McpProviderSession.McpProviderSessionConfig | undefined,
+  ) =>
+    McpProviderSession.readExternalMcpServers(session, flavor.driver).pipe(
+      Effect.map((servers) => acpExternalMcpServers(servers, flavor.mcpOverHttp)),
+    );
   const readMcpContext = (threadId: ThreadId | null) =>
     threadId === null
       ? Effect.succeed(acpMcpContext(undefined, self, flavor.mcpOverHttp, flavor.deferMcpTools))
       : mcpSessions
           .read(threadId)
           .pipe(
-            Effect.map((session) =>
-              acpMcpContext(session, self, flavor.mcpOverHttp, flavor.deferMcpTools),
+            Effect.flatMap((session) =>
+              readExternalMcpServers(session).pipe(
+                Effect.map((external) =>
+                  acpMcpContext(session, self, flavor.mcpOverHttp, flavor.deferMcpTools, external),
+                ),
+              ),
             ),
           );
   const driver = flavor.driver;
@@ -8435,9 +8449,19 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
           // while the prompt is prepared still resends the notes in this prompt.
           const previousInstructionState = (yield* Ref.get(promptInstructionStates)).get(sessionId);
           const compactionMarker = (yield* Ref.get(compactionMarkers)).get(sessionId);
+          const primingText = isNativeSlashCommand
+            ? undefined
+            : yield* McpProviderSession.readFirstTurnPriming(
+                mcpSession,
+                turnInput,
+                readExternalMcpServers(mcpSession).pipe(
+                  Effect.map((servers) => servers.length > 0),
+                ),
+              );
           const text = t3AcpPromptWithInstructions({
             prompt: messageText,
             state: instructionState,
+            ...(primingText === undefined ? {} : { priming: primingText }),
             ...(previousInstructionState === undefined || compactionMarker !== undefined
               ? {}
               : { previousState: previousInstructionState }),

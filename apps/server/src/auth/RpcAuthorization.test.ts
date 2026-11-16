@@ -83,6 +83,8 @@ describe("RPC authorization scopes", () => {
       WS_METHODS.cabinetUpdateItem,
       WS_METHODS.cabinetAddToProject,
       WS_METHODS.cabinetCapture,
+      WS_METHODS.cabinetIngestProject,
+      WS_METHODS.cabinetUnlinkProject,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
     }

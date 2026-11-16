@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import { McpServer } from "effect/ai";
 
 import { AssetSigner } from "../assets/AssetSigner.ts";
+import { CabinetIngest } from "../cabinet/CabinetIngest.ts";
 import { ServerSecretStore } from "../auth/ServerSecretStore.ts";
 import { ServerConfig } from "../config.ts";
 import { ServerEnvironment } from "../environment/ServerEnvironment.ts";
@@ -50,6 +51,7 @@ import budget from "./agentContextBudget.json" with { type: "json" };
 // Registration only stores tool definitions, so the handlers' services are never called.
 const toolHandlerServices = Layer.mergeAll(
   Layer.mock(AssetSigner)({}),
+  Layer.mock(CabinetIngest)({}),
   Layer.mock(DocumentText)({}),
   Layer.mock(EnvironmentThemeService)({}),
   Layer.mock(GitVcsDriver)({}),

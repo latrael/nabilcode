@@ -261,6 +261,22 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["http stdio agents tools model context protocol"],
   },
   {
+    id: "cabinet-agent-token",
+    title: "Cabinet agent token",
+    to: "/settings/cabinet",
+    scope: "environment-defaults",
+    environmentOnly: true,
+    searchTerms: ["mcp agents tools api key secret credential http"],
+  },
+  {
+    id: "cabinet-cli-command",
+    title: "Cabinet CLI command",
+    to: "/settings/cabinet",
+    scope: "environment-defaults",
+    environmentOnly: true,
+    searchTerms: ["mcp stdio agents executable path command"],
+  },
+  {
     id: "storage-worktree-keep-when",
     targetId: "storage-worktrees",
     title: "Keep worktrees with local changes",

@@ -505,6 +505,8 @@ describe("cabinet settings", () => {
       baseUrl: "http://127.0.0.1:4747",
       token: "",
       mcpTransport: "http",
+      agentToken: "",
+      cliCommand: "cabinet",
     });
     expect(decodeServerSettings({ cabinet: { enabled: true } }).cabinet).toEqual({
       ...DEFAULT_SERVER_SETTINGS.cabinet,

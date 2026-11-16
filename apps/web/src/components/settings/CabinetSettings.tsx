@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
   AuthSettingsWriteScope,
+  cabinetAgentToolsOffReason,
   type CabinetStatus,
   type EnvironmentId,
   isSecretReference,
@@ -22,7 +23,11 @@ import { DraftInput } from "../ui/draft-input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Spinner } from "../ui/spinner";
 import { Switch } from "../ui/switch";
-import { CABINET_STATE_DISPLAY, cabinetStatusDetail } from "./CabinetSettings.logic";
+import {
+  CABINET_AGENT_TOOLS_OFF_REASONS,
+  CABINET_STATE_DISPLAY,
+  cabinetStatusDetail,
+} from "./CabinetSettings.logic";
 import { SecretSourceInput, useSecretSources } from "./SecretSourceInput";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
@@ -88,6 +93,9 @@ function CabinetSettings({ environmentId }: { readonly environmentId: Environmen
     setTestResult(null);
     updateSettings({ cabinet: { token: next } });
   };
+  const agentTokenConfigured = typeof cabinet.agentToken === "string" && cabinet.agentToken !== "";
+  const saveAgentToken = (next: SettingsSecretValue) =>
+    updateSettings({ cabinet: { agentToken: next } });
 
   const runTest = async () => {
     setTesting(true);
@@ -105,6 +113,10 @@ function CabinetSettings({ environmentId }: { readonly environmentId: Environmen
   };
 
   const liveStatus = AsyncResult.isSuccess(status) ? status.value : null;
+  const agentToolsOff =
+    liveStatus === null
+      ? null
+      : cabinetAgentToolsOffReason(cabinet, liveStatus.state !== "disconnected");
   return (
     <SettingsPageContainer>
       <SettingsSection id="cabinet" title="Cabinet">
@@ -119,6 +131,23 @@ function CabinetSettings({ environmentId }: { readonly environmentId: Environmen
           }
           control={<CabinetStatusBadge status={liveStatus} />}
         />
+        {liveStatus === null ? null : (
+          <SettingsRow
+            title={gt("Agent tools")}
+            description={
+              agentToolsOff === null ? (
+                <T>Agents get Cabinet&rsquo;s MCP tools.</T>
+              ) : (
+                m(CABINET_AGENT_TOOLS_OFF_REASONS[agentToolsOff])
+              )
+            }
+            control={
+              <Badge variant={agentToolsOff === null ? "success" : "secondary"}>
+                {agentToolsOff === null ? gt("Active") : gt("Off")}
+              </Badge>
+            }
+          />
+        )}
         <SettingsRow
           serverScoped
           {...searchableSetting("cabinet-enabled")}
@@ -163,8 +192,8 @@ function CabinetSettings({ environmentId }: { readonly environmentId: Environmen
           settingKeys={["cabinet"]}
           description={
             <T>
-              Optional on the same machine. Needed for MCP over HTTP and to attribute writes. For
-              memory review, create it in Cabinet Settings, Agents, with &ldquo;Can review memory
+              Optional on the same machine. Attributes writes; agents never get it. For memory
+              review, create it in Cabinet Settings, Agents, with &ldquo;Can review memory
               proposals&rdquo;.
             </T>
           }
@@ -194,7 +223,9 @@ function CabinetSettings({ environmentId }: { readonly environmentId: Environmen
           serverScoped
           {...searchableSetting("cabinet-mcp-transport")}
           settingKeys={["cabinet"]}
-          description={<T>How agents reach Cabinet&rsquo;s MCP tools. HTTP needs a token.</T>}
+          description={
+            <T>How agents reach Cabinet&rsquo;s MCP tools. HTTP needs an agent token.</T>
+          }
           control={
             <Select
               value={cabinet.mcpTransport}
@@ -215,6 +246,57 @@ function CabinetSettings({ environmentId }: { readonly environmentId: Environmen
             </Select>
           }
         />
+        <SettingsRow
+          serverScoped
+          {...searchableSetting("cabinet-agent-token")}
+          settingKeys={["cabinet"]}
+          description={
+            <T>
+              A plain Cabinet token for agents&rsquo; MCP tools. Create it in Cabinet &rarr;
+              Settings &rarr; Agents without review access.
+            </T>
+          }
+          control={
+            <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-72">
+              <SecretSourceInput
+                id="cabinet-agent-token"
+                aria-label={gt("Cabinet agent token")}
+                value={isSecretReference(cabinet.agentToken) ? cabinet.agentToken : ""}
+                configured={agentTokenConfigured}
+                environmentId={environmentId}
+                sources={secretSources}
+                onCommit={(next) => saveAgentToken(next.trim())}
+                onSecretChange={(secret) => saveAgentToken(secret ?? "")}
+                size="sm"
+              />
+              {agentTokenConfigured ? (
+                <Button size="xs" variant="outline" onClick={() => saveAgentToken("")}>
+                  {gt("Clear")}
+                </Button>
+              ) : null}
+            </div>
+          }
+        />
+        {cabinet.mcpTransport === "stdio" ? (
+          <SettingsRow
+            serverScoped
+            {...searchableSetting("cabinet-cli-command")}
+            settingKeys={["cabinet"]}
+            description={<T>The Cabinet command agents start for MCP over stdio.</T>}
+            control={
+              <DraftInput
+                className="w-full sm:w-72"
+                size="sm"
+                font="mono"
+                value={cabinet.cliCommand}
+                onCommit={(next) => updateSettings({ cabinet: { cliCommand: next.trim() } })}
+                placeholder="cabinet"
+                spellCheck={false}
+                aria-label={gt("Cabinet CLI command")}
+              />
+            }
+          />
+        ) : null}
         <SettingsRow
           title={gt("Test connection")}
           description={

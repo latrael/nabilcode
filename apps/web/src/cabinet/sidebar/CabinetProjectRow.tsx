@@ -1,11 +1,21 @@
 import { useGT } from "gt-react";
-import { ChevronRightIcon, PinIcon, PinOffIcon, PlusIcon, SettingsIcon } from "lucide-react";
-import { memo, type ReactNode } from "react";
+import {
+  ChevronRightIcon,
+  LibraryIcon,
+  LinkIcon,
+  PinIcon,
+  PinOffIcon,
+  PlusIcon,
+  SettingsIcon,
+} from "lucide-react";
+import { memo, useState, type ReactNode } from "react";
 
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import type { SidebarProjectSnapshot } from "~/sidebarProjectGrouping";
+import { CabinetIngestDialog } from "./CabinetIngestDialog";
 
 // Revealed on hover or keyboard focus so the resting row stays name and count only.
 const REVEAL_CLASS =
@@ -52,6 +62,11 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
 }) {
   const { group, expanded } = props;
   const gt = useGT();
+  const linked = useEnvironmentSettings(
+    group.environmentId,
+    (settings) => settings.projectSettingsOverrides[group.id]?.cabinetProjectRef !== undefined,
+  );
+  const [ingestOpen, setIngestOpen] = useState(false);
   return (
     <div className="group/project mx-1.5 flex h-7 items-center rounded-md hover:bg-sidebar-row-hover">
       <button
@@ -92,6 +107,13 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
             {group.pinned ? <PinOffIcon /> : <PinIcon />}
           </RowAction>
         ) : null}
+        <RowAction
+          label={linked ? gt("Linked to Cabinet. Re-ingest docs") : gt("Ingest into Cabinet")}
+          visible={linked}
+          onClick={() => setIngestOpen(true)}
+        >
+          {linked ? <LinkIcon /> : <LibraryIcon />}
+        </RowAction>
         <RowAction label={gt("Project settings")} onClick={() => props.onOpenSettings(group)}>
           <SettingsIcon />
         </RowAction>
@@ -99,6 +121,15 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
           {props.threadCount}
         </span>
       </div>
+      {ingestOpen ? (
+        <CabinetIngestDialog
+          environmentId={group.environmentId}
+          projectId={group.id}
+          projectName={group.displayName}
+          linked={linked}
+          onClose={() => setIngestOpen(false)}
+        />
+      ) : null}
     </div>
   );
 });

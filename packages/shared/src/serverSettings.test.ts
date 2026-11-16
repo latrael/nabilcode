@@ -581,6 +581,17 @@ describe("serverSettings helpers", () => {
         projectSettingsOverrides: { [projectId]: { cabinetProjectRef: "sourdough" } },
       }).projectSettingsOverrides[projectId]?.cabinetProjectRef,
     ).toBe("sourdough");
+    // JSON cannot carry undefined, so only an in-process caller can clear the link this way.
+    const cleared = applyServerSettingsPatch(current, {
+      projectSettingsOverrides: {
+        [projectId]: { newWorktreesStartFromOrigin: true, cabinetProjectRef: undefined as never },
+      },
+    }).projectSettingsOverrides[projectId];
+    expect(cleared).toEqual({
+      newWorktreesStartFromOrigin: true,
+      providerInstances: { [instanceId]: { enabled: false } },
+    });
+    expect(Object.hasOwn(cleared ?? {}, "cabinetProjectRef")).toBe(false);
   });
 
   // regression: #18334 a newer client must still see this server drop a key it does not know

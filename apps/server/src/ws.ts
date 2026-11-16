@@ -7,6 +7,7 @@ import * as NodeHttpServerRequest from "@effect/platform-node/NodeHttpServerRequ
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
+import * as CabinetIngest from "./cabinet/CabinetIngest.ts";
 import * as CabinetService from "./cabinet/CabinetService.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 
@@ -1537,6 +1538,7 @@ export const layerWsRpc = (
       const peerLinks = yield* PeerLinks.PeerLinks;
       const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
       const cabinet = yield* CabinetService.CabinetService;
+      const cabinetIngest = yield* CabinetIngest.CabinetIngest;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
@@ -2666,6 +2668,8 @@ export const layerWsRpc = (
         [WS_METHODS.cabinetUpdateItem]: (input) => cabinet.updateItem(input),
         [WS_METHODS.cabinetAddToProject]: (input) => cabinet.addToProject(input),
         [WS_METHODS.cabinetCapture]: (input) => cabinet.capture(input),
+        [WS_METHODS.cabinetIngestProject]: (input) => cabinetIngest.ingestProject(input),
+        [WS_METHODS.cabinetUnlinkProject]: (input) => cabinetIngest.unlinkProject(input),
         [WS_METHODS.cabinetSubscribeEvents]: (_input) => cabinet.events,
         [WS_METHODS.serverGetSettings]: (_input) =>
           Effect.map(serverSettings.getSettings, (settings) =>
@@ -3542,6 +3546,7 @@ export const layer = Layer.unwrap(
     const peerLinks = yield* PeerLinks.PeerLinks;
     const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
     const cabinet = yield* CabinetService.CabinetService;
+    const cabinetIngest = yield* CabinetIngest.CabinetIngest;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3638,6 +3643,7 @@ export const layer = Layer.unwrap(
               Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
               Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
               Layer.provide(Layer.succeed(CabinetService.CabinetService, cabinet)),
+              Layer.provide(Layer.succeed(CabinetIngest.CabinetIngest, cabinetIngest)),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(
