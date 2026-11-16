@@ -19,6 +19,8 @@ import { useNowMinute } from "~/hooks/useNowMinute";
 import { cn } from "~/lib/utils";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 import { useUiStateStore } from "~/uiStateStore";
+import { MemoryBadge } from "../memory/MemoryBadge";
+import { useThreadProposalCount } from "../memory/useMemoryProposals";
 import { cabinetRowStatus, type CabinetThreadStatus } from "./cabinetStatus.logic";
 import type { CabinetProviderEntry } from "./providerEntries";
 
@@ -112,6 +114,7 @@ export const CabinetThreadRow = memo(function CabinetThreadRow(props: {
   const localLastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[threadKey]);
   const lastVisitedAt = resolveThreadLastVisitedAt(thread.lastVisitedAt, localLastVisitedAt);
   const { status, text } = cabinetRowStatus(resolveSidebarRowStatus({ ...thread, lastVisitedAt }));
+  const proposalCount = useThreadProposalCount(thread.environmentId, thread.id);
   const currentInstanceId = resolveThreadProviderStack(thread).at(-1) ?? thread.providerInstanceId;
   const provider = providerEntry?.instanceId === currentInstanceId ? providerEntry : null;
   const rowClass = cn(
@@ -171,6 +174,7 @@ export const CabinetThreadRow = memo(function CabinetThreadRow(props: {
             </span>
           )}
           {text ? <span className={TEXT_CLASS[status]}>{m(text)}</span> : null}
+          <MemoryBadge count={proposalCount} className="ml-auto" />
         </span>
       </span>
     </>

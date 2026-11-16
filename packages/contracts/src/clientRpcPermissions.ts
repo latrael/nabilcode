@@ -34,6 +34,9 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.cabinetUpdateItem]: AuthOrchestrationOperateScope,
   [WS_METHODS.cabinetAddToProject]: AuthOrchestrationOperateScope,
   [WS_METHODS.cabinetCapture]: AuthOrchestrationOperateScope,
+  // Decides a memory proposal as the harness's review token.
+  [WS_METHODS.cabinetApproveProposal]: AuthOrchestrationOperateScope,
+  [WS_METHODS.cabinetRejectProposal]: AuthOrchestrationOperateScope,
   // Writes Cabinet as the harness and the project's Cabinet link, which operating the project covers.
   [WS_METHODS.cabinetIngestProject]: AuthOrchestrationOperateScope,
   [WS_METHODS.cabinetUnlinkProject]: AuthOrchestrationOperateScope,

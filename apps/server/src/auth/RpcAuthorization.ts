@@ -98,12 +98,17 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.cabinetResolve]: AuthOrchestrationReadScope,
   [WS_METHODS.cabinetSearch]: AuthOrchestrationReadScope,
   [WS_METHODS.cabinetSuggest]: AuthOrchestrationReadScope,
+  [WS_METHODS.cabinetListProposals]: AuthOrchestrationReadScope,
+  [WS_METHODS.cabinetProposalCounts]: AuthOrchestrationReadScope,
+  [WS_METHODS.cabinetGetProposal]: AuthOrchestrationReadScope,
   [WS_METHODS.cabinetSubscribeEvents]: AuthOrchestrationReadScope,
   // Writing to Cabinet acts as the harness's own Cabinet identity, like operating a thread.
   [WS_METHODS.cabinetCreateItem]: AuthOrchestrationOperateScope,
   [WS_METHODS.cabinetUpdateItem]: AuthOrchestrationOperateScope,
   [WS_METHODS.cabinetAddToProject]: AuthOrchestrationOperateScope,
   [WS_METHODS.cabinetCapture]: AuthOrchestrationOperateScope,
+  [WS_METHODS.cabinetApproveProposal]: AuthOrchestrationOperateScope,
+  [WS_METHODS.cabinetRejectProposal]: AuthOrchestrationOperateScope,
   [WS_METHODS.cabinetIngestProject]: AuthOrchestrationOperateScope,
   [WS_METHODS.cabinetUnlinkProject]: AuthOrchestrationOperateScope,
   // Tries a base URL and token with the saved token's reach, so only those who edit settings may.

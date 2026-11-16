@@ -31,6 +31,7 @@ import { buildThreadRouteParams } from "~/threadRoutes";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 import { CabinetStatusChips } from "../CabinetStatusChips";
 import { useCabinetItemTitles } from "../data/useCabinet";
+import { MemoryDock } from "../memory/MemoryDock";
 import { boardKey, canResizeCardWidth, DEFAULT_LAYOUT, layoutSlots } from "./board.logic";
 import {
   PRIMARY_CARD_ID,
@@ -243,6 +244,9 @@ export function BoardView(props: { readonly primary: ReactNode }) {
               ))
             : null}
         </div>
+        {active === null ? null : (
+          <MemoryDock environmentId={active.environmentId} projectId={active.projectId} />
+        )}
         {/* A header-sized ghost, never a clone of the card: cloning the primary would mount a second ChatView. */}
         {createPortal(
           <DragOverlay dropAnimation={null}>

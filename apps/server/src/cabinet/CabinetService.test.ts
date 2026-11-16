@@ -303,6 +303,145 @@ it.effect("surfaces other refusals with Cabinet's status and code", () => {
   }).pipe(Effect.provide(layerFor(cabinet.client)));
 });
 
+const proposal = (id: string, over: Record<string, unknown> = {}) => ({
+  id,
+  slug: `fact-${id}`,
+  path: `memories/fact-${id}.md`,
+  title: "Armchair is 95 cm tall",
+  text: "The armchair is 95 cm tall.",
+  status: "proposed",
+  hash: "h1",
+  agent: "claude-code",
+  proposed_by: "agent:claude-code",
+  proposed_at: "2026-11-15T10:00:00Z",
+  thread_id: "t-1",
+  project_ids: ["p1"],
+  sources: [{ item_id: "n1", quote: "95 cm" }],
+  decided_by: null,
+  decided_at: null,
+  reject_reason: null,
+  original_text: null,
+  extraFromCabinet: true,
+  ...over,
+});
+
+it.effect("reads proposals, their counts and one by id, with the harness token", () => {
+  const cabinet = fakeCabinet(({ url }) =>
+    url.endsWith("/api/memory/proposals")
+      ? json({ proposals: [proposal("a")], total: 1 })
+      : url.endsWith("/counts")
+        ? json({ total: 1, byProject: { p1: 1 }, byThread: { "t-1": 1 } })
+        : json({ proposal: proposal("a b") }),
+  );
+  return Effect.gen(function* () {
+    const service = yield* CabinetService.CabinetService;
+    const listed = yield* service.listProposals({
+      status: "all",
+      project: "reading-corner",
+      thread: "t-1",
+      agent: "claude-code",
+      limit: 20,
+      offset: 40,
+    });
+    assert.deepEqual(cabinet.calls[0]?.query, {
+      status: "all",
+      project: "reading-corner",
+      thread: "t-1",
+      agent: "claude-code",
+      limit: "20",
+      offset: "40",
+    });
+    assert.equal(cabinet.calls[0]?.authorization, "Bearer t");
+    assert.equal(listed.total, 1);
+    assert.equal(listed.proposals[0]?.extraFromCabinet, true);
+    assert.equal(listed.proposals[0]?.thread_id, "t-1");
+    const counts = yield* service.proposalCounts;
+    assert.deepEqual(counts, { total: 1, byProject: { p1: 1 }, byThread: { "t-1": 1 } });
+    assert.equal(cabinet.calls[1]?.url, `${BASE}/api/memory/proposals/counts`);
+    assert.equal((yield* service.getProposal({ id: "a b" })).id, "a b");
+    assert.equal(cabinet.calls[2]?.url, `${BASE}/api/memory/proposals/a%20b`);
+  }).pipe(Effect.provide(layerFor(cabinet.client, { enabled: true, baseUrl: BASE, token: "t" })));
+});
+
+it.effect("approves with an edit and the shown hash, and rejects with a reason", () => {
+  const cabinet = fakeCabinet(({ url }) =>
+    json({
+      proposal: url.endsWith("/approve")
+        ? proposal("a", { status: "approved", decided_by: "you", original_text: "old" })
+        : proposal("a", { status: "rejected", reject_reason: "wrong" }),
+    }),
+  );
+  return Effect.gen(function* () {
+    const service = yield* CabinetService.CabinetService;
+    const approved = yield* service.approveProposal({
+      id: "a",
+      text: "The armchair is 94 cm tall.",
+      title: "Armchair height",
+      baseHash: "h1",
+    });
+    assert.equal(cabinet.calls[0]?.method, "POST");
+    assert.equal(cabinet.calls[0]?.url, `${BASE}/api/memory/proposals/a/approve`);
+    assert.deepEqual(cabinet.calls[0]?.body, {
+      text: "The armchair is 94 cm tall.",
+      title: "Armchair height",
+      baseHash: "h1",
+    });
+    assert.equal(approved.status, "approved");
+    assert.equal(approved.original_text, "old");
+    const rejected = yield* service.rejectProposal({ id: "a", reason: "wrong", baseHash: "h1" });
+    assert.equal(cabinet.calls[1]?.url, `${BASE}/api/memory/proposals/a/reject`);
+    assert.deepEqual(cabinet.calls[1]?.body, { reason: "wrong", baseHash: "h1" });
+    assert.equal(rejected.reject_reason, "wrong");
+  }).pipe(Effect.provide(layerFor(cabinet.client)));
+});
+
+it.effect.each([
+  {
+    name: "a token without the review scope",
+    response: () => json({ error: "forbidden", message: "Agents cannot review proposals" }, 403),
+    tag: "CabinetReviewForbiddenError",
+  },
+  {
+    name: "a proposal someone else decided",
+    response: () =>
+      json(
+        {
+          error: "already_decided",
+          message: "decided",
+          current: proposal("a", { status: "approved" }),
+        },
+        409,
+      ),
+    tag: "CabinetAlreadyDecidedError",
+    currentStatus: "approved",
+  },
+  {
+    name: "a stale base hash",
+    response: () =>
+      json(
+        { error: "conflict", message: "changed", current: { ...item("a"), body: "x", hash: "h2" } },
+        409,
+      ),
+    tag: "CabinetConflictError",
+  },
+  {
+    name: "a proposal that does not exist",
+    response: () => json({ error: "not_found", message: "no" }, 404),
+    tag: "CabinetNotFoundError",
+  },
+])("maps $name on approve to $tag", ({ response, tag, currentStatus }) => {
+  const cabinet = fakeCabinet(response);
+  return Effect.gen(function* () {
+    const service = yield* CabinetService.CabinetService;
+    const error = yield* service.approveProposal({ id: "a" }).pipe(Effect.flip);
+    assert.equal(error._tag, tag);
+    if (error._tag === "CabinetAlreadyDecidedError") {
+      assert.equal(error.current?.status, currentStatus);
+    }
+    if (error._tag === "CabinetConflictError") assert.equal(error.current?.hash, "h2");
+  }).pipe(Effect.provide(layerFor(cabinet.client)));
+});
+
 it.effect("fetches an attachment with the caller's range, the token, and an encoded path", () => {
   const cabinet = fakeCabinet(() => new Response("pdf", { status: 206 }));
   return Effect.gen(function* () {
@@ -335,17 +474,28 @@ it.effect("forwards only what changed, and a resync after every connection opens
             },
           ],
           ["ping", {}],
+          [
+            "library",
+            {
+              kind: "memory",
+              id: "m",
+              path: "memories/m.md",
+              origin: "app",
+              data: { action: "proposed", status: "proposed", project_ids: [] },
+            },
+          ],
           ["library", { kind: "rebuilt", origin: "system" }],
         ),
       ),
   );
   return Effect.gen(function* () {
     const service = yield* CabinetService.CabinetService;
-    const events = yield* service.events.pipe(Stream.take(3), Stream.runCollect, Effect.forkChild);
+    const events = yield* service.events.pipe(Stream.take(4), Stream.runCollect, Effect.forkChild);
     yield* TestClock.adjust("1 minute");
     assert.deepEqual(Array.from(yield* Fiber.join(events)), [
       { kind: "resync" },
       { kind: "updated", id: "a", path: "notes/a.md" },
+      { kind: "memory", id: "m", path: "memories/m.md" },
       { kind: "rebuilt" },
     ]);
     assert.equal(cabinet.calls[0]?.url, `${BASE}/api/events`);

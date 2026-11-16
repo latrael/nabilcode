@@ -1,4 +1,5 @@
 import {
+  CabinetAlreadyDecidedError,
   CabinetCaptureResult,
   CabinetConflictError,
   CabinetDisabledError,
@@ -6,20 +7,28 @@ import {
   CabinetItem,
   CabinetItemDetail,
   CabinetListItemsResult,
+  CabinetListProposalsResult,
   CabinetNotFoundError,
+  CabinetProposal,
+  CabinetProposalCounts,
   CabinetRequestError,
   CabinetResolveResult,
+  CabinetReviewForbiddenError,
   CabinetSearchResult,
   CabinetSuggestResult,
   CabinetUnauthorizedError,
   CabinetUnavailableError,
   type CabinetAddToProjectInput,
+  type CabinetApproveProposalInput,
   type CabinetCaptureInput,
   type CabinetCreateItemInput,
   type CabinetError,
   type CabinetGetItemInput,
+  type CabinetGetProposalInput,
   type CabinetGetRawResult,
   type CabinetListItemsInput,
+  type CabinetListProposalsInput,
+  type CabinetRejectProposalInput,
   type CabinetResolveInput,
   type CabinetSearchInput,
   type CabinetStatus,
@@ -62,6 +71,8 @@ const RESYNC: CabinetEvent = { kind: "resync" };
 
 const decodeEventData = Schema.decodeUnknownOption(Schema.fromJsonString(CabinetEvent));
 const decodeItem = Schema.decodeUnknownOption(CabinetItem);
+const decodeProposal = Schema.decodeUnknownOption(CabinetProposal);
+const ProposalEnvelope = Schema.Struct({ proposal: CabinetProposal });
 const AuthStatusBody = Schema.Struct({
   via: Schema.optionalKey(Schema.String),
   author: Schema.optionalKey(Schema.String),
@@ -137,6 +148,22 @@ export class CabinetService extends Context.Service<
     readonly capture: (
       input: CabinetCaptureInput,
     ) => Effect.Effect<CabinetCaptureResult, CabinetError>;
+    /** Memory proposals agents made through Cabinet's `remember`, awaiting the owner's review. */
+    readonly listProposals: (
+      input: CabinetListProposalsInput,
+    ) => Effect.Effect<CabinetListProposalsResult, CabinetError>;
+    /** Of the proposals still awaiting review. */
+    readonly proposalCounts: Effect.Effect<CabinetProposalCounts, CabinetError>;
+    readonly getProposal: (
+      input: CabinetGetProposalInput,
+    ) => Effect.Effect<CabinetProposal, CabinetError>;
+    /** Needs a token with Cabinet's review scope. `text` means edit, then approve. */
+    readonly approveProposal: (
+      input: CabinetApproveProposalInput,
+    ) => Effect.Effect<CabinetProposal, CabinetError>;
+    readonly rejectProposal: (
+      input: CabinetRejectProposalInput,
+    ) => Effect.Effect<CabinetProposal, CabinetError>;
     /** An attachment under Cabinet's `attachments/`; any status Cabinet answers is returned as is. */
     readonly fetchFile: (input: {
       readonly path: string;
@@ -209,9 +236,19 @@ const make = Effect.gen(function* () {
     switch (response.status) {
       case 401:
         return new CabinetUnauthorizedError({});
+      case 403:
+        return code === "forbidden"
+          ? new CabinetReviewForbiddenError({})
+          : new CabinetRequestError({ status: 403, ...(code === undefined ? {} : { code }) });
       case 404:
         return new CabinetNotFoundError({});
       case 409: {
+        if (code === "already_decided") {
+          const proposal = decodeProposal(record.current);
+          return new CabinetAlreadyDecidedError(
+            Option.isSome(proposal) ? { current: proposal.value } : {},
+          );
+        }
         const current = decodeItem(record.current);
         return new CabinetConflictError(Option.isSome(current) ? { current: current.value } : {});
       }
@@ -405,6 +442,54 @@ const make = Effect.gen(function* () {
     });
   });
 
+  const proposalPath = (id: string) => `/api/memory/proposals/${encodeURIComponent(id)}`;
+
+  const listProposals = Effect.fn("CabinetService.listProposals")(function* (
+    input: CabinetListProposalsInput,
+  ) {
+    return yield* requestJson(CabinetListProposalsResult, {
+      method: "GET",
+      path: "/api/memory/proposals",
+      query: input,
+    });
+  });
+
+  const proposalCounts = Effect.fn("CabinetService.proposalCounts")(function* () {
+    return yield* requestJson(CabinetProposalCounts, {
+      method: "GET",
+      path: "/api/memory/proposals/counts",
+    });
+  });
+
+  const getProposal = Effect.fn("CabinetService.getProposal")(function* ({
+    id,
+  }: CabinetGetProposalInput) {
+    return (yield* requestJson(ProposalEnvelope, { method: "GET", path: proposalPath(id) }))
+      .proposal;
+  });
+
+  const approveProposal = Effect.fn("CabinetService.approveProposal")(function* ({
+    id,
+    ...body
+  }: CabinetApproveProposalInput) {
+    return (yield* requestJson(ProposalEnvelope, {
+      method: "POST",
+      path: `${proposalPath(id)}/approve`,
+      body,
+    })).proposal;
+  });
+
+  const rejectProposal = Effect.fn("CabinetService.rejectProposal")(function* ({
+    id,
+    ...body
+  }: CabinetRejectProposalInput) {
+    return (yield* requestJson(ProposalEnvelope, {
+      method: "POST",
+      path: `${proposalPath(id)}/reject`,
+      body,
+    })).proposal;
+  });
+
   const fetchFile = Effect.fn("CabinetService.fetchFile")(function* (input: {
     readonly path: string;
     readonly headers: Readonly<Record<string, string>>;
@@ -535,6 +620,11 @@ const make = Effect.gen(function* () {
     updateItem,
     addToProject,
     capture,
+    listProposals,
+    proposalCounts: proposalCounts(),
+    getProposal,
+    approveProposal,
+    rejectProposal,
     fetchFile,
     events,
   });

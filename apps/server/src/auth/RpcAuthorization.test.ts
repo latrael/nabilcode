@@ -74,6 +74,9 @@ describe("RPC authorization scopes", () => {
       WS_METHODS.cabinetResolve,
       WS_METHODS.cabinetSearch,
       WS_METHODS.cabinetSuggest,
+      WS_METHODS.cabinetListProposals,
+      WS_METHODS.cabinetProposalCounts,
+      WS_METHODS.cabinetGetProposal,
       WS_METHODS.cabinetSubscribeEvents,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
@@ -83,6 +86,8 @@ describe("RPC authorization scopes", () => {
       WS_METHODS.cabinetUpdateItem,
       WS_METHODS.cabinetAddToProject,
       WS_METHODS.cabinetCapture,
+      WS_METHODS.cabinetApproveProposal,
+      WS_METHODS.cabinetRejectProposal,
       WS_METHODS.cabinetIngestProject,
       WS_METHODS.cabinetUnlinkProject,
     ]) {

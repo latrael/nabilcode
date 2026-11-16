@@ -12,6 +12,7 @@ import {
 } from "../components/settings/CabinetSettings.logic";
 import { useEnvironmentSettings } from "../hooks/useSettings";
 import { cabinetEnvironment } from "../state/cabinet";
+import { MemoryPendingChip } from "./memory/MemoryPendingChip";
 import { cabinetChipsView, type CabinetChipTone } from "./CabinetStatusChips.logic";
 
 const DOT_CLASS: Record<CabinetChipTone, string> = {
@@ -42,6 +43,7 @@ export function CabinetStatusChips(props: { readonly environmentId: EnvironmentI
   const detail = cabinetStatusDetail(status);
   return (
     <div className="ml-auto flex shrink-0 items-center gap-1.5">
+      <MemoryPendingChip environmentId={props.environmentId} className={CHIP_CLASS} />
       <Tooltip>
         <TooltipTrigger
           render={

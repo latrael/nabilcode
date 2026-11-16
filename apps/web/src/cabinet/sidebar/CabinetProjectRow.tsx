@@ -15,6 +15,8 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import type { SidebarProjectSnapshot } from "~/sidebarProjectGrouping";
+import { MemoryBadge } from "../memory/MemoryBadge";
+import { useProjectProposalCount } from "../memory/useMemoryProposals";
 import { CabinetIngestDialog } from "./CabinetIngestDialog";
 
 // Revealed on hover or keyboard focus so the resting row stays name and count only.
@@ -66,6 +68,7 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
     group.environmentId,
     (settings) => settings.projectSettingsOverrides[group.id]?.cabinetProjectRef !== undefined,
   );
+  const proposalCount = useProjectProposalCount(group.environmentId, group.id);
   const [ingestOpen, setIngestOpen] = useState(false);
   return (
     <div className="group/project mx-1.5 flex h-7 items-center rounded-md hover:bg-sidebar-row-hover">
@@ -117,6 +120,7 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
         <RowAction label={gt("Project settings")} onClick={() => props.onOpenSettings(group)}>
           <SettingsIcon />
         </RowAction>
+        <MemoryBadge count={proposalCount} />
         <span className="min-w-4 pr-1 text-right text-2xs tabular-nums text-sidebar-muted-foreground">
           {props.threadCount}
         </span>

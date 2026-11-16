@@ -349,6 +349,7 @@ import {
 } from "./settings.ts";
 import {
   CabinetAddToProjectInput,
+  CabinetApproveProposalInput,
   CabinetCaptureInput,
   CabinetCaptureResult,
   CabinetCreateItemInput,
@@ -356,10 +357,16 @@ import {
   CabinetEvent,
   CabinetGetItemInput,
   CabinetGetRawInput,
+  CabinetGetProposalInput,
   CabinetGetRawResult,
   CabinetItemDetail,
   CabinetListItemsInput,
   CabinetListItemsResult,
+  CabinetListProposalsInput,
+  CabinetListProposalsResult,
+  CabinetProposal,
+  CabinetProposalCounts,
+  CabinetRejectProposalInput,
   CabinetResolveInput,
   CabinetResolveResult,
   CabinetSearchInput,
@@ -536,6 +543,11 @@ export const WS_METHODS = {
   cabinetCapture: "cabinet.capture",
   cabinetIngestProject: "cabinet.ingestProject",
   cabinetUnlinkProject: "cabinet.unlinkProject",
+  cabinetListProposals: "cabinet.listProposals",
+  cabinetProposalCounts: "cabinet.proposalCounts",
+  cabinetGetProposal: "cabinet.getProposal",
+  cabinetApproveProposal: "cabinet.approveProposal",
+  cabinetRejectProposal: "cabinet.rejectProposal",
   cabinetSubscribeEvents: "cabinet.subscribeEvents",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
@@ -939,6 +951,36 @@ const WsCabinetUnlinkProjectRpc = Rpc.make(WS_METHODS.cabinetUnlinkProject, {
   payload: CabinetUnlinkProjectInput,
   success: CabinetUnlinkProjectResult,
   error: Schema.Union([CabinetIngestError, EnvironmentAuthorizationError]),
+});
+
+const WsCabinetListProposalsRpc = Rpc.make(WS_METHODS.cabinetListProposals, {
+  payload: CabinetListProposalsInput,
+  success: CabinetListProposalsResult,
+  error: CabinetRpcError,
+});
+
+const WsCabinetProposalCountsRpc = Rpc.make(WS_METHODS.cabinetProposalCounts, {
+  payload: Schema.Struct({}),
+  success: CabinetProposalCounts,
+  error: CabinetRpcError,
+});
+
+const WsCabinetGetProposalRpc = Rpc.make(WS_METHODS.cabinetGetProposal, {
+  payload: CabinetGetProposalInput,
+  success: CabinetProposal,
+  error: CabinetRpcError,
+});
+
+const WsCabinetApproveProposalRpc = Rpc.make(WS_METHODS.cabinetApproveProposal, {
+  payload: CabinetApproveProposalInput,
+  success: CabinetProposal,
+  error: CabinetRpcError,
+});
+
+const WsCabinetRejectProposalRpc = Rpc.make(WS_METHODS.cabinetRejectProposal, {
+  payload: CabinetRejectProposalInput,
+  success: CabinetProposal,
+  error: CabinetRpcError,
 });
 
 const WsCabinetSubscribeEventsRpc = Rpc.make(WS_METHODS.cabinetSubscribeEvents, {
@@ -2199,6 +2241,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsCabinetCaptureRpc,
   WsCabinetIngestProjectRpc,
   WsCabinetUnlinkProjectRpc,
+  WsCabinetListProposalsRpc,
+  WsCabinetProposalCountsRpc,
+  WsCabinetGetProposalRpc,
+  WsCabinetApproveProposalRpc,
+  WsCabinetRejectProposalRpc,
   WsCabinetSubscribeEventsRpc,
   WsPeerLinksLinkRpc,
   WsPeerLinksUnlinkRpc,

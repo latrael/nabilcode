@@ -201,6 +201,81 @@ export const CabinetCaptureResult = permissive({
 });
 export type CabinetCaptureResult = typeof CabinetCaptureResult.Type;
 
+export const CabinetProposalStatus = Schema.Literals(["proposed", "approved", "rejected"]);
+export type CabinetProposalStatus = typeof CabinetProposalStatus.Type;
+
+const CabinetProposalSource = permissive({
+  item_id: Schema.optionalKey(Schema.String),
+  url: Schema.optionalKey(Schema.String),
+  quote: Schema.optionalKey(Schema.String),
+});
+
+/** An agent's `remember`, awaiting review. `hash` is the `baseHash` for deciding it. */
+export const CabinetProposal = permissive({
+  id: Schema.String,
+  slug: Schema.String,
+  path: Schema.String,
+  title: Schema.String,
+  text: Schema.String,
+  status: CabinetProposalStatus,
+  hash: Schema.String,
+  agent: Schema.String,
+  proposed_by: Schema.String,
+  proposed_at: Schema.String,
+  thread_id: Schema.NullOr(Schema.String),
+  project_ids: Schema.Array(Schema.String),
+  sources: Schema.Array(CabinetProposalSource),
+  decided_by: Schema.NullOr(Schema.String),
+  decided_at: Schema.NullOr(Schema.String),
+  reject_reason: Schema.NullOr(Schema.String),
+  original_text: Schema.NullOr(Schema.String),
+});
+export type CabinetProposal = typeof CabinetProposal.Type;
+
+/** `status` defaults to `proposed` in Cabinet; `project` is an id or slug. */
+export const CabinetListProposalsInput = Schema.Struct({
+  status: Schema.optionalKey(Schema.Literals(["proposed", "approved", "rejected", "all"])),
+  project: Schema.optionalKey(Schema.String),
+  thread: Schema.optionalKey(Schema.String),
+  agent: Schema.optionalKey(Schema.String),
+  limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 200 }))),
+  offset: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+});
+export type CabinetListProposalsInput = typeof CabinetListProposalsInput.Type;
+
+export const CabinetListProposalsResult = Schema.Struct({
+  proposals: Schema.Array(CabinetProposal),
+  total: Schema.Number,
+});
+export type CabinetListProposalsResult = typeof CabinetListProposalsResult.Type;
+
+/** Proposals still awaiting review; keys exist only for non-zero counts. */
+export const CabinetProposalCounts = Schema.Struct({
+  total: Schema.Number,
+  byProject: Schema.Record(Schema.String, Schema.Number),
+  byThread: Schema.Record(Schema.String, Schema.Number),
+});
+export type CabinetProposalCounts = typeof CabinetProposalCounts.Type;
+
+export const CabinetGetProposalInput = CabinetGetItemInput;
+export type CabinetGetProposalInput = typeof CabinetGetProposalInput.Type;
+
+/** `text` present means edit, then approve. */
+export const CabinetApproveProposalInput = Schema.Struct({
+  id: CabinetRef,
+  text: Schema.optionalKey(Schema.String),
+  title: Schema.optionalKey(Schema.String),
+  baseHash: Schema.optionalKey(Schema.String),
+});
+export type CabinetApproveProposalInput = typeof CabinetApproveProposalInput.Type;
+
+export const CabinetRejectProposalInput = Schema.Struct({
+  id: CabinetRef,
+  reason: Schema.optionalKey(Schema.String),
+  baseHash: Schema.optionalKey(Schema.String),
+});
+export type CabinetRejectProposalInput = typeof CabinetRejectProposalInput.Type;
+
 /** What changed, never the content. `resync` means events may have been missed: refetch. */
 export const CabinetEvent = Schema.Struct({
   kind: Schema.String,
@@ -254,6 +329,24 @@ export class CabinetConflictError extends Schema.TaggedError<CabinetConflictErro
   }
 }
 
+export class CabinetReviewForbiddenError extends Schema.TaggedError<CabinetReviewForbiddenError>()(
+  "CabinetReviewForbiddenError",
+  {},
+) {
+  override get message(): string {
+    return "The Cabinet token cannot review memory proposals. Use a token with the review scope.";
+  }
+}
+
+export class CabinetAlreadyDecidedError extends Schema.TaggedError<CabinetAlreadyDecidedError>()(
+  "CabinetAlreadyDecidedError",
+  { current: Schema.optionalKey(CabinetProposal) },
+) {
+  override get message(): string {
+    return "Someone else already decided this proposal.";
+  }
+}
+
 export class CabinetRequestError extends Schema.TaggedError<CabinetRequestError>()(
   "CabinetRequestError",
   {
@@ -274,6 +367,8 @@ export const CabinetError = Schema.Union([
   CabinetUnauthorizedError,
   CabinetNotFoundError,
   CabinetConflictError,
+  CabinetReviewForbiddenError,
+  CabinetAlreadyDecidedError,
   CabinetRequestError,
 ]);
 export type CabinetError = typeof CabinetError.Type;
