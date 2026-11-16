@@ -124,7 +124,7 @@ function PdfPage(props: {
   return (
     <>
       <canvas ref={canvas} aria-label={`Page ${index + 1}`} className="block h-full w-full" />
-      <div ref={text} data-pdf-text-layer />
+      <div ref={text} data-pdf-text-layer data-pdf-page={index + 1} />
     </>
   );
 }

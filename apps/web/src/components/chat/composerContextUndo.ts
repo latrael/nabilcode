@@ -1,4 +1,5 @@
 import type {
+  CabinetQuoteContextRecord,
   EnvironmentContextRecord,
   PreviewAnnotationPayload,
   ThreadContextRecord,
@@ -25,6 +26,7 @@ export interface RetainedContextPayloads extends RetainedAttachmentContextPayloa
   reviewComments: Map<string, ReviewCommentContext>;
   threads: Map<string, ThreadContextRecord>;
   environments: Map<string, EnvironmentContextRecord>;
+  cabinetQuotes: Map<string, CabinetQuoteContextRecord>;
 }
 
 function createRetainedContextPayloads(): RetainedContextPayloads {
@@ -33,6 +35,7 @@ function createRetainedContextPayloads(): RetainedContextPayloads {
     reviewComments: new Map(),
     threads: new Map(),
     environments: new Map(),
+    cabinetQuotes: new Map(),
     files: new Map(),
     previewAnnotations: new Map(),
   };

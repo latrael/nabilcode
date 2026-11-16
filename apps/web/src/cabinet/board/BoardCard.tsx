@@ -44,6 +44,8 @@ export function BoardCard(props: {
   readonly active: boolean;
   /** The preset places more than one card. */
   readonly multi: boolean;
+  /** Overrides the title derived from `card.ref` (Cabinet cards show the item title). */
+  readonly title?: string | null | undefined;
   readonly onClose: () => void;
   readonly children: ReactNode;
 }) {
@@ -55,7 +57,7 @@ export function BoardCard(props: {
     id: card.id,
     disabled: !draggable,
   });
-  const title = boardCardTitle(card);
+  const title = props.title === undefined ? boardCardTitle(card) : props.title;
 
   let header: ReactNode = null;
   if (primary) {
@@ -95,7 +97,7 @@ export function BoardCard(props: {
               </span>
             }
           />
-          <TooltipPopup side="bottom">{card.ref}</TooltipPopup>
+          <TooltipPopup side="bottom">{card.source === "cabinet" ? title : card.ref}</TooltipPopup>
         </Tooltip>
         <Button
           variant="ghost"

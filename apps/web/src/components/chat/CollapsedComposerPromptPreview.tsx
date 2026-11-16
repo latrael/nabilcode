@@ -40,6 +40,7 @@ const CONTEXT_REFERENCE_ICONS: Record<
   "review-comment": () => <MessageCircleIcon />,
   thread: () => <MessagesSquareIcon />,
   environment: () => <MonitorIcon />,
+  "cabinet-quote": () => <QuoteIcon />,
 };
 
 // Mirrors the editor's chip: only a draft record of the same kind resolves a reference.
@@ -97,7 +98,7 @@ export function CollapsedComposerPromptPreview(props: {
         return entry ? (
           <ContextChipShell
             key={key}
-            kind={entry.kind}
+            kind={entry.kind === "cabinet-quote" ? "citation" : entry.kind}
             icon={CONTEXT_REFERENCE_ICONS[entry.kind](segment.label, props.theme)}
             label={segment.label}
           />

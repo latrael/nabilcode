@@ -31,6 +31,19 @@ describe("boardStore", () => {
     expect(layout.cards.map((card) => card.kind)).toEqual(["thread", "markdown", "pdf"]);
   });
 
+  it("opens cabinet items by kind and focuses an already open one", () => {
+    const { openCabinetItem } = useBoardStore.getState();
+    openCabinetItem(KEY, { id: "01NOTE", type: "note" });
+    openCabinetItem(KEY, { id: "01PDF", type: "pdf" });
+    openCabinetItem(KEY, { id: "01NOTE", type: "note" });
+    const layout = selectBoardLayout(KEY)(useBoardStore.getState());
+    expect(layout.cards.map(({ id, source }) => [id, source])).toEqual([
+      ["primary", "repo"],
+      ["cabinet:markdown:01NOTE", "cabinet"],
+      ["cabinet:pdf:01PDF", "cabinet"],
+    ]);
+  });
+
   it("persists and rehydrates through sanitize", async () => {
     useBoardStore.getState().setPreset(KEY, "grid");
     const { storage, name } = useBoardStore.persist.getOptions();

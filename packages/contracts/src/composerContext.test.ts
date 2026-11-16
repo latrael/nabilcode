@@ -118,6 +118,15 @@ const knownRecords: Record<(typeof COMPOSER_CONTEXT_KINDS)[number], Record<strin
     label: "vps",
     environmentId: "environment-vps",
   },
+  "cabinet-quote": {
+    ...base,
+    kind: "cabinet-quote",
+    label: "“Revenue grew 12%”",
+    text: "Revenue grew 12% in Q3.",
+    sourceLabel: "report.pdf",
+    source: { kind: "cabinet", itemId: "item_1" },
+    page: 4,
+  },
   response: {
     ...base,
     kind: "response",

@@ -4,6 +4,8 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { resolveStorage } from "../../lib/storage";
 import {
   applyPreset,
+  cabinetCardKind,
+  type CabinetCardItem,
   cardKindForPath,
   closeCard,
   DEFAULT_LAYOUT,
@@ -21,6 +23,8 @@ interface BoardStoreState {
   moveToSlot: (key: string, cardId: string, slotIndex: number) => void;
   /** Opens a repo file as a card. Returns false (no write) for unsupported extensions. */
   openFile: (key: string, relativePath: string) => boolean;
+  /** Opens (or focuses) a Cabinet item as a markdown or PDF card, keyed by the item id. */
+  openCabinetItem: (key: string, item: CabinetCardItem) => void;
   closeCard: (key: string, cardId: string) => void;
 }
 
@@ -59,6 +63,10 @@ export const useBoardStore = create<BoardStoreState>()(
           update(key, (layout) => openCard(layout, { kind, ref: relativePath }));
           return true;
         },
+        openCabinetItem: (key, item) =>
+          update(key, (layout) =>
+            openCard(layout, { kind: cabinetCardKind(item), ref: item.id, source: "cabinet" }),
+          ),
         closeCard: (key, cardId) => update(key, (layout) => closeCard(layout, cardId)),
       };
     },

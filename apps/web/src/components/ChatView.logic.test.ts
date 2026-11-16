@@ -1245,6 +1245,7 @@ describe("snapshotComposerSend", () => {
       reviewComments: [],
       threadContexts: [],
       environmentContexts: [],
+      cabinetQuotes: [],
       replyTo: null,
     });
 
@@ -1281,6 +1282,7 @@ describe("snapshotComposerSend", () => {
       reviewComments: [],
       threadContexts: [],
       environmentContexts: [],
+      cabinetQuotes: [],
       replyTo,
     });
 

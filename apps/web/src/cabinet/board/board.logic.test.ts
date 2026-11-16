@@ -3,6 +3,8 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   applyPreset,
   boardKey,
+  cabinetAttachmentPath,
+  cabinetCardKind,
   cardKindForPath,
   closeCard,
   DEFAULT_LAYOUT,
@@ -184,6 +186,36 @@ describe("boardKey", () => {
   });
 });
 
+describe("cabinet cards", () => {
+  const cabinetMd = { kind: "markdown", ref: "01ABC", source: "cabinet" } as const;
+
+  it("keeps repo and cabinet cards apart even when the ref matches", () => {
+    const layout = openCard(openCard(DEFAULT_LAYOUT, md("01ABC")), cabinetMd);
+    expect(ids(layout)).toEqual(["primary", "markdown:01ABC", "cabinet:markdown:01ABC"]);
+    expect(layout.cards.map((card) => card.source)).toEqual(["repo", "repo", "cabinet"]);
+    expect(openCard(layout, cabinetMd)).toBe(layout);
+  });
+
+  it.each([
+    [{ id: "1", type: "pdf" }, "pdf"],
+    [{ id: "1", type: "note" }, "markdown"],
+    [{ id: "1", type: "article", frontmatter: { attachment: "attachments/a/b.PDF" } }, "pdf"],
+    [{ id: "1", type: "image", frontmatter: { attachment: "attachments/a/b.png" } }, "markdown"],
+  ] as const)("opens %j as a %s card", (item, kind) => {
+    expect(cabinetCardKind(item)).toBe(kind);
+  });
+
+  it.each([
+    [{ attachment: " attachments/x.pdf " }, "attachments/x.pdf"],
+    [{ file: "attachments/y.pdf" }, "attachments/y.pdf"],
+    [{ attachment: "" }, null],
+    [{ attachment: 4 }, null],
+    [undefined, null],
+  ] as const)("reads the attachment path from %j", (frontmatter, expected) => {
+    expect(cabinetAttachmentPath(frontmatter)).toBe(expected);
+  });
+});
+
 describe("sanitizeLayout", () => {
   it.each([null, undefined, 4, "x", [], {}, { preset: "nope", cards: "nope" }])(
     "falls back to a primary-only focus layout for %j",
@@ -232,8 +264,38 @@ describe("sanitizeLayout", () => {
     expect(slotOf(layout, "markdown:b.md")).toBeNull();
   });
 
+  it("defaults a missing source to repo and keeps cabinet cards distinct from repo ones", () => {
+    const layout = sanitizeLayout({
+      preset: "bento",
+      cards: [
+        { id: "markdown:x", kind: "markdown", ref: "x", slot: null },
+        { id: "whatever", kind: "pdf", ref: "x", source: "cabinet", slot: null },
+        { id: "markdown:x", kind: "markdown", ref: "x", source: "cabinet", slot: null },
+        { id: "pdf:y", kind: "pdf", ref: "y", source: "elsewhere", slot: null },
+      ],
+    });
+    expect(ids(layout)).toEqual([
+      "primary",
+      "markdown:x",
+      "cabinet:pdf:x",
+      "cabinet:markdown:x",
+      "pdf:y",
+    ]);
+    expect(layout.cards.map((card) => card.source)).toEqual([
+      "repo",
+      "repo",
+      "cabinet",
+      "cabinet",
+      "repo",
+    ]);
+  });
+
   it("round-trips a valid layout", () => {
-    const layout = openCard(open(DEFAULT_LAYOUT, "a.md", "b.md"), md("c.md"));
+    const layout = openCard(openCard(open(DEFAULT_LAYOUT, "a.md", "b.md"), md("c.md")), {
+      kind: "pdf",
+      ref: "01ABC",
+      source: "cabinet",
+    });
     expect(sanitizeLayout(JSON.parse(JSON.stringify(layout)))).toEqual(layout);
   });
 });

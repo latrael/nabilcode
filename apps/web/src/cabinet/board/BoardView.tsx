@@ -22,6 +22,7 @@ import { isElectron } from "~/env";
 import { cn } from "~/lib/utils";
 import { useProject } from "~/state/entities";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
+import { useCabinetItemTitles } from "../data/useCabinet";
 import { boardKey, DEFAULT_LAYOUT } from "./board.logic";
 import {
   PRIMARY_CARD_ID,
@@ -44,6 +45,8 @@ import { useActiveProjectRef } from "./useActiveProjectRef";
 // Lazy so pdf.js and the Markdown renderer stay out of the main chunk until a card opens.
 const MarkdownCard = lazy(() => import("./cards/MarkdownCard"));
 const PdfCard = lazy(() => import("./cards/PdfCard"));
+const CabinetMarkdownCard = lazy(() => import("./cards/CabinetMarkdownCard"));
+const CabinetPdfCard = lazy(() => import("./cards/CabinetPdfCard"));
 
 const selectDefaultLayout = (): BoardLayout => DEFAULT_LAYOUT;
 
@@ -83,6 +86,14 @@ export function BoardView(props: { readonly primary: ReactNode }) {
   placed.sort((a, b) => renderOrder(a.card, b.card));
   const dragCard =
     dragId === null ? null : (placed.find(({ card }) => card.id === dragId)?.card ?? null);
+  const cabinetTitles = useCabinetItemTitles(
+    active?.environmentId ?? null,
+    layout.cards.flatMap((card) => (card.source === "cabinet" && card.ref ? [card.ref] : [])),
+  );
+  const titleOf = (card: BoardCardModel) =>
+    card.source === "cabinet"
+      ? (cabinetTitles[card.ref ?? ""] ?? gt("Cabinet item"))
+      : boardCardTitle(card);
 
   const onDragStart = (event: DragStartEvent) => setDragId(String(event.active.id));
   const onDragEnd = (event: DragEndEvent) => {
@@ -124,6 +135,7 @@ export function BoardView(props: { readonly primary: ReactNode }) {
               slot={slot}
               active={active !== null}
               multi={multi}
+              title={titleOf(card)}
               onClose={() => useBoardStore.getState().closeCard(key!, card.id)}
             >
               {card.id === PRIMARY_CARD_ID ? (
@@ -131,9 +143,11 @@ export function BoardView(props: { readonly primary: ReactNode }) {
               ) : active !== null && card.ref !== null ? (
                 <FileCardBody
                   kind={card.kind}
+                  source={card.source}
                   environmentId={active.environmentId}
+                  boardKey={key!}
                   cwd={project?.workspaceRoot ?? null}
-                  relativePath={card.ref}
+                  itemRef={card.ref}
                   threadRef={active.threadRef}
                 />
               ) : null}
@@ -164,7 +178,7 @@ export function BoardView(props: { readonly primary: ReactNode }) {
                   <BoardCardKindIcon card={dragCard} />
                 )}
                 <span className="truncate font-mono text-2xs">
-                  {boardCardTitle(dragCard) ?? gt("Thread")}
+                  {titleOf(dragCard) ?? gt("Thread")}
                 </span>
               </div>
             ) : null}
@@ -204,25 +218,40 @@ function BoardSlotTarget(props: {
 
 function FileCardBody(props: {
   readonly kind: BoardCardModel["kind"];
+  readonly source: BoardCardModel["source"];
   readonly environmentId: EnvironmentId;
+  readonly boardKey: string;
   readonly cwd: string | null;
-  readonly relativePath: string;
+  /** Repo-relative path, or the Cabinet item id for a Cabinet card. */
+  readonly itemRef: string;
   readonly threadRef: ScopedThreadRef;
 }) {
+  if (props.source === "cabinet") {
+    return (
+      <Suspense fallback={<FileSurfaceLoading />}>
+        {props.kind === "pdf" ? (
+          <CabinetPdfCard environmentId={props.environmentId} itemId={props.itemRef} />
+        ) : (
+          <CabinetMarkdownCard
+            environmentId={props.environmentId}
+            itemId={props.itemRef}
+            boardKey={props.boardKey}
+            threadRef={props.threadRef}
+          />
+        )}
+      </Suspense>
+    );
+  }
   if (props.cwd === null) return <FileSurfaceLoading />;
   return (
     <Suspense fallback={<FileSurfaceLoading />}>
       {props.kind === "pdf" ? (
-        <PdfCard
-          environmentId={props.environmentId}
-          cwd={props.cwd}
-          relativePath={props.relativePath}
-        />
+        <PdfCard environmentId={props.environmentId} cwd={props.cwd} relativePath={props.itemRef} />
       ) : (
         <MarkdownCard
           environmentId={props.environmentId}
           cwd={props.cwd}
-          relativePath={props.relativePath}
+          relativePath={props.itemRef}
           threadRef={props.threadRef}
         />
       )}

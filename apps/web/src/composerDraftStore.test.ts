@@ -101,6 +101,7 @@ import { waitForDraftHeroTransition } from "./components/chat/draftHeroTransitio
 import { insertInlineContextReference } from "./lib/composerContextReferences";
 import {
   buildMessageContext,
+  cabinetQuoteContextRecord,
   environmentContextRecord,
   terminalContextReference,
 } from "./lib/composerContextRecords";
@@ -848,6 +849,57 @@ describe("composerDraftStore environment contexts", () => {
     const store = useComposerDraftStore.getState();
     store.addEnvironmentContexts(threadRef, [vps]);
     store.setEnvironmentContexts(threadRef, []);
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
+  });
+});
+
+describe("composerDraftStore cabinet quotes", () => {
+  const threadId = ThreadId.make("thread-with-quote");
+  const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
+  const quote = cabinetQuoteContextRecord({
+    text: "Revenue grew 12% in Q3.",
+    sourceLabel: "report.pdf",
+    source: { kind: "cabinet", itemId: "item_1" },
+    page: 4,
+  });
+
+  beforeEach(resetComposerDraftStore);
+
+  it("cites a passage once, survives persistence, and sends it as a record", () => {
+    const store = useComposerDraftStore.getState();
+    store.setPrompt(threadRef, "Is this right?");
+    store.addCabinetQuotes(threadRef, [quote]);
+    store.addCabinetQuotes(threadRef, [quote]);
+
+    const draft = draftFor(threadId, TEST_ENVIRONMENT_ID);
+    expect(draft?.cabinetQuotes).toEqual([quote]);
+    expect(draft?.prompt).toBe(
+      `Is this right? [${quote.label}](t3-context://v1/cabinet-quote/${quote.contextId}) `,
+    );
+
+    const merge = useComposerDraftStore.persist.getOptions().merge!;
+    const hydrated = merge(
+      JSON.parse(
+        JSON.stringify(partializeComposerDraftStoreState(useComposerDraftStore.getState())),
+      ),
+      useComposerDraftStore.getInitialState(),
+    );
+    const restored = hydrated.draftsByThreadKey[scopedThreadKey(threadRef)];
+    expect(restored?.cabinetQuotes).toEqual([quote]);
+    expect(
+      buildMessageContext({
+        terminalContexts: [],
+        reviewComments: [],
+        previewAnnotations: [],
+        cabinetQuotes: restored?.cabinetQuotes ?? [],
+      })?.records,
+    ).toEqual([quote]);
+  });
+
+  it("drops the chip with the record and removes an otherwise empty draft", () => {
+    const store = useComposerDraftStore.getState();
+    store.addCabinetQuotes(threadRef, [quote]);
+    store.setCabinetQuotes(threadRef, []);
     expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
   });
 });

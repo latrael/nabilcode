@@ -3,6 +3,8 @@ import * as Schema from "effect/Schema";
 import { ChevronRightIcon } from "lucide-react";
 import { useState } from "react";
 
+import { useCabinetState } from "../data/useCabinet";
+import { CabinetTree } from "./CabinetTree";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
@@ -19,6 +21,16 @@ export function FilesDrawer({ target }: { target: RepoTreeTarget | null }) {
   const gt = useGT();
   const [open, setOpen] = useLocalStorage(FILES_DRAWER_OPEN_KEY, true, Schema.Boolean);
   const [mode, setMode] = useState<FilesMode>("repo");
+  const cabinetState = useCabinetState(target?.environmentId ?? null);
+  const cabinetReady = cabinetState === "connected";
+  const cabinetHint =
+    target === null
+      ? gt("Open a project to browse Cabinet.")
+      : cabinetState === "disabled"
+        ? gt("Turn Cabinet on in Settings")
+        : cabinetState === "unauthorized"
+          ? gt("Cabinet refused the token")
+          : gt("Cabinet is disconnected");
   return (
     <section
       aria-label={gt("Files")}
@@ -50,22 +62,33 @@ export function FilesDrawer({ target }: { target: RepoTreeTarget | null }) {
           value={[mode]}
           onValueChange={(next) => {
             if (next[0] === "repo") setMode("repo");
+            if (next[0] === "cabinet") setMode("cabinet");
           }}
         >
           <Toggle value="repo">{gt("Repo")}</Toggle>
-          <Tooltip>
-            <TooltipTrigger render={<span className="inline-flex" />}>
-              <Toggle value="cabinet" disabled>
-                {gt("Cabinet")}
-              </Toggle>
-            </TooltipTrigger>
-            <TooltipPopup>{gt("Arrives with Cabinet cards")}</TooltipPopup>
-          </Tooltip>
+          {cabinetReady || mode === "cabinet" ? (
+            <Toggle value="cabinet">{gt("Cabinet")}</Toggle>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger render={<span className="inline-flex" />}>
+                <Toggle value="cabinet" disabled>
+                  {gt("Cabinet")}
+                </Toggle>
+              </TooltipTrigger>
+              <TooltipPopup>{cabinetHint}</TooltipPopup>
+            </Tooltip>
+          )}
         </ToggleGroup>
       </div>
       {open ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {target ? (
+          {target && mode === "cabinet" ? (
+            cabinetReady ? (
+              <CabinetTree target={target} />
+            ) : (
+              <p className="px-3 py-2 text-xs text-sidebar-muted-foreground">{cabinetHint}</p>
+            )
+          ) : target ? (
             <RepoTree target={target} />
           ) : (
             <p className="px-3 py-2 text-xs text-sidebar-muted-foreground">

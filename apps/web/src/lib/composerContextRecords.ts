@@ -5,12 +5,14 @@ import {
 import {
   COMPOSER_CONTEXT_PREVIEW_COMMENT_MAX_CHARS,
   COMPOSER_CONTEXT_REVIEW_DIFF_MAX_CHARS,
+  COMPOSER_CONTEXT_CABINET_QUOTE_MAX_CHARS,
   COMPOSER_CONTEXT_REVIEW_TEXT_MAX_CHARS,
   COMPOSER_CONTEXT_TERMINAL_TEXT_MAX_CHARS,
 } from "@t3tools/contracts";
 import type {
   ComposerContextId,
   ComposerContextRecord,
+  CabinetQuoteContextRecord,
   EnvironmentContextRecord,
   EnvironmentId,
   FileContextRecord,
@@ -235,6 +237,40 @@ export function environmentContextRecord(
   };
 }
 
+export function cabinetQuoteContextReference(
+  record: CabinetQuoteContextRecord,
+): ComposerContextReference {
+  return { kind: "cabinet-quote", contextId: record.contextId, label: record.label };
+}
+
+const CABINET_QUOTE_LABEL_MAX_CHARS = 40;
+
+/** Citing the same passage twice reuses the chip: identity is source, page and text. */
+export function cabinetQuoteContextRecord(
+  input: Pick<CabinetQuoteContextRecord, "text" | "sourceLabel" | "source" | "page">,
+): CabinetQuoteContextRecord {
+  const text = clampContextText(input.text.trim(), COMPOSER_CONTEXT_CABINET_QUOTE_MAX_CHARS);
+  const sourceKey = input.source.kind === "repo" ? input.source.path : input.source.itemId;
+  const flat = text.replace(/\s+/g, " ");
+  const excerpt =
+    flat.length > CABINET_QUOTE_LABEL_MAX_CHARS
+      ? `${flat.slice(0, CABINET_QUOTE_LABEL_MAX_CHARS).trimEnd()}…`
+      : flat;
+  return {
+    version: 1,
+    kind: "cabinet-quote",
+    contextId: toKindScopedComposerContextId(
+      "cabinet-quote",
+      `${input.source.kind}:${sourceKey}:${input.page}:${text}`,
+    ),
+    label: sanitizeComposerContextLabel(`“${excerpt}”`, "cabinet-quote"),
+    text,
+    sourceLabel: input.sourceLabel,
+    source: input.source,
+    page: input.page,
+  };
+}
+
 export function terminalContextRecord(context: TerminalContextDraft): TerminalContextRecord {
   return {
     version: 1,
@@ -382,6 +418,7 @@ export function buildMessageContext(input: {
   previewAnnotations: ReadonlyArray<PreviewAnnotationPayload>;
   threadContexts?: ReadonlyArray<ThreadContextRecord>;
   environmentContexts?: ReadonlyArray<EnvironmentContextRecord>;
+  cabinetQuotes?: ReadonlyArray<CabinetQuoteContextRecord>;
   replyTo?: ResponseContextRecord | null;
   attachments?: ReadonlyArray<BoundComposerAttachment>;
 }): OrchestrationMessageContext | undefined {
@@ -395,6 +432,7 @@ export function buildMessageContext(input: {
     ...input.reviewComments.map(reviewCommentContextRecord),
     ...(input.threadContexts ?? []),
     ...(input.environmentContexts ?? []),
+    ...(input.cabinetQuotes ?? []),
     ...(input.replyTo ? [input.replyTo] : []),
     ...input.previewAnnotations.map((annotation) =>
       previewAnnotationContextRecord(annotation, {

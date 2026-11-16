@@ -28,6 +28,7 @@ export const COMPOSER_CONTEXT_KINDS = [
   "thread",
   "environment",
   "response",
+  "cabinet-quote",
 ] as const;
 export type KnownComposerContextKind = (typeof COMPOSER_CONTEXT_KINDS)[number];
 
@@ -251,6 +252,28 @@ export const ResponseContextRecord = Schema.Struct({
 });
 export type ResponseContextRecord = typeof ResponseContextRecord.Type;
 
+export const COMPOSER_CONTEXT_CABINET_QUOTE_MAX_CHARS = 16_000;
+
+/** Text selected in a PDF on the board, cited into a thread. Only the excerpt and where it came from travel. */
+export const CabinetQuoteContextRecord = Schema.Struct({
+  ...recordBase,
+  kind: Schema.Literal("cabinet-quote"),
+  text: BoundedString(COMPOSER_CONTEXT_CABINET_QUOTE_MAX_CHARS),
+  sourceLabel: ShortString,
+  source: Schema.Union([
+    Schema.Struct({
+      kind: Schema.Literal("repo"),
+      path: TrimmedNonEmptyString.check(Schema.isMaxLength(2_048)),
+    }),
+    Schema.Struct({
+      kind: Schema.Literal("cabinet"),
+      itemId: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+    }),
+  ]),
+  page: PositiveInt,
+});
+export type CabinetQuoteContextRecord = typeof CabinetQuoteContextRecord.Type;
+
 const isJson = Schema.is(Schema.Json);
 
 /** Excludes known discriminators so malformed known records fail their own schema. */
@@ -283,6 +306,7 @@ export const KnownComposerContextRecord = Schema.Union([
   ThreadContextRecord,
   EnvironmentContextRecord,
   ResponseContextRecord,
+  CabinetQuoteContextRecord,
 ]);
 export type KnownComposerContextRecord = typeof KnownComposerContextRecord.Type;
 

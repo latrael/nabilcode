@@ -130,7 +130,7 @@ describe("buildComposerPromptHistoryEntries", () => {
     expect(entry).toEqual({
       id: "m1",
       prompt: `Agent in ${threadChip} finished on ${machineChip}. See`,
-      mentions: { threadContexts: [thread], environmentContexts: [machine] },
+      mentions: { threadContexts: [thread], environmentContexts: [machine], cabinetQuotes: [] },
     });
     const recalled = stepComposerPromptHistory({
       direction: "backward",
@@ -141,6 +141,7 @@ describe("buildComposerPromptHistoryEntries", () => {
     expect(recalled?.mentions).toEqual({
       threadContexts: [thread],
       environmentContexts: [machine],
+      cabinetQuotes: [],
     });
   });
 
@@ -176,7 +177,7 @@ describe("stepComposerPromptHistory", () => {
     expect(forward(newer!.position, "third")).toEqual({
       position: null,
       prompt: "",
-      mentions: { threadContexts: [], environmentContexts: [] },
+      mentions: { threadContexts: [], environmentContexts: [], cabinetQuotes: [] },
     });
   });
 

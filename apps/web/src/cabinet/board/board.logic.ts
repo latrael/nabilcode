@@ -2,6 +2,7 @@ import {
   PRIMARY_CARD_ID,
   type BoardCard,
   type BoardCardKind,
+  type BoardCardSource,
   type BoardLayout,
   type BoardPresetId,
   type BoardSlot,
@@ -13,6 +14,7 @@ const CARD_KINDS: readonly BoardCardKind[] = ["thread", "markdown", "pdf", "diff
 const createPrimaryCard = (slot: BoardSlot | null): BoardCard => ({
   id: PRIMARY_CARD_ID,
   kind: "thread",
+  source: "repo",
   ref: null,
   slot,
 });
@@ -43,7 +45,9 @@ const firstFreeIndex = (layout: BoardLayout) =>
     (_, index) => cardAtIndex(layout, index) === undefined,
   );
 
-const cardIdFor = (kind: BoardCardKind, ref: string) => `${kind}:${ref}`;
+// Repo ids stay `${kind}:${ref}` so persisted layouts keep matching; Cabinet ids are prefixed.
+const cardIdFor = (kind: BoardCardKind, ref: string, source: BoardCardSource = "repo") =>
+  source === "cabinet" ? `cabinet:${kind}:${ref}` : `${kind}:${ref}`;
 
 // Placed cards first, docked after, each group in its existing order, so
 // `applyPreset` re-places cards in the order they were opened.
@@ -100,9 +104,11 @@ export const moveCardToSlot = (
 
 export const openCard = (
   layout: BoardLayout,
-  { kind, ref }: { kind: BoardCardKind; ref: string },
+  { kind, ref, source = "repo" }: { kind: BoardCardKind; ref: string; source?: BoardCardSource },
 ): BoardLayout => {
-  const existing = layout.cards.find((card) => card.kind === kind && card.ref === ref);
+  const existing = layout.cards.find(
+    (card) => card.kind === kind && card.ref === ref && card.source === source,
+  );
   if (existing?.slot) return layout;
 
   let base = layout;
@@ -112,7 +118,7 @@ export const openCard = (
     free = firstFreeIndex(base);
   }
   const others = base.cards.filter((card) => card.id !== existing?.id);
-  const opened = { id: cardIdFor(kind, ref), kind, ref };
+  const opened = { id: cardIdFor(kind, ref, source), kind, source, ref };
 
   if (free >= 0) {
     const slot = BOARD_PRESET_PLACEMENTS[base.preset][free]!;
@@ -143,6 +149,27 @@ export const closeCard = (layout: BoardLayout, cardId: string): BoardLayout => {
   });
 };
 
+export interface CabinetCardItem {
+  readonly id: string;
+  readonly type: string;
+  readonly frontmatter?: Readonly<Record<string, unknown>> | undefined;
+}
+
+/** The attachment a Cabinet item points at (`attachments/...`), or null for a plain note. */
+export const cabinetAttachmentPath = (
+  frontmatter: Readonly<Record<string, unknown>> | undefined,
+): string | null => {
+  const value = frontmatter?.attachment ?? frontmatter?.file;
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+};
+
+/** PDF items, and any item whose attachment is a `.pdf`, open as PDF cards; the rest as Markdown. */
+export const cabinetCardKind = (item: CabinetCardItem): "markdown" | "pdf" =>
+  item.type === "pdf" ||
+  cabinetAttachmentPath(item.frontmatter)?.toLowerCase().endsWith(".pdf") === true
+    ? "pdf"
+    : "markdown";
+
 export const cardKindForPath = (relativePath: string): "markdown" | "pdf" | null => {
   const lower = relativePath.toLowerCase();
   if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
@@ -169,7 +196,18 @@ const parseCard = (raw: unknown): { card: BoardCard; rawSlot: BoardSlot | null }
   }
   const kind = CARD_KINDS.find((candidate) => candidate === raw.kind);
   if (!kind || kind === "thread" || typeof raw.ref !== "string" || raw.ref === "") return null;
-  return { card: { id: raw.id, kind, ref: raw.ref, slot: null, ...minimized }, rawSlot };
+  const source: BoardCardSource = raw.source === "cabinet" ? "cabinet" : "repo";
+  return {
+    card: {
+      id: cardIdFor(kind, raw.ref, source),
+      kind,
+      source,
+      ref: raw.ref,
+      slot: null,
+      ...minimized,
+    },
+    rawSlot,
+  };
 };
 
 export const sanitizeLayout = (raw: unknown): BoardLayout => {
@@ -182,7 +220,7 @@ export const sanitizeLayout = (raw: unknown): BoardLayout => {
 
   const seen = new Set<string>();
   const unique = parsed.filter(({ card }) => {
-    const identity = card.id === PRIMARY_CARD_ID ? card.id : cardIdFor(card.kind, card.ref!);
+    const identity = card.id;
     if (seen.has(identity)) return false;
     seen.add(identity);
     return true;
