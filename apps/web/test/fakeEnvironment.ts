@@ -223,6 +223,8 @@ export interface FakeThread {
   readonly sideChatOf?: ThreadId;
   /** Makes this an older settled thread the shell leaves out; only its family read returns it. */
   readonly olderSettled?: true;
+  /** The shell's run status; defaults to completed, or idle without runs. */
+  readonly status?: OrchestrationV2ThreadShell["status"];
   readonly id: ThreadId;
   readonly title: string;
   /** Defaults to GPT-5.4 on Codex. */
@@ -328,7 +330,7 @@ function shellOf(thread: FakeThread): OrchestrationV2ThreadShell {
     latestRunId: latest?.id ?? null,
     activeRunId: null,
     // Idle reads as waiting on the user, which shows a per-second duration in the sidebar.
-    status: latest ? "completed" : "idle",
+    status: thread.status ?? (latest ? "completed" : "idle"),
     pendingRuntimeRequest: null,
     latestVisibleMessage: null,
     latestUserMessageAt: AT,

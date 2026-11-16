@@ -36,7 +36,7 @@ interface QueuedThreadShell {
  * Failed starts and stale shells from older servers can leave user messages unadopted.
  * Bound the pending window so those threads can eventually settle.
  */
-export const QUEUED_TURN_START_GRACE_MS = 2 * 60 * 1_000;
+const QUEUED_TURN_START_GRACE_MS = 2 * 60 * 1_000;
 
 export function hasQueuedTurnStart(
   shell: QueuedThreadShell,

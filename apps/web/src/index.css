@@ -1101,6 +1101,13 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   background-size: var(--surface-grain-size);
 }
 
+/* The Cabinet board's dot grid, layered over the inherited background. */
+@utility cabinet-board-dots {
+  background-image: radial-gradient(var(--cabinet-board-dot) 1px, transparent 1.2px);
+  background-size: 16px 16px;
+  background-position: -4px -4px;
+}
+
 /* Suppress all transitions during theme changes */
 .no-transitions,
 .no-transitions *,
@@ -1286,6 +1293,18 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     /* On black a gray mix stays as bright as the blue, so dim with transparency instead. */
     --diff-modified-icon: color-mix(in srgb, var(--info-foreground) 65%, transparent);
     --diff-added-icon: var(--success-foreground);
+  }
+}
+
+/* Cabinet board chrome, derived from theme roles so a palette only swaps these. */
+:root {
+  --cabinet-board-dot: color-mix(in srgb, var(--foreground) 12%, transparent);
+  --cabinet-card-head: color-mix(in srgb, var(--muted) 70%, var(--card));
+  --cabinet-card-shadow: 0 1px 2px rgb(0 0 0 / 5%), 0 8px 22px rgb(0 0 0 / 7%);
+
+  @variant dark {
+    --cabinet-board-dot: color-mix(in srgb, var(--foreground) 10%, transparent);
+    --cabinet-card-shadow: 0 1px 2px rgb(0 0 0 / 50%);
   }
 }
 

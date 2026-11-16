@@ -4652,12 +4652,6 @@ export function useComposerThreadDraft(threadRef: ComposerThreadTarget): Compose
   });
 }
 
-export function useThreadHasUnsentDraft(threadRef: ScopedThreadRef): boolean {
-  return useComposerDraftStore((state) =>
-    composerDraftHasUserContent(getComposerDraftState(state, threadRef)),
-  );
-}
-
 export function useComposerDraftModelState(
   threadRef: ComposerThreadTarget,
 ): ComposerDraftModelState {
@@ -4672,17 +4666,6 @@ export function useComposerDraftModelState(
           }
         : EMPTY_COMPOSER_DRAFT_MODEL_STATE;
     }),
-  );
-}
-
-/** Threads a sent draft is launching into: from their shell's arrival until the server owns the send. */
-export function usePromotingDraftThreadKeys(): ReadonlyArray<string> {
-  return useComposerDraftStore(
-    useShallow((state) =>
-      Object.values(state.draftThreadsByThreadKey).flatMap((draft) =>
-        draft.promotedTo ? [scopedThreadKey(draft.promotedTo)] : [],
-      ),
-    ),
   );
 }
 
