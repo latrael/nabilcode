@@ -1,108 +1,113 @@
-<p align="center">
-  <a href="https://t3.codes">
-    <img src="./assets/prod/t3-black-web-icon-192x192.png" width="80" height="80" alt="T3 Code logo" />
-  </a>
-</p>
+<h1 align="center">nabilcode</h1>
 
-<h1 align="center">T3 Code</h1>
-
-<p align="center">The open-source control plane for coding agents.</p>
+<p align="center">A desktop harness for coding agents, wired into your <a href="https://github.com/latrael/cabinet">Cabinet</a> library.</p>
 
 <p align="center">
-  <a href="https://t3.codes/download"><strong>Download</strong></a> ·
-  <a href="https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824">iOS</a> ·
-  <a href="https://play.google.com/store/apps/details?id=com.t3tools.t3code">Android</a> ·
-  <a href="https://app.t3.codes">Web</a> ·
-  <a href="./docs/README.md">Docs</a> ·
-  <a href="https://discord.gg/jn4EGJjrvv">Discord</a>
+  <img src="./docs/screenshots/board.png" width="100%" alt="nabilcode with a Claude thread as the main card, a Cabinet note and a Cabinet PDF beside it, the Cabinet file drawer in the sidebar, and the Memory Proposals dock along the bottom" />
 </p>
 
-<p align="center">
-  <a href="https://t3.codes">
-    <img src="./.github/readme/hero.webp" width="100%" alt="T3 Code on desktop with a finished Claude thread, next to the phone app asking to approve a command from Codex" />
-  </a>
-</p>
+nabilcode runs the coding agents already installed on your machine (Claude Code, Codex, and ACP agents such as Grok, Kiro, Antigravity, and fx) and puts each project on a board next to its notes, PDFs, and diffs. Cabinet, a separate local app, holds what your agents know about a project. nabilcode reads from it, writes to it, and gives agents Cabinet's MCP tools.
 
-T3 Code runs the coding agents on your machine and gives them one fast interface. Start a thread at your desk, then approve the next step from your phone.
-
-It works with Claude Code, Codex, Grok Build, Antigravity, Kiro, fx, and any [ACP](./docs/user/providers-acp.md) agent. If an agent is set up on your computer, T3 Code can control it.
+It is a hard fork of [T3 Code](https://github.com/pingdotgg/t3code), reduced to the desktop app and the local web client it runs on.
 
 ## What you get
 
-- **Your subscriptions.** T3 Code does not resell tokens. It drives the agents you are already signed in to.
-- **Every agent in one place.** Change models in the middle of a thread. Let Claude hand a task to Codex.
-- **Desktop, web, and phone.** One server, and every client shows the same threads. There are apps for iOS and Android.
-- **Remote ready.** Run agents on any machine. Connect over your local network, Tailscale, or [T3 Connect](./docs/user/remote-access.md).
-- **Git built in.** Each thread can work in its own worktree. Review the diff, then commit, push, and open a pull request with one button.
-- **Fast.** Performance is a feature here. We measure it, and we treat a dropped frame as a bug.
-- **Open.** MIT licensed. If you don't like something, fork it.
+- **A bento board per project.** Pick Focus, Split, Bento (8+4), or 2×2. Drag cards between slots and drag an edge to resize; widths snap to a 12-column grid. Each project keeps its own layout.
+- **Thread cards.** The live chat is the main card. Open other threads beside it, then click **Focus** to swap one into the main card.
+- **Notes, PDFs, and diffs as cards.** In the Files drawer, click a `.md` or `.pdf` from the repo or from Cabinet. Diff cards show a thread's full diff.
+- **Cabinet notes that stay in sync.** `[[wikilinks]]` open the linked note. Ticking a checklist box saves it to Cabinet. Edits made in Cabinet appear in the open card.
+- **Quote from PDFs.** Select text and choose **Cite to thread** to attach it to your next message, or **Save quote to Cabinet** to keep it.
+- **`@` mentions for Cabinet.** Type `@` in the composer to mention a Cabinet note. The agent gets its id and fetches the full note with Cabinet's tools.
+- **Agents that know your project.** **Ingest into Cabinet** links a repo to a Cabinet project and copies its README, AGENTS.md, CLAUDE.md, and `docs/` into Cabinet as notes. Agents then get Cabinet's MCP tools and a short project brief on their first turn.
+- **Memory proposals.** When an agent wants Cabinet to remember something, it proposes it instead of writing it. Approve, edit, or reject proposals in the dock under the board. Badges show which threads and projects have proposals waiting.
+- **Your subscriptions.** nabilcode drives the agents you are already signed in to. It does not resell tokens.
 
-## Install
+<p align="center">
+  <img src="./docs/screenshots/cabinet-settings.png" width="80%" alt="Settings, Cabinet panel showing a connected Cabinet, agent tools active, the base URL, harness and agent tokens, MCP transport, and Test connection" />
+</p>
 
-### Desktop app
+## Run it
 
-[Download T3 Code](https://t3.codes/download) for macOS, Windows, or Linux. You can also use a package manager:
+### 1. Install the toolchain
 
-| Platform       | Command                                                              |
-| -------------- | -------------------------------------------------------------------- |
-| macOS          | `brew install --cask t3-code`                                        |
-| Windows        | `winget install T3Tools.T3Code` or `scoop install extras/t3code`     |
-| Arch Linux     | `yay -S t3code-bin`                                                  |
-| Nix            | `nix profile add github:NixOS/nixpkgs/nixos-unstable#t3code`         |
-| Debian, Ubuntu | `.deb` from [Releases](https://github.com/pingdotgg/t3code/releases) |
-
-### Command line
-
-This installs the `t3` command. Run `t3` to start the server and open the web app.
+nabilcode uses [Vite+](https://viteplus.dev). Install its `vp` command, then install dependencies from the repository root:
 
 ```bash
-curl -fsSL https://t3.codes/install.sh | sh
+curl -fsSL https://vite.plus | bash
 ```
 
-On Windows, in PowerShell:
-
-```powershell
-irm https://t3.codes/install.ps1 | iex
+```bash
+vp i
 ```
 
-To try it once without an install, run `npx t3@latest`.
+If your shell can't find `vp` (nvm can reorder `PATH`), call it directly as `~/.local/share/vite-plus/bin/vp`.
 
-### Phone
+You also need at least one agent installed and signed in, for example `claude auth login` for Claude Code or `codex login` for Codex.
 
-Get the app from the [App Store](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824) or [Google Play](https://play.google.com/store/apps/details?id=com.t3tools.t3code). Then follow [remote access](./docs/user/remote-access.md) to connect it to your computer.
+### 2. Start the app
 
-### Sign in to an agent
+To run the server and the web app:
 
-T3 Code needs one agent that is installed and signed in. For example, install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`, or install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`.
+```bash
+vp run dev
+```
 
-[Provider setup](./docs/user/install.md#providers) has the steps for each agent. [Install T3 Code](./docs/user/install.md) covers nightly builds, AppImage, WSL, and NixOS.
+Open the **pairing URL** the dev runner prints. The bare address alone won't sign a new browser in.
 
-## "Wait, what are you selling me?"
+To run the desktop app instead:
 
-Nothing. We built T3 Code because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
+```bash
+vp run dev:desktop
+```
 
-We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the tool that you want.
+If another process already uses the default ports (5733 and 13773), shift them:
 
-## Documentation
+```bash
+T3CODE_PORT_OFFSET=100 vp run dev
+```
 
-- [Install and first run](./docs/user/install.md)
-- [Remote access from a phone or another machine](./docs/user/remote-access.md)
-- [Permission modes](./docs/user/permission-modes.md)
-- [Source control](./docs/user/source-control.md)
-- [Connect outside agents over MCP](./docs/user/outside-agents.md)
-- [FAQ](./docs/user/faq.md)
+Dev state lives in `~/.t3/dev`, separate from any installed copy.
 
-[All docs](./docs/README.md) has the full list.
+### 3. Connect Cabinet
 
-## Contributing
+Start Cabinet from its own repository. Use a sandbox library while you try things out:
 
-We have limited review capacity. Small, focused fixes are the most likely to be merged. Features need an approved discussion first.
+```bash
+pnpm cabinet init ~/Cabinet-Sandbox --sample
+```
 
-- Read [CONTRIBUTING.md](./CONTRIBUTING.md) before you report a bug or open a pull request.
-- Put feature requests in [Ideas](https://github.com/pingdotgg/t3code/discussions/categories/ideas).
-- Build from source with the [development runbook](./docs/operations/development.md#first-checkout). The [architecture overview](./docs/internals/overview.md) explains how it works.
-- Get help in [Discord](https://discord.gg/jn4EGJjrvv).
+```bash
+pnpm cabinet start --library ~/Cabinet-Sandbox
+```
+
+In Cabinet, under **Settings → Agents**, create two tokens:
+
+- a **harness token** with **Can review memory proposals** turned on. nabilcode uses it for reading, writing, and reviewing proposals. Agents never receive it.
+- a plain **agent token**. Agents use it for Cabinet's MCP tools.
+
+Then in nabilcode, go to **Settings → Cabinet**. Turn Cabinet on, set the base URL (use `http://127.0.0.1:4747` rather than `localhost`), and paste both tokens. The status should read **Connected**, and **Agent tools** should read **Active**.
+
+### 4. Try it
+
+1. In the sidebar, hover a project and choose **Ingest into Cabinet**.
+2. Start a thread and ask the agent to check Cabinet before it works.
+3. Switch the Files drawer to **Cabinet**, then open notes and PDFs as cards.
+4. Review anything the agent proposes in the **Memory Proposals** dock.
+
+To watch a turn without paying for a model, pick the free **Replay (dev)** provider in the model picker. It replays recorded turns through the real pipeline.
+
+## Checks
+
+```bash
+vp run check:changed
+```
+
+This runs format, lint, knip, typecheck, and the tests next to your changes. For a single file, run `vp test run <file>`. Browser tests need Playwright's Chromium once:
+
+```bash
+cd apps/web && vp exec playwright install chromium
+```
 
 ## License
 
-[MIT](./LICENSE)
+[MIT](./LICENSE). nabilcode is based on T3 Code by T3 Tools.

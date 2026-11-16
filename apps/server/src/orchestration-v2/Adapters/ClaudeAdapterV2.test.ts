@@ -784,14 +784,14 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
           transport: "stdio",
           name: "cabinet",
           command: "cabinet",
-          args: ["mcp", "--agent", "nabilinc-claude"],
+          args: ["mcp", "--agent", "nabilcode-claude"],
         },
       ],
     });
     assert.deepEqual(stdio.mcpServers?.["cabinet"], {
       type: "stdio",
       command: "cabinet",
-      args: ["mcp", "--agent", "nabilinc-claude"],
+      args: ["mcp", "--agent", "nabilcode-claude"],
     });
     assert.notInclude(stdio.allowedTools ?? [], "mcp__cabinet__*");
     assert.notProperty(

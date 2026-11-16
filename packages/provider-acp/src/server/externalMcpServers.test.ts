@@ -13,7 +13,7 @@ const stdio: ExternalMcpServer = {
   transport: "stdio",
   name: "cabinet",
   command: "cabinet",
-  args: ["mcp", "--agent", "nabilinc-grok", "--thread", "thread-1"],
+  args: ["mcp", "--agent", "nabilcode-grok", "--thread", "thread-1"],
 };
 
 describe("acpExternalMcpServers", () => {
@@ -42,7 +42,7 @@ describe("acpExternalMcpServers", () => {
         {
           name: "cabinet",
           command: "cabinet",
-          args: ["mcp", "--agent", "nabilinc-grok", "--thread", "thread-1"],
+          args: ["mcp", "--agent", "nabilcode-grok", "--thread", "thread-1"],
           env: [],
         },
       ],

@@ -40,7 +40,7 @@ export function cabinetMcpDescriptor(input: {
         args: [
           "mcp",
           "--agent",
-          `nabilinc-${input.provider}`,
+          `nabilcode-${input.provider}`,
           "--thread",
           threadId,
           ...(cabinetProjectRef === undefined ? [] : ["--project", cabinetProjectRef]),

@@ -55,7 +55,7 @@ describe("cabinetMcpDescriptor", () => {
           args: [
             "mcp",
             "--agent",
-            "nabilinc-claude",
+            "nabilcode-claude",
             "--thread",
             "thread-1",
             "--project",
@@ -94,7 +94,7 @@ describe("cabinetMcpDescriptor", () => {
       provider: "codex",
     });
     expect(stdio.server).toMatchObject({
-      args: ["mcp", "--agent", "nabilinc-codex", "--thread", "thread-1"],
+      args: ["mcp", "--agent", "nabilcode-codex", "--thread", "thread-1"],
     });
   });
 });
