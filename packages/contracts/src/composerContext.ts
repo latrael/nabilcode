@@ -29,6 +29,7 @@ export const COMPOSER_CONTEXT_KINDS = [
   "environment",
   "response",
   "cabinet-quote",
+  "cabinet-item",
 ] as const;
 export type KnownComposerContextKind = (typeof COMPOSER_CONTEXT_KINDS)[number];
 
@@ -274,6 +275,17 @@ export const CabinetQuoteContextRecord = Schema.Struct({
 });
 export type CabinetQuoteContextRecord = typeof CabinetQuoteContextRecord.Type;
 
+/** A Cabinet item the user @-mentioned. Identity only: the agent reads the body through Cabinet's tools. */
+export const CabinetItemContextRecord = Schema.Struct({
+  ...recordBase,
+  kind: Schema.Literal("cabinet-item"),
+  itemId: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+  title: ShortString,
+  type: TrimmedNonEmptyString.check(Schema.isMaxLength(64)),
+  path: BoundedString(2_048),
+});
+export type CabinetItemContextRecord = typeof CabinetItemContextRecord.Type;
+
 const isJson = Schema.is(Schema.Json);
 
 /** Excludes known discriminators so malformed known records fail their own schema. */
@@ -307,6 +319,7 @@ export const KnownComposerContextRecord = Schema.Union([
   EnvironmentContextRecord,
   ResponseContextRecord,
   CabinetQuoteContextRecord,
+  CabinetItemContextRecord,
 ]);
 export type KnownComposerContextRecord = typeof KnownComposerContextRecord.Type;
 

@@ -22,6 +22,7 @@ import {
 } from "../../lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "../../lib/syntaxHighlighting";
 import ChatMarkdown from "../ChatMarkdown";
+import { CabinetItemChip } from "~/cabinet/CabinetItemChip";
 import { CabinetQuoteChip } from "~/cabinet/CabinetQuoteChip";
 import { EnvironmentContextChip } from "../EnvironmentContextChip";
 import { ThreadContextChip } from "../ThreadContextChip";
@@ -356,6 +357,16 @@ const userMessageContextPresentationRegistry = createContextPresentationRegistry
       render: (record, context) =>
         record.kind === "cabinet-quote" ? (
           <CabinetQuoteChip record={record} copyMarkdown={context.copyMarkdown} />
+        ) : (
+          <UnavailableUserMessageContextChip {...context} />
+        ),
+    },
+    {
+      kind: "cabinet-item",
+      canRender: (record) => record.kind === "cabinet-item",
+      render: (record, context) =>
+        record.kind === "cabinet-item" ? (
+          <CabinetItemChip record={record} copyMarkdown={context.copyMarkdown} />
         ) : (
           <UnavailableUserMessageContextChip {...context} />
         ),

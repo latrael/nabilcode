@@ -23,7 +23,7 @@ import { cabinetRowStatus, type CabinetThreadStatus } from "./cabinetStatus.logi
 import type { CabinetProviderEntry } from "./providerEntries";
 
 // Static dots only: a continuously repainting animation pegs the GPU on high-refresh displays.
-const DOT_CLASS: Record<CabinetThreadStatus, string> = {
+export const DOT_CLASS: Record<CabinetThreadStatus, string> = {
   working: "bg-success",
   waiting: "bg-warning",
   failed: "bg-destructive",

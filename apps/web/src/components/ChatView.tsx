@@ -169,7 +169,11 @@ import { copyThreadReference } from "../lib/copyThreadReference";
 import { subscribeSnapShotComposerFocus } from "../lib/desktopSnapShot";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { FileMetadataThreadProvider } from "../hooks/FileMetadataThreadProvider";
-import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
+import {
+  isRightPanelLayoutTooNarrow,
+  RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY,
+  shouldUseRightPanelSheet,
+} from "../rightPanelLayout";
 import { PopoverCreateHandle } from "./ui/popover";
 import {
   selectActiveRightPanel,
@@ -731,6 +735,19 @@ export default function ChatView(props: ChatViewProps) {
   // Focusing the composer without a tap raises the on-screen keyboard on touch devices.
   const isCoarsePointer = useMediaQuery({ pointer: "coarse" });
   const [workspaceLayoutElement, setWorkspaceLayoutElement] = useState<HTMLDivElement | null>(null);
+  // A board card is narrower than the window, so the inline/sheet choice follows the row itself.
+  const [workspaceLayoutTooNarrow, setWorkspaceLayoutTooNarrow] = useState(false);
+  const [workspaceLayoutRef] = useState(() => (node: HTMLDivElement) => {
+    setWorkspaceLayoutElement(node);
+    const measure = () =>
+      setWorkspaceLayoutTooNarrow(isRightPanelLayoutTooNarrow(node.clientWidth));
+    measure();
+    const stopObserving = observeResize(node, measure);
+    return () => {
+      stopObserving();
+      setWorkspaceLayoutElement(null);
+    };
+  });
   const threadPanelPopoverAnchorRef = useRef<HTMLElement | null>(null);
   const [terminalUiLaunchContext, setTerminalUiLaunchContext] =
     useState<TerminalLaunchContext | null>(null);
@@ -1075,7 +1092,11 @@ export default function ChatView(props: ChatViewProps) {
   const rightPanelState = useRightPanelStore((state) =>
     selectThreadRightPanelState(state.byThreadKey, activeThreadRef),
   );
-  const shouldUsePlanSidebarSheet = prefersPlanSidebarSheet && rightPanelState.maximized !== true;
+  const shouldUsePlanSidebarSheet = shouldUseRightPanelSheet({
+    viewportNarrow: prefersPlanSidebarSheet,
+    layoutTooNarrow: workspaceLayoutTooNarrow,
+    maximized: rightPanelState.maximized === true,
+  });
   const activeRightPanelSurface = useRightPanelStore((state) =>
     selectActiveRightPanelSurface(state.byThreadKey, activeThreadRef),
   );
@@ -3314,7 +3335,7 @@ export default function ChatView(props: ChatViewProps) {
 
   const content = (
     <div
-      ref={setWorkspaceLayoutElement}
+      ref={workspaceLayoutRef}
       className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
     >
       {rightPanelControlsAtRoot && !embedded ? panelLayoutControls : null}

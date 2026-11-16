@@ -24,6 +24,7 @@ import {
   type PreviewAnnotationPayload,
   RuntimeMode,
   ThreadContextRecord,
+  CabinetItemContextRecord,
   CabinetQuoteContextRecord,
   EnvironmentContextRecord,
   type ServerProvider,
@@ -92,6 +93,7 @@ import {
   terminalContextReference,
   threadContextReference,
   cabinetQuoteContextReference,
+  cabinetItemContextReference,
   environmentContextReference,
 } from "./lib/composerContextRecords";
 import { create } from "zustand";
@@ -115,6 +117,7 @@ const isReviewCommentContext = Schema.is(ReviewCommentContextSchema);
 const isThreadContextRecord = Schema.is(ThreadContextRecord);
 const isEnvironmentContextRecord = Schema.is(EnvironmentContextRecord);
 const isCabinetQuoteContextRecord = Schema.is(CabinetQuoteContextRecord);
+const isCabinetItemContextRecord = Schema.is(CabinetItemContextRecord);
 const isSnapShotSource = Schema.is(SnapShotSource);
 const isPreviewAnnotationPayload = Schema.is(PreviewAnnotationPayloadSchema);
 const isResponseContextRecord = Schema.is(ResponseContextRecord);
@@ -349,6 +352,7 @@ const PersistedComposerThreadDraftState = Schema.Struct({
   threadContexts: Schema.optionalKey(Schema.Array(ThreadContextRecord)),
   environmentContexts: Schema.optionalKey(Schema.Array(EnvironmentContextRecord)),
   cabinetQuotes: Schema.optionalKey(Schema.Array(CabinetQuoteContextRecord)),
+  cabinetItems: Schema.optionalKey(Schema.Array(CabinetItemContextRecord)),
   replyTo: Schema.optionalKey(ResponseContextRecord),
   modelSelectionByProvider: Schema.optionalKey(Schema.Record(ProviderInstanceId, ModelSelection)),
   activeProvider: Schema.optionalKey(Schema.NullOr(ProviderInstanceId)),
@@ -478,6 +482,7 @@ export interface ComposerThreadDraftState {
   threadContexts: ThreadContextRecord[];
   environmentContexts: EnvironmentContextRecord[];
   cabinetQuotes: CabinetQuoteContextRecord[];
+  cabinetItems: CabinetItemContextRecord[];
   /** The response this message replies to. It becomes a context record when the message is sent. */
   replyTo: ResponseContextRecord | null;
   modelSelectionByProvider: Partial<Record<ProviderInstanceId, ModelSelection>>;
@@ -504,6 +509,7 @@ export function composerDraftHasUserContent(
     draft.threadContexts.length > 0 ||
     draft.environmentContexts.length > 0 ||
     draft.cabinetQuotes.length > 0 ||
+    draft.cabinetItems.length > 0 ||
     draft.replyTo !== null
   );
 }
@@ -766,6 +772,16 @@ interface ComposerDraftStoreState {
     threadRef: ComposerThreadTarget,
     records: ReadonlyArray<CabinetQuoteContextRecord>,
   ) => void;
+  /** Mentions Cabinet items as context; an already-mentioned item is skipped. */
+  addCabinetItems: (
+    threadRef: ComposerThreadTarget,
+    records: ReadonlyArray<CabinetItemContextRecord>,
+    options?: ComposerContextAddOptions,
+  ) => void;
+  setCabinetItems: (
+    threadRef: ComposerThreadTarget,
+    records: ReadonlyArray<CabinetItemContextRecord>,
+  ) => void;
   clearPersistedAttachments: (threadRef: ComposerThreadTarget) => void;
   syncPersistedAttachments: (
     threadRef: ComposerThreadTarget,
@@ -877,6 +893,7 @@ const EMPTY_REVIEW_COMMENTS: ReviewCommentContext[] = [];
 const EMPTY_THREAD_CONTEXTS: ThreadContextRecord[] = [];
 const EMPTY_ENVIRONMENT_CONTEXTS: EnvironmentContextRecord[] = [];
 const EMPTY_CABINET_QUOTES: CabinetQuoteContextRecord[] = [];
+const EMPTY_CABINET_ITEMS: CabinetItemContextRecord[] = [];
 Object.freeze(EMPTY_IMAGES);
 Object.freeze(EMPTY_FILES);
 Object.freeze(EMPTY_IDS);
@@ -905,6 +922,7 @@ const EMPTY_THREAD_DRAFT = Object.freeze<ComposerThreadDraftState>({
   threadContexts: EMPTY_THREAD_CONTEXTS,
   environmentContexts: EMPTY_ENVIRONMENT_CONTEXTS,
   cabinetQuotes: EMPTY_CABINET_QUOTES,
+  cabinetItems: EMPTY_CABINET_ITEMS,
   replyTo: null,
   modelSelectionByProvider: EMPTY_MODEL_SELECTION_BY_PROVIDER,
   activeProvider: null,
@@ -925,6 +943,7 @@ function createEmptyThreadDraft(): ComposerThreadDraftState {
     threadContexts: [],
     environmentContexts: [],
     cabinetQuotes: [],
+    cabinetItems: [],
     replyTo: null,
     modelSelectionByProvider: {},
     activeProvider: null,
@@ -1040,6 +1059,7 @@ function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
     draft.threadContexts.length === 0 &&
     draft.environmentContexts.length === 0 &&
     draft.cabinetQuotes.length === 0 &&
+    draft.cabinetItems.length === 0 &&
     draft.replyTo === null &&
     Object.keys(draft.modelSelectionByProvider).length === 0 &&
     draft.activeProvider === null &&
@@ -2142,6 +2162,9 @@ function normalizePersistedDraftsByThreadId(
     const cabinetQuotes = Array.isArray(draftCandidate.cabinetQuotes)
       ? draftCandidate.cabinetQuotes.filter(isCabinetQuoteContextRecord)
       : [];
+    const cabinetItems = Array.isArray(draftCandidate.cabinetItems)
+      ? draftCandidate.cabinetItems.filter(isCabinetItemContextRecord)
+      : [];
     const previewAnnotations = Array.isArray(draftCandidate.previewAnnotations)
       ? draftCandidate.previewAnnotations.filter(isPreviewAnnotationPayload)
       : [];
@@ -2261,6 +2284,7 @@ function normalizePersistedDraftsByThreadId(
       threadContexts.length === 0 &&
       environmentContexts.length === 0 &&
       cabinetQuotes.length === 0 &&
+      cabinetItems.length === 0 &&
       replyTo === null &&
       !hasModelData &&
       !runtimeMode &&
@@ -2290,6 +2314,7 @@ function normalizePersistedDraftsByThreadId(
       ...(threadContexts.length > 0 ? { threadContexts } : {}),
       ...(environmentContexts.length > 0 ? { environmentContexts } : {}),
       ...(cabinetQuotes.length > 0 ? { cabinetQuotes } : {}),
+      ...(cabinetItems.length > 0 ? { cabinetItems } : {}),
       ...(replyTo ? { replyTo: replyTo as DeepMutable<ResponseContextRecord> } : {}),
       ...(hasModelData
         ? {
@@ -2317,6 +2342,7 @@ function persistedComposerDraftHasUserContent(draft: PersistedComposerThreadDraf
     (draft.threadContexts?.length ?? 0) > 0 ||
     (draft.environmentContexts?.length ?? 0) > 0 ||
     (draft.cabinetQuotes?.length ?? 0) > 0 ||
+    (draft.cabinetItems?.length ?? 0) > 0 ||
     draft.replyTo !== undefined
   );
 }
@@ -2398,6 +2424,8 @@ export function partializeComposerDraftStoreState(
       draft.threadContexts.length === 0 &&
       draft.environmentContexts.length === 0 &&
       draft.cabinetQuotes.length === 0 &&
+      draft.cabinetItems.length === 0 &&
+      draft.cabinetItems.length === 0 &&
       draft.replyTo === null &&
       !hasModelData &&
       draft.runtimeMode === null &&
@@ -2459,6 +2487,9 @@ export function partializeComposerDraftStoreState(
         : {}),
       ...(draft.cabinetQuotes.length > 0
         ? { cabinetQuotes: draft.cabinetQuotes.map((record) => ({ ...record })) }
+        : {}),
+      ...(draft.cabinetItems.length > 0
+        ? { cabinetItems: draft.cabinetItems.map((record) => ({ ...record })) }
         : {}),
       ...(draft.replyTo
         ? { replyTo: { ...draft.replyTo } as DeepMutable<ResponseContextRecord> }
@@ -2728,6 +2759,7 @@ function toHydratedThreadDraft(
       ...(persistedDraft.threadContexts ?? []).map(threadContextReference),
       ...(persistedDraft.environmentContexts ?? []).map(environmentContextReference),
       ...(persistedDraft.cabinetQuotes ?? []).map(cabinetQuoteContextReference),
+      ...(persistedDraft.cabinetItems ?? []).map(cabinetItemContextReference),
       ...files.map(fileContextReference),
     ]),
     images: hydrateImagesFromPersisted(persistedDraft.attachments),
@@ -2745,6 +2777,7 @@ function toHydratedThreadDraft(
     threadContexts: persistedDraft.threadContexts?.map((record) => ({ ...record })) ?? [],
     environmentContexts: persistedDraft.environmentContexts?.map((record) => ({ ...record })) ?? [],
     cabinetQuotes: persistedDraft.cabinetQuotes?.map((record) => ({ ...record })) ?? [],
+    cabinetItems: persistedDraft.cabinetItems?.map((record) => ({ ...record })) ?? [],
     replyTo: persistedDraft.replyTo ?? null,
     modelSelectionByProvider,
     activeProvider,
@@ -4369,6 +4402,73 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             return { draftsByThreadKey: nextDraftsByThreadKey };
           });
         },
+        addCabinetItems: (threadRef, records, options) => {
+          const threadKey = resolveComposerDraftKey(get(), threadRef);
+          if (!threadKey) return;
+          const existingIds = new Set(
+            (get().draftsByThreadKey[threadKey]?.cabinetItems ?? []).map(
+              (record) => record.contextId,
+            ),
+          );
+          const incoming = records.filter((record) => {
+            if (existingIds.has(record.contextId)) return false;
+            existingIds.add(record.contextId);
+            return true;
+          });
+          if (incoming.length === 0) return;
+          const references = incoming.map(cabinetItemContextReference);
+          const placedAtCaret =
+            options?.appendReference !== false &&
+            options?.insertAtCaret !== false &&
+            (contextInsertionHandlers.get(threadKey)?.(references) ?? false);
+          set((state) => {
+            const existing = state.draftsByThreadKey[threadKey] ?? createEmptyThreadDraft();
+            const known = new Set(existing.cabinetItems.map((record) => record.contextId));
+            const accepted = incoming.filter((record) => !known.has(record.contextId));
+            if (accepted.length === 0) return state;
+            return {
+              draftsByThreadKey: {
+                ...state.draftsByThreadKey,
+                [threadKey]: {
+                  ...existing,
+                  prompt:
+                    placedAtCaret || options?.appendReference === false
+                      ? existing.prompt
+                      : ensureInlineContextReferences(
+                          existing.prompt,
+                          accepted.map(cabinetItemContextReference),
+                        ),
+                  cabinetItems: [...existing.cabinetItems, ...accepted],
+                },
+              },
+            };
+          });
+        },
+        setCabinetItems: (threadRef, records) => {
+          const threadKey = resolveComposerDraftKey(get(), threadRef);
+          if (!threadKey) return;
+          const cabinetItems = records
+            .filter(isCabinetItemContextRecord)
+            .map((record) => ({ ...record }));
+          set((state) => {
+            const existing = state.draftsByThreadKey[threadKey] ?? createEmptyThreadDraft();
+            const retainedIds = new Set(cabinetItems.map((record) => record.contextId));
+            let prompt = existing.prompt;
+            for (const previous of existing.cabinetItems) {
+              if (retainedIds.has(previous.contextId)) continue;
+              prompt = removeInlineContextReference(prompt, previous.contextId).prompt;
+            }
+            prompt = ensureInlineContextReferences(
+              prompt,
+              cabinetItems.map(cabinetItemContextReference),
+            );
+            const nextDraft = { ...existing, prompt, cabinetItems };
+            const nextDraftsByThreadKey = { ...state.draftsByThreadKey };
+            if (shouldRemoveDraft(nextDraft)) delete nextDraftsByThreadKey[threadKey];
+            else nextDraftsByThreadKey[threadKey] = nextDraft;
+            return { draftsByThreadKey: nextDraftsByThreadKey };
+          });
+        },
         removeReviewComment: (threadRef, commentId) => {
           const threadKey = resolveComposerDraftKey(get(), threadRef);
           if (!threadKey || !commentId) return;
@@ -4488,6 +4588,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
                 ...current.threadContexts.map(threadContextReference),
                 ...current.environmentContexts.map(environmentContextReference),
                 ...current.cabinetQuotes.map(cabinetQuoteContextReference),
+                ...current.cabinetItems.map(cabinetItemContextReference),
                 ...current.previewAnnotations.map(previewAnnotationContextReference),
               ]),
               images: [],

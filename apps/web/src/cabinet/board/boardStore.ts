@@ -11,6 +11,9 @@ import {
   DEFAULT_LAYOUT,
   moveCardToSlot,
   openCard,
+  openThreadCard,
+  promoteThreadCard,
+  resizeCard,
   sanitizeLayout,
   swapCards,
 } from "./board.logic";
@@ -25,7 +28,15 @@ interface BoardStoreState {
   openFile: (key: string, relativePath: string) => boolean;
   /** Opens (or focuses) a Cabinet item as a markdown or PDF card, keyed by the item id. */
   openCabinetItem: (key: string, item: CabinetCardItem) => void;
+  /** Opens a thread (scoped thread key) as a secondary card; a no-op for the route's own thread. */
+  openThread: (key: string, threadKey: string, primaryThreadKey: string | null) => void;
+  /** Opens the full-thread diff of a thread (scoped thread key) as a card. */
+  openDiff: (key: string, threadKey: string) => void;
+  /** Swaps a secondary thread card for the route's previous thread; the caller navigates. */
+  promoteThread: (key: string, cardId: string, previousPrimaryThreadKey: string | null) => void;
   closeCard: (key: string, cardId: string) => void;
+  /** Sets a card's width in columns by moving its right edge; the layout turns `custom`. */
+  resizeCard: (key: string, cardId: string, size: { w: number }) => void;
 }
 
 export const selectBoardLayout = (key: string) => (state: BoardStoreState) =>
@@ -67,7 +78,15 @@ export const useBoardStore = create<BoardStoreState>()(
           update(key, (layout) =>
             openCard(layout, { kind: cabinetCardKind(item), ref: item.id, source: "cabinet" }),
           ),
+        openThread: (key, threadKey, primaryThreadKey) =>
+          update(key, (layout) => openThreadCard(layout, threadKey, primaryThreadKey)),
+        openDiff: (key, threadKey) =>
+          update(key, (layout) => openCard(layout, { kind: "diff", ref: threadKey })),
+        promoteThread: (key, cardId, previousPrimaryThreadKey) =>
+          update(key, (layout) => promoteThreadCard(layout, cardId, previousPrimaryThreadKey)),
         closeCard: (key, cardId) => update(key, (layout) => closeCard(layout, cardId)),
+        resizeCard: (key, cardId, size) =>
+          update(key, (layout) => resizeCard(layout, cardId, size)),
       };
     },
     {

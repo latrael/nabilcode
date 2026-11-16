@@ -1,5 +1,6 @@
 import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
 import {
+  CabinetItemContextRecord,
   CabinetQuoteContextRecord,
   EnvironmentContextRecord,
   type OrchestrationMessageContext,
@@ -20,6 +21,7 @@ const TRAILING_LEGACY_CONTEXT =
 const isThreadContextRecord = Schema.is(ThreadContextRecord);
 const isEnvironmentContextRecord = Schema.is(EnvironmentContextRecord);
 const isCabinetQuoteContextRecord = Schema.is(CabinetQuoteContextRecord);
+const isCabinetItemContextRecord = Schema.is(CabinetItemContextRecord);
 
 type ComposerPromptHistoryMessage = Parameters<typeof resolveUserMessagePresentation>[0] & {
   readonly id: string;
@@ -31,12 +33,14 @@ export interface ComposerPromptHistoryMentions {
   readonly threadContexts: ReadonlyArray<ThreadContextRecord>;
   readonly environmentContexts: ReadonlyArray<EnvironmentContextRecord>;
   readonly cabinetQuotes: ReadonlyArray<CabinetQuoteContextRecord>;
+  readonly cabinetItems: ReadonlyArray<CabinetItemContextRecord>;
 }
 
 const NO_MENTIONS: ComposerPromptHistoryMentions = {
   threadContexts: [],
   environmentContexts: [],
   cabinetQuotes: [],
+  cabinetItems: [],
 };
 
 interface ComposerPromptHistoryEntry {
@@ -156,10 +160,13 @@ export function recallComposerMessage(
   const threadRecords = records.filter(isThreadContextRecord);
   const environmentRecords = records.filter(isEnvironmentContextRecord);
   const quoteRecords = records.filter(isCabinetQuoteContextRecord);
+  const itemRecords = records.filter(isCabinetItemContextRecord);
   const prompt = recallableComposerPrompt(
     message.text,
     new Set(
-      [...threadRecords, ...environmentRecords, ...quoteRecords].map((record) => record.contextId),
+      [...threadRecords, ...environmentRecords, ...quoteRecords, ...itemRecords].map(
+        (record) => record.contextId,
+      ),
     ),
   );
   // A record whose chip is gone from the text would put the chip back when written to the draft.
@@ -172,6 +179,7 @@ export function recallComposerMessage(
       threadContexts: threadRecords.filter((record) => referenced.has(record.contextId)),
       environmentContexts: environmentRecords.filter((record) => referenced.has(record.contextId)),
       cabinetQuotes: quoteRecords.filter((record) => referenced.has(record.contextId)),
+      cabinetItems: itemRecords.filter((record) => referenced.has(record.contextId)),
     },
   };
 }

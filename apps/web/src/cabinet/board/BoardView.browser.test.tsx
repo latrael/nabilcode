@@ -1,3 +1,4 @@
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
 import type * as Context from "effect/Context";
@@ -54,7 +55,7 @@ const placement = (id: string) => {
 const chatColumn = () =>
   document.querySelector<HTMLElement>('[data-board-card="primary"] [data-chat-column]');
 
-it("places cards per preset and drag, and keeps the one primary ChatView mounted", async () => {
+it("places cards per preset, drag and promotion, and keeps the one primary ChatView mounted", async () => {
   await page.viewport(1400, 900);
   const [first, second] = [threadWithHistory("board-a", 1), threadWithHistory("board-b", 1)];
   using _environment = installFakeEnvironment([first, second]);
@@ -134,4 +135,83 @@ it("places cards per preset and drag, and keeps the one primary ChatView mounted
   await expect.element(page.getByText("Answer 0 for board-b.")).toBeVisible();
   expect(chatColumn()).toBe(mounted);
   expect(placement(notesId)).toBe("1 / span 6 | 2 / span 1");
+
+  // Promoting a secondary thread card routes to its thread and swaps the old one into its slot.
+  const [firstKey, secondKey] = [first, second].map((thread) =>
+    scopedThreadKey(scopeThreadRef(ENVIRONMENT_ID, thread.id)),
+  );
+  await act(() => useBoardStore.getState().openThread(KEY, firstKey!, secondKey!));
+  const secondaryId = `thread:${firstKey}`;
+  await expect.element(page.getByText("Answer 0 for board-a.")).toBeVisible();
+  expect(card(secondaryId)?.textContent).toContain("Answer 0 for board-a.");
+  const secondarySlot = placement(secondaryId);
+
+  await userEvent.click(page.getByRole("button", { name: "Focus Thread board-a" }));
+  await vi.waitFor(() =>
+    expect(router.state.location.pathname).toBe(`/${ENVIRONMENT_ID}/${first.id}`),
+  );
+  const demotedId = `thread:${secondKey}`;
+  await expect.element(page.getByText("Answer 0 for board-b.")).toBeVisible();
+  expect(card("primary")?.textContent).toContain("Answer 0 for board-a.");
+  expect(card(demotedId)?.textContent).toContain("Answer 0 for board-b.");
+  expect(card(secondaryId)).toBeNull();
+  expect(placement(demotedId)).toBe(secondarySlot);
+  expect(chatColumn()).toBe(mounted);
+});
+
+it("snaps a card edge drag to the nearest column line and commits a custom layout", async () => {
+  await page.viewport(1400, 900);
+  const thread = threadWithHistory("board-a", 1);
+  using _environment = installFakeEnvironment([thread]);
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+  });
+  useBoardStore.setState({ layouts: {} });
+  useBoardStore.getState().openFile(KEY, NOTES);
+  useBoardStore.getState().setPreset(KEY, "split");
+
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${thread.id}`] }),
+  );
+  await router.load();
+  await using _app = await render(<AppRoot router={router} />, { router: false });
+  await expect.element(page.getByText("Answer 0 for board-a.")).toBeVisible();
+  const mounted = chatColumn();
+  const notesId = `markdown:${NOTES}`;
+  await vi.waitFor(() => expect(placement("primary")).toBe("1 / span 6 | 1 / span 2"));
+
+  const handle = page.getByRole("separator", { name: "Resize card width" }).element();
+  const grid = document.querySelector<HTMLElement>("[data-board-grid]")!.getBoundingClientRect();
+  const from = handle.getBoundingClientRect();
+  const pointer = (type: string, x: number) =>
+    new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 1,
+      isPrimary: true,
+      button: 0,
+      buttons: type === "pointerup" ? 0 : 1,
+      clientX: x,
+      clientY: from.y + from.height / 2,
+    });
+  // Two thirds across the grid sits closest to the line after column 8.
+  const to = grid.left + (grid.width * 8) / 12;
+  await act(() => {
+    handle.dispatchEvent(pointer("pointerdown", from.x + from.width / 2));
+    handle.dispatchEvent(pointer("pointermove", to));
+  });
+  // Only an outline previews the drag; nothing is committed yet.
+  expect(placement("primary")).toBe("1 / span 6 | 1 / span 2");
+  expect(document.querySelector<HTMLElement>("[data-board-grid] > [hidden]")).toBeNull();
+  await act(() => handle.dispatchEvent(pointer("pointerup", to)));
+
+  await vi.waitFor(() => expect(placement("primary")).toBe("1 / span 8 | 1 / span 2"));
+  expect(placement(notesId)).toBe("9 / span 4 | 1 / span 2");
+  expect(useBoardStore.getState().layouts[KEY]?.preset).toBe("custom");
+  expect(chatColumn()).toBe(mounted);
+
+  await userEvent.click(page.getByRole("button", { name: "Split" }));
+  await vi.waitFor(() => expect(placement("primary")).toBe("1 / span 6 | 1 / span 2"));
+  expect(placement(notesId)).toBe("7 / span 6 | 1 / span 2");
 });

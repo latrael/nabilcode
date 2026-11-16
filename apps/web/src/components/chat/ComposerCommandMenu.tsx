@@ -24,14 +24,17 @@ import {
   UserRoundIcon,
   type LucideIcon,
 } from "lucide-react";
+import { useGT } from "gt-react";
 import { memo, useLayoutEffect, useRef, useState } from "react";
 
 import { type ComposerSlashCommand, type ComposerTriggerKind } from "../../composer-logic";
 import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
-import { Command, CommandGroup, CommandItem, CommandList } from "../ui/command";
+import { Command, CommandGroup, CommandGroupLabel, CommandItem, CommandList } from "../ui/command";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
+import { CabinetTypeIcon } from "~/cabinet/CabinetTypeIcon";
+import type { CabinetMentionItem } from "~/cabinet/cabinetItemMention.logic";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { ComposerBanner } from "./ComposerBanner";
@@ -92,6 +95,7 @@ export type ComposerCommandItem =
       label: string;
       description: string;
     }
+  | CabinetMentionItem
   | {
       id: string;
       type: "model";
@@ -116,7 +120,23 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
   onHighlightedItemChange: (itemId: string | null) => void;
   onSelect: (item: ComposerCommandItem) => void;
 }) {
+  const gt = useGT();
   const listRef = useRef<HTMLDivElement>(null);
+  // Cabinet's rows trail the rest under their own heading.
+  const mainItems = props.items.filter((item) => item.type !== "cabinet-item");
+  const cabinetItems = props.items.filter((item) => item.type === "cabinet-item");
+  const renderItem = (item: ComposerCommandItem) => (
+    <ComposerCommandMenuItem
+      key={item.id}
+      optionId={composerSuggestionOptionId(props.listId, item.id)}
+      item={item}
+      triggerKind={props.triggerKind}
+      resolvedTheme={props.resolvedTheme}
+      isActive={props.activeItemId === item.id}
+      onHighlight={props.onHighlightedItemChange}
+      onSelect={props.onSelect}
+    />
+  );
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- scrolls the highlighted menu item's DOM node into view
   useLayoutEffect(() => {
@@ -148,20 +168,13 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
             aria-label={props.triggerKind ? LISTBOX_LABEL_BY_TRIGGER[props.triggerKind] : undefined}
             className="max-h-72 min-h-0 scroll-pb-6"
           >
-            <CommandGroup>
-              {props.items.map((item) => (
-                <ComposerCommandMenuItem
-                  key={item.id}
-                  optionId={composerSuggestionOptionId(props.listId, item.id)}
-                  item={item}
-                  triggerKind={props.triggerKind}
-                  resolvedTheme={props.resolvedTheme}
-                  isActive={props.activeItemId === item.id}
-                  onHighlight={props.onHighlightedItemChange}
-                  onSelect={props.onSelect}
-                />
-              ))}
-            </CommandGroup>
+            <CommandGroup>{mainItems.map(renderItem)}</CommandGroup>
+            {cabinetItems.length > 0 ? (
+              <CommandGroup>
+                <CommandGroupLabel>{gt("Cabinet")}</CommandGroupLabel>
+                {cabinetItems.map(renderItem)}
+              </CommandGroup>
+            ) : null}
           </CommandList>
         ) : (
           <div className="px-5 pt-3.5 pb-7">
@@ -233,6 +246,12 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
           pathValue={props.item.path}
           kind={props.item.pathKind}
           theme={props.resolvedTheme}
+        />
+      ) : null}
+      {props.item.type === "cabinet-item" ? (
+        <CabinetTypeIcon
+          type={props.item.cabinetItem.type}
+          className="size-4 shrink-0 text-secondary-label"
         />
       ) : null}
       {props.item.type === "thread" ? (

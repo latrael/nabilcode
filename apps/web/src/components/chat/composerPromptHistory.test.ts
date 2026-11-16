@@ -11,7 +11,10 @@ import {
   stepComposerPromptHistory,
   type ComposerPromptHistoryPosition,
 } from "./composerPromptHistory";
-import { environmentContextRecord } from "../../lib/composerContextRecords";
+import {
+  cabinetItemContextRecord,
+  environmentContextRecord,
+} from "../../lib/composerContextRecords";
 
 const entries = buildComposerPromptHistoryEntries([
   { id: "m1", role: "user", text: "first" },
@@ -117,20 +120,32 @@ describe("buildComposerPromptHistoryEntries", () => {
       "Removed before send",
     );
     const machine = environmentContextRecord(environmentId, "Build box");
+    const cabinetItem = cabinetItemContextRecord({
+      itemId: "item_1",
+      title: "Paper lamp",
+      type: "image",
+      path: "sources/lamp.md",
+    });
+    const itemChip = formatComposerContextReference(cabinetItem);
     const threadChip = formatComposerContextReference(thread);
     const machineChip = formatComposerContextReference(machine);
     const [entry] = buildComposerPromptHistoryEntries([
       {
         id: "m1",
         role: "user",
-        text: `Agent in ${threadChip} finished on ${machineChip}. See [Gone](t3-context://v1/thread/gone) ![shot](t3-context://v1/image/img-1)`,
-        context: { version: 1, records: [thread, unmentioned, machine] },
+        text: `Agent in ${threadChip} finished on ${machineChip} about ${itemChip}. See [Gone](t3-context://v1/thread/gone) ![shot](t3-context://v1/image/img-1)`,
+        context: { version: 1, records: [thread, unmentioned, machine, cabinetItem] },
       },
     ]);
     expect(entry).toEqual({
       id: "m1",
-      prompt: `Agent in ${threadChip} finished on ${machineChip}. See`,
-      mentions: { threadContexts: [thread], environmentContexts: [machine], cabinetQuotes: [] },
+      prompt: `Agent in ${threadChip} finished on ${machineChip} about ${itemChip}. See`,
+      mentions: {
+        threadContexts: [thread],
+        environmentContexts: [machine],
+        cabinetQuotes: [],
+        cabinetItems: [cabinetItem],
+      },
     });
     const recalled = stepComposerPromptHistory({
       direction: "backward",
@@ -142,6 +157,7 @@ describe("buildComposerPromptHistoryEntries", () => {
       threadContexts: [thread],
       environmentContexts: [machine],
       cabinetQuotes: [],
+      cabinetItems: [cabinetItem],
     });
   });
 
@@ -177,7 +193,12 @@ describe("stepComposerPromptHistory", () => {
     expect(forward(newer!.position, "third")).toEqual({
       position: null,
       prompt: "",
-      mentions: { threadContexts: [], environmentContexts: [], cabinetQuotes: [] },
+      mentions: {
+        threadContexts: [],
+        environmentContexts: [],
+        cabinetQuotes: [],
+        cabinetItems: [],
+      },
     });
   });
 

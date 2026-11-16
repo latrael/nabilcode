@@ -1,5 +1,13 @@
 import { useDraggable } from "@dnd-kit/core";
-import { FileIcon, FileTextIcon, GripHorizontalIcon, GripVerticalIcon, XIcon } from "lucide-react";
+import {
+  FileDiffIcon,
+  FileIcon,
+  FileTextIcon,
+  GripHorizontalIcon,
+  GripVerticalIcon,
+  MessageSquareIcon,
+  XIcon,
+} from "lucide-react";
 import { useGT } from "gt-react";
 import type { CSSProperties, ReactNode } from "react";
 
@@ -21,11 +29,16 @@ const fileName = (path: string) =>
   path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
 
 export function BoardCardKindIcon(props: { readonly card: BoardCardModel }) {
-  return props.card.kind === "pdf" ? (
-    <FileIcon aria-hidden className="size-3.5 shrink-0 text-destructive/80" />
-  ) : (
-    <FileTextIcon aria-hidden className="size-3.5 shrink-0 text-warning-foreground" />
-  );
+  switch (props.card.kind) {
+    case "pdf":
+      return <FileIcon aria-hidden className="size-3.5 shrink-0 text-destructive/80" />;
+    case "thread":
+      return <MessageSquareIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />;
+    case "diff":
+      return <FileDiffIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />;
+    case "markdown":
+      return <FileTextIcon aria-hidden className="size-3.5 shrink-0 text-warning-foreground" />;
+  }
 }
 
 export function boardCardTitle(card: BoardCardModel) {
@@ -46,6 +59,13 @@ export function BoardCard(props: {
   readonly multi: boolean;
   /** Overrides the title derived from `card.ref` (Cabinet cards show the item title). */
   readonly title?: string | null | undefined;
+  /** Replaces the kind icon, e.g. a thread's status dot and provider glyph. */
+  readonly leading?: ReactNode;
+  /** Makes the title a button, e.g. to promote a thread card. */
+  readonly onActivateTitle?: (() => void) | undefined;
+  readonly titleActionLabel?: string | undefined;
+  /** Header buttons before Close. */
+  readonly actions?: ReactNode;
   readonly onClose: () => void;
   readonly children: ReactNode;
 }) {
@@ -88,17 +108,37 @@ export function BoardCard(props: {
         >
           <GripVerticalIcon aria-hidden className="size-3.5" />
         </button>
-        <BoardCardKindIcon card={card} />
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <span className="min-w-0 flex-1 truncate font-mono text-2xs text-foreground">
-                {title}
-              </span>
-            }
-          />
-          <TooltipPopup side="bottom">{card.source === "cabinet" ? title : card.ref}</TooltipPopup>
-        </Tooltip>
+        {props.leading ?? <BoardCardKindIcon card={card} />}
+        {props.onActivateTitle ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  onClick={props.onActivateTitle}
+                  className="min-w-0 flex-1 truncate rounded-sm text-left text-xs font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                >
+                  {title}
+                </button>
+              }
+            />
+            <TooltipPopup side="bottom">{props.titleActionLabel}</TooltipPopup>
+          </Tooltip>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span className="min-w-0 flex-1 truncate font-mono text-2xs text-foreground">
+                  {title}
+                </span>
+              }
+            />
+            <TooltipPopup side="bottom">
+              {card.source === "cabinet" || card.kind === "diff" ? title : card.ref}
+            </TooltipPopup>
+          </Tooltip>
+        )}
+        {props.actions}
         <Button
           variant="ghost"
           size="icon-xs"

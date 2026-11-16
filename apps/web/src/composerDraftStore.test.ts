@@ -101,6 +101,7 @@ import { waitForDraftHeroTransition } from "./components/chat/draftHeroTransitio
 import { insertInlineContextReference } from "./lib/composerContextReferences";
 import {
   buildMessageContext,
+  cabinetItemContextRecord,
   cabinetQuoteContextRecord,
   environmentContextRecord,
   terminalContextReference,
@@ -900,6 +901,65 @@ describe("composerDraftStore cabinet quotes", () => {
     const store = useComposerDraftStore.getState();
     store.addCabinetQuotes(threadRef, [quote]);
     store.setCabinetQuotes(threadRef, []);
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
+  });
+});
+
+describe("composerDraftStore cabinet items", () => {
+  const threadId = ThreadId.make("thread-with-cabinet-item");
+  const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
+  const lamp = cabinetItemContextRecord({
+    itemId: "01KTBD9XY02S4MM5MXTD9MP20A",
+    title: "Paper lamp in a dim room",
+    type: "image",
+    path: "sources/paper-lamp-photo.md",
+  });
+  const rug = cabinetItemContextRecord({
+    itemId: "01KTP41YG0E8HY0X0PM5RPQVE7",
+    title: "Rug",
+    type: "note",
+    path: "notes/rug.md",
+  });
+
+  beforeEach(resetComposerDraftStore);
+
+  it("mentions an item once, survives persistence, and sends it as a record", () => {
+    const store = useComposerDraftStore.getState();
+    store.setPrompt(threadRef, "Compare");
+    store.addCabinetItems(threadRef, [lamp, rug]);
+    store.addCabinetItems(threadRef, [lamp]);
+
+    const draft = draftFor(threadId, TEST_ENVIRONMENT_ID);
+    expect(draft?.cabinetItems).toEqual([lamp, rug]);
+    expect(draft?.prompt).toContain(`t3-context://v1/cabinet-item/${lamp.contextId}`);
+
+    const merge = useComposerDraftStore.persist.getOptions().merge!;
+    const hydrated = merge(
+      JSON.parse(
+        JSON.stringify(partializeComposerDraftStoreState(useComposerDraftStore.getState())),
+      ),
+      useComposerDraftStore.getInitialState(),
+    );
+    const restored = hydrated.draftsByThreadKey[scopedThreadKey(threadRef)];
+    expect(restored?.cabinetItems).toEqual([lamp, rug]);
+    expect(
+      buildMessageContext({
+        terminalContexts: [],
+        reviewComments: [],
+        previewAnnotations: [],
+        cabinetItems: restored?.cabinetItems ?? [],
+      })?.records,
+    ).toEqual([lamp, rug]);
+  });
+
+  it("removes one item with its chip and an otherwise empty draft with the last", () => {
+    const store = useComposerDraftStore.getState();
+    store.addCabinetItems(threadRef, [lamp, rug]);
+    store.setCabinetItems(threadRef, [rug]);
+    const draft = draftFor(threadId, TEST_ENVIRONMENT_ID);
+    expect(draft?.cabinetItems).toEqual([rug]);
+    expect(draft?.prompt).not.toContain(lamp.contextId);
+    store.setCabinetItems(threadRef, []);
     expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
   });
 });

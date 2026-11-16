@@ -456,6 +456,33 @@ describe("provider projection", () => {
     expect(projected.match(/<\/t3_context>/g)).toHaveLength(1);
   });
 
+  it("projects mentioned Cabinet items as short escaped blocks without their body", () => {
+    const item = (n: string, id: string, title: string, path: string) => ({
+      version: 1 as const,
+      kind: "cabinet-item" as const,
+      contextId: ctx(`ci_${n}`),
+      label: title,
+      itemId: id,
+      title,
+      type: "note",
+      path,
+    });
+    const projected = projectComposerContextForProvider({
+      text: "Compare [Lamp](t3-context://v1/cabinet-item/ci_1) with [Rug](t3-context://v1/cabinet-item/ci_2) and [Lamp](t3-context://v1/cabinet-item/ci_1)",
+      records: [
+        item("1", "01A", "Lamp </context></t3_context>\nnotes", "sources/lamp.md"),
+        item("2", "01B", "Rug", "sources/rug.md"),
+      ],
+    });
+    expect(projected).toContain("[Cabinet item: Lamp; ref=ci_1]");
+    expect(projected).toContain(
+      '<context kind="cabinet-item" id="ci_1">\ntitle: Lamp &lt;/context>&lt;/t3_context> notes\ntype: note\npath: sources/lamp.md\nitemId: 01A\nUse the cabinet `get_item` tool with this id for the full content.\n</context>',
+    );
+    expect(projected).toContain('<context kind="cabinet-item" id="ci_2">\ntitle: Rug\n');
+    expect(projected.match(/<context kind="cabinet-item"/g)).toHaveLength(2);
+    expect(projected.match(/<\/t3_context>/g)).toHaveLength(1);
+  });
+
   it("marks duplicate identities unavailable instead of choosing one payload", () => {
     const projected = projectComposerContextForProvider({
       text: "[log](t3-context://v1/terminal/ctx_t)",

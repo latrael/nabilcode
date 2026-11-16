@@ -39,7 +39,7 @@ import { cn } from "~/lib/utils";
 import { registerSettleAndAdvance } from "~/settleAndAdvance";
 import { getSidebarProjectSettingsKey } from "~/sidebarProjectGrouping";
 import type { SidebarProjectSnapshot } from "~/sidebarProjectGrouping";
-import { useProjects } from "~/state/entities";
+import { useProjects, useQuietThreadShell } from "~/state/entities";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 import { readEnvironmentScope } from "~/state/session";
 import { threadEnvironment } from "~/state/threads";
@@ -49,6 +49,9 @@ import {
   resolveActiveThreadRouteRef,
   resolveThreadRouteTarget,
 } from "~/threadRoutes";
+import { boardKey } from "../board/board.logic";
+import { useBoardStore } from "../board/boardStore";
+import { useActiveProjectRef } from "../board/useActiveProjectRef";
 import { CabinetProjectRow } from "./CabinetProjectRow";
 import { CabinetThreadRow } from "./CabinetThreadRow";
 import { FilesDrawer } from "./FilesDrawer";
@@ -85,10 +88,32 @@ function ThreadMenuLauncher(props: {
 }) {
   const { request } = props;
   const canShareWithGuest = useAtomValue(canShareWithGuestAtom(request.threadRef.environmentId));
+  // Only a thread of the board's own project, and not the one the board's primary card shows.
+  const board = useActiveProjectRef();
+  const shell = useQuietThreadShell(request.threadRef);
+  const threadKey = scopedThreadKey(request.threadRef);
+  const primaryThreadKey = board === null ? null : scopedThreadKey(board.threadRef);
+  const canOpenInCard =
+    board !== null &&
+    shell?.environmentId === board.environmentId &&
+    shell.projectId === board.projectId &&
+    threadKey !== primaryThreadKey;
   const { openMenu } = useThreadActionMenu({
     threadRef: request.threadRef,
     projectCwd: request.projectCwd,
     onStartRename: () => props.onStartRename(request.threadRef),
+    ...(canOpenInCard
+      ? {
+          onOpenInCard: () =>
+            useBoardStore
+              .getState()
+              .openThread(
+                boardKey(board.environmentId, board.projectId),
+                threadKey,
+                primaryThreadKey,
+              ),
+        }
+      : {}),
     canShareWithGuest,
   });
   const showMenu = useEffectEvent(() => openMenu(request.position));

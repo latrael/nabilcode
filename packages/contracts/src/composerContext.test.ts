@@ -127,6 +127,15 @@ const knownRecords: Record<(typeof COMPOSER_CONTEXT_KINDS)[number], Record<strin
     source: { kind: "cabinet", itemId: "item_1" },
     page: 4,
   },
+  "cabinet-item": {
+    ...base,
+    kind: "cabinet-item",
+    label: "Paper lamp in a dim room",
+    itemId: "01KTBD9XY02S4MM5MXTD9MP20A",
+    title: "Paper lamp in a dim room",
+    type: "image",
+    path: "sources/paper-lamp-photo.md",
+  },
   response: {
     ...base,
     kind: "response",

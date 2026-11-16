@@ -1246,6 +1246,7 @@ describe("snapshotComposerSend", () => {
       threadContexts: [],
       environmentContexts: [],
       cabinetQuotes: [],
+      cabinetItems: [],
       replyTo: null,
     });
 
@@ -1283,6 +1284,7 @@ describe("snapshotComposerSend", () => {
       threadContexts: [],
       environmentContexts: [],
       cabinetQuotes: [],
+      cabinetItems: [],
       replyTo,
     });
 

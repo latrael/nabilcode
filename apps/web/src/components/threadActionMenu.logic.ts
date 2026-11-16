@@ -3,6 +3,7 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
 
 export type ThreadActionMenuId =
   | "find"
+  | "open-in-card"
   | "new-thread-on-branch"
   | "filter-by-project"
   | "turn-into-project"
@@ -32,6 +33,8 @@ export type ThreadActionMenuId =
 export interface ThreadActionMenuState {
   readonly canOperate: boolean;
   readonly canFind?: boolean;
+  /** The board can show this thread as a secondary card. */
+  readonly canOpenInCard?: boolean;
   readonly branch: string | null;
   readonly projectFilter: {
     readonly label: string;
@@ -63,6 +66,7 @@ export interface ThreadActionMenuState {
 export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean {
   return ![
     "find",
+    "open-in-card",
     "new-thread-on-branch",
     "project-settings",
     "mark-unread",
@@ -81,6 +85,9 @@ export function buildThreadActionMenuItems(
   const items: ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> = [
     ...(state.canFind
       ? [{ id: "find" as const, label: "Find in thread", icon: "text-search" }]
+      : []),
+    ...(state.canOpenInCard
+      ? [{ id: "open-in-card" as const, label: "Open in card", icon: "message-square" }]
       : []),
     ...(state.branch
       ? [

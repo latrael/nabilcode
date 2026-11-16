@@ -47,6 +47,8 @@ import {
   matchesPullRequestQuery,
   rankPullRequestMatches,
 } from "../pullRequest/pullRequestList.logic";
+import { buildCabinetMentionItems } from "~/cabinet/cabinetItemMention.logic";
+import { useCabinetSuggestions } from "~/cabinet/data/useCabinetSuggestions";
 import type { ComposerCommandItem } from "./ComposerCommandMenu";
 import { matchComposerModelItems } from "./composerModelMentions";
 import type { ModelEsque } from "./providerIconUtils";
@@ -144,6 +146,12 @@ export function useComposerMenuItems({
     query: isPathTrigger ? pathTriggerQuery : null,
   });
 
+  // Files come first; Cabinet's items follow once Cabinet is connected and the query settles.
+  const cabinetSuggestions = useCabinetSuggestions(
+    environmentId,
+    isPathTrigger && questionAttachmentTarget === null ? pathTriggerQuery : null,
+  );
+
   const pullRequestListTargets =
     composerTriggerKind !== "pull-request" ||
     pullRequestProjectId === null ||
@@ -236,6 +244,7 @@ export function useComposerMenuItems({
           label: basenameOfPath(entry.path),
           description: entry.path.slice(0, Math.max(0, entry.path.lastIndexOf("/"))),
         })),
+        ...buildCabinetMentionItems(cabinetSuggestions.items),
       ];
     }
     if (composerTrigger.kind === "slash-command") {
@@ -401,7 +410,8 @@ export function useComposerMenuItems({
     return [];
   })();
   const isLoading =
-    (composerTriggerKind === "path" && workspaceEntries.isPending) ||
+    (composerTriggerKind === "path" &&
+      (workspaceEntries.isPending || cabinetSuggestions.isPending)) ||
     ((composerTriggerKind === "skill" || composerTriggerKind === "slash-command") &&
       workspaceSkillsScanning) ||
     (composerTriggerKind === "pull-request" &&

@@ -510,6 +510,7 @@ export function useComposerSend(input: ComposerSendInput) {
         sendCtx.threadContexts.length > 0 ||
         sendCtx.environmentContexts.length > 0 ||
         sendCtx.cabinetQuotes.length > 0 ||
+        sendCtx.cabinetItems.length > 0 ||
         useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.replyTo
       ) {
         toastManager.add(
@@ -587,6 +588,7 @@ export function useComposerSend(input: ComposerSendInput) {
       threadContexts: composerThreadContexts,
       environmentContexts: composerEnvironmentContexts,
       cabinetQuotes: composerCabinetQuotes,
+      cabinetItems: composerCabinetItems,
       selectedProvider: ctxSelectedProvider,
       selectedModel: ctxSelectedModel,
       selectedProviderModels: ctxSelectedProviderModels,
@@ -660,6 +662,7 @@ export function useComposerSend(input: ComposerSendInput) {
           threadContexts: composerThreadContexts,
           environmentContexts: composerEnvironmentContexts,
           cabinetQuotes: composerCabinetQuotes,
+          cabinetItems: composerCabinetItems,
           replyTo,
         },
         setThreadError,
@@ -680,7 +683,8 @@ export function useComposerSend(input: ComposerSendInput) {
         composerReviewComments.length +
         composerThreadContexts.length +
         composerEnvironmentContexts.length +
-        composerCabinetQuotes.length,
+        composerCabinetQuotes.length +
+        composerCabinetItems.length,
     });
     const feedbackCommand =
       ctxSelectedProvider === "codex" &&
@@ -691,7 +695,8 @@ export function useComposerSend(input: ComposerSendInput) {
       composerReviewComments.length === 0 &&
       composerThreadContexts.length === 0 &&
       composerEnvironmentContexts.length === 0 &&
-      composerCabinetQuotes.length === 0
+      composerCabinetQuotes.length === 0 &&
+      composerCabinetItems.length === 0
         ? parseCodexFeedbackCommand(trimmed)
         : null;
     if (feedbackCommand && multipleModelSelections === null) {
@@ -749,6 +754,7 @@ export function useComposerSend(input: ComposerSendInput) {
       composerThreadContexts.length === 0 &&
       composerEnvironmentContexts.length === 0 &&
       composerCabinetQuotes.length === 0 &&
+      composerCabinetItems.length === 0 &&
       replyTo === null;
     if (freshSessionAvailable && composerHoldsOnlyText && isClearComposerCommand(trimmed)) {
       armFreshSession(routeThreadKey);
@@ -797,6 +803,7 @@ export function useComposerSend(input: ComposerSendInput) {
       threadContexts: composerThreadContexts,
       environmentContexts: composerEnvironmentContexts,
       cabinetQuotes: composerCabinetQuotes,
+      cabinetItems: composerCabinetItems,
       replyTo,
     });
     const {
@@ -808,6 +815,7 @@ export function useComposerSend(input: ComposerSendInput) {
       threadContexts: composerThreadContextsSnapshot,
       environmentContexts: composerEnvironmentContextsSnapshot,
       cabinetQuotes: composerCabinetQuotesSnapshot,
+      cabinetItems: composerCabinetItemsSnapshot,
       messageText: messageTextForSend,
     } = sendSnapshot;
     const {
@@ -846,6 +854,7 @@ export function useComposerSend(input: ComposerSendInput) {
         threadContexts: composerThreadContextsSnapshot,
         environmentContexts: composerEnvironmentContextsSnapshot,
         cabinetQuotes: composerCabinetQuotesSnapshot,
+        cabinetItems: composerCabinetItemsSnapshot,
         replyTo,
         attachments: composerAttachmentsSnapshot.map((attachment, index) => ({
           attachment,

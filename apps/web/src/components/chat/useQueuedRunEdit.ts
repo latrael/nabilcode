@@ -8,6 +8,7 @@ import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   type ChatAttachment,
   type ComposerContextRecord,
+  type CabinetItemContextRecord,
   type CabinetQuoteContextRecord,
   type EnvironmentContextRecord,
   type ResponseContextRecord,
@@ -97,11 +98,15 @@ interface QueuedRunEditContent {
   readonly threadContexts: ReadonlyArray<ThreadContextRecord>;
   readonly environmentContexts: ReadonlyArray<EnvironmentContextRecord>;
   readonly cabinetQuotes: ReadonlyArray<CabinetQuoteContextRecord>;
+  readonly cabinetItems: ReadonlyArray<CabinetItemContextRecord>;
   readonly replyTo?: ResponseContextRecord | null;
 }
 
 const isDraftOwnedRecord = (record: ComposerContextRecord) =>
-  record.kind === "thread" || record.kind === "environment" || record.kind === "cabinet-quote";
+  record.kind === "thread" ||
+  record.kind === "environment" ||
+  record.kind === "cabinet-quote" ||
+  record.kind === "cabinet-item";
 
 async function submitQueuedRunEdit(input: {
   readonly environmentId: EnvironmentId;
@@ -162,6 +167,7 @@ async function submitQueuedRunEdit(input: {
         threadContexts: content.threadContexts,
         environmentContexts: content.environmentContexts,
         cabinetQuotes: content.cabinetQuotes,
+        cabinetItems: content.cabinetItems,
         replyTo: content.replyTo ?? null,
         attachments: newAttachments.map((attachment, index) => ({
           attachment,
@@ -281,6 +287,12 @@ export function useQueuedRunEdit(input: {
       target,
       records.filter(
         (record): record is CabinetQuoteContextRecord => record.kind === "cabinet-quote",
+      ),
+    );
+    store.setCabinetItems(
+      target,
+      records.filter(
+        (record): record is CabinetItemContextRecord => record.kind === "cabinet-item",
       ),
     );
     if (reply) store.setReplyTo(target, reply);

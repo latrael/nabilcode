@@ -2,6 +2,7 @@ import ChatMarkdown from "./ChatMarkdown";
 import { isSvgAttachment } from "@t3tools/shared/image";
 import { ReadOnlySourcePreview } from "./files/AttachmentFilePreview";
 import type {
+  CabinetItemContextRecord,
   CabinetQuoteContextRecord,
   EnvironmentContextRecord,
   PreviewAnnotationPayload,
@@ -35,6 +36,7 @@ import {
 import type { TerminalContextDraft } from "~/lib/terminalContext";
 import type { ReviewCommentContext } from "~/reviewCommentContext";
 import { ComposerPendingTerminalContextChip } from "./chat/ComposerPendingTerminalContexts";
+import { CabinetItemChip } from "~/cabinet/CabinetItemChip";
 import { CabinetQuoteChip } from "~/cabinet/CabinetQuoteChip";
 import { EnvironmentContextChip } from "./EnvironmentContextChip";
 import { ThreadContextChip } from "./ThreadContextChip";
@@ -67,7 +69,8 @@ export type ComposerDraftContextRecord =
   | { kind: "file"; record: ComposerFileAttachment; upload?: AttachmentUploadState | undefined }
   | { kind: "thread"; record: ThreadContextRecord }
   | { kind: "environment"; record: EnvironmentContextRecord }
-  | { kind: "cabinet-quote"; record: CabinetQuoteContextRecord };
+  | { kind: "cabinet-quote"; record: CabinetQuoteContextRecord }
+  | { kind: "cabinet-item"; record: CabinetItemContextRecord };
 
 export {
   ComposerContextActionsContext,
@@ -94,6 +97,7 @@ export function composerContextRecordsFromDraft(input: {
   threadContexts?: ReadonlyArray<ThreadContextRecord>;
   environmentContexts?: ReadonlyArray<EnvironmentContextRecord>;
   cabinetQuotes?: ReadonlyArray<CabinetQuoteContextRecord>;
+  cabinetItems?: ReadonlyArray<CabinetItemContextRecord>;
   images?: ReadonlyArray<ComposerImageAttachment>;
   files?: ReadonlyArray<ComposerFileAttachment>;
   uploadsByImageId?: Readonly<Record<string, AttachmentUploadState>>;
@@ -135,6 +139,9 @@ export function composerContextRecordsFromDraft(input: {
   }
   for (const record of input.cabinetQuotes ?? []) {
     records.set(record.contextId, { kind: "cabinet-quote", record });
+  }
+  for (const record of input.cabinetItems ?? []) {
+    records.set(record.contextId, { kind: "cabinet-item", record });
   }
   return records;
 }
@@ -382,6 +389,7 @@ const composerContextPresentationRegistry = createContextPresentationRegistry<
     "thread",
     "environment",
     "cabinet-quote",
+    "cabinet-item",
   ],
   handlers: [
     {
@@ -494,6 +502,16 @@ const composerContextPresentationRegistry = createContextPresentationRegistry<
       render: (entry, context) =>
         entry.kind === "cabinet-quote" ? (
           <CabinetQuoteChip record={entry.record} />
+        ) : (
+          <UnresolvedContextChip label={context.label} />
+        ),
+    },
+    {
+      kind: "cabinet-item",
+      canRender: (entry) => entry.kind === "cabinet-item",
+      render: (entry, context) =>
+        entry.kind === "cabinet-item" ? (
+          <CabinetItemChip record={entry.record} />
         ) : (
           <UnresolvedContextChip label={context.label} />
         ),

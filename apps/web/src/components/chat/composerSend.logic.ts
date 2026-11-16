@@ -21,6 +21,7 @@ export function composerDraftContentChanged(
     before.threadContexts !== after.threadContexts ||
     before.environmentContexts !== after.environmentContexts ||
     before.cabinetQuotes !== after.cabinetQuotes ||
+    before.cabinetItems !== after.cabinetItems ||
     before.replyTo !== after.replyTo
   );
 }

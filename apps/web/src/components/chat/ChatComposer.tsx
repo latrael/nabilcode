@@ -29,6 +29,7 @@ import type {
   ProjectId,
   PreviewAnnotationPayload,
   ThreadContextRecord,
+  CabinetItemContextRecord,
   CabinetQuoteContextRecord,
   EnvironmentContextRecord,
   ResolvedKeybindingsConfig,
@@ -185,6 +186,8 @@ import {
   terminalContextReference,
   terminalContextRecord,
   threadContextReference,
+  cabinetItemContextRecord,
+  cabinetItemContextReference,
   environmentContextRecord,
   environmentContextReference,
 } from "~/lib/composerContextRecords";
@@ -338,6 +341,7 @@ export interface ChatComposerHandle {
     threadContexts: ThreadContextRecord[];
     environmentContexts: EnvironmentContextRecord[];
     cabinetQuotes: CabinetQuoteContextRecord[];
+    cabinetItems: CabinetItemContextRecord[];
     selectedPromptEffort: string | null;
     selectedModelSelection: ModelSelection;
     multipleModelSelections: ReadonlyArray<ModelSelection> | null;
@@ -700,6 +704,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerThreadContexts = attachmentDraft.threadContexts;
   const composerEnvironmentContexts = composerDraft.environmentContexts;
   const composerCabinetQuotes = composerDraft.cabinetQuotes;
+  const composerCabinetItems = composerDraft.cabinetItems;
   const {
     pendingSnapShotAnimations,
     pendingSnapShotIds,
@@ -755,6 +760,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     threadContexts: composerThreadContexts,
     environmentContexts: composerEnvironmentContexts,
     cabinetQuotes: composerCabinetQuotes,
+    cabinetItems: composerCabinetItems,
     images: composerImages,
     files: composerFiles,
     uploadsByImageId,
@@ -1107,7 +1113,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       composerReviewComments.length +
       composerThreadContexts.length +
       composerEnvironmentContexts.length +
-      composerCabinetQuotes.length,
+      composerCabinetQuotes.length +
+      composerCabinetItems.length,
   });
   const composerTriggerKind = composerTrigger?.kind ?? null;
   const compactSlashCommandAvailable =
@@ -1298,6 +1305,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     (store) => store.setEnvironmentContexts,
   );
   const setComposerDraftCabinetQuotes = useComposerDraftStore((store) => store.setCabinetQuotes);
+  const setComposerDraftCabinetItems = useComposerDraftStore((store) => store.setCabinetItems);
+  const addComposerDraftCabinetItems = useComposerDraftStore((store) => store.addCabinetItems);
   const buildContextClipboardFragment = (contextIds: ReadonlyArray<string>): string | null => {
     const wanted = new Set(contextIds);
     const copiedFiles = new Map<string, File>();
@@ -1316,6 +1325,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       ...composerThreadContexts.filter((record) => wanted.has(record.contextId)),
       ...composerEnvironmentContexts.filter((record) => wanted.has(record.contextId)),
       ...composerCabinetQuotes.filter((record) => wanted.has(record.contextId)),
+      ...composerCabinetItems.filter((record) => wanted.has(record.contextId)),
       ...composerReviewComments
         .filter((c) => wanted.has(reviewCommentContextId(c.id)))
         .map(reviewCommentContextRecord),
@@ -1683,6 +1693,23 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     }
     if (nextQuotes.length !== composerCabinetQuotes.length || restoredQuotes.length > 0) {
       setComposerDraftCabinetQuotes(composerDraftTarget, nextQuotes);
+    }
+
+    const liveItemIds = new Set<string>(composerCabinetItems.map((record) => record.contextId));
+    const restoredItems = [...referenced].flatMap((contextId) => {
+      if (liveItemIds.has(contextId)) return [];
+      const record = retained.cabinetItems.get(contextId);
+      return record ? [record] : [];
+    });
+    const nextItems = [
+      ...composerCabinetItems.filter((record) => referenced.has(record.contextId)),
+      ...restoredItems,
+    ];
+    for (const record of composerCabinetItems) {
+      if (!referenced.has(record.contextId)) retained.cabinetItems.set(record.contextId, record);
+    }
+    if (nextItems.length !== composerCabinetItems.length || restoredItems.length > 0) {
+      setComposerDraftCabinetItems(composerDraftTarget, nextItems);
     }
 
     for (const comment of composerReviewComments) {
@@ -2058,6 +2085,24 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       }
       return;
     }
+    if (item.type === "cabinet-item") {
+      if (trigger.kind !== "path") return;
+      const record = cabinetItemContextRecord(item.cabinetItem);
+      const replacement = `${formatInlineContextReference(cabinetItemContextReference(record))} `;
+      const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+        snapshot.value,
+        trigger.rangeEnd,
+        replacement,
+      );
+      const applied = applyPromptReplacement(trigger.rangeStart, replacementRangeEnd, replacement, {
+        expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd),
+      });
+      if (applied) {
+        addComposerDraftCabinetItems(composerDraftTarget, [record], { appendReference: false });
+        setComposerHighlightedItemId(null);
+      }
+      return;
+    }
     if (item.type === "model") {
       if (trigger.kind !== "path") return;
       const replacement = `${formatComposerModelMention(item.instanceId, item.model)} `;
@@ -2371,6 +2416,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       setComposerDraftThreadContexts,
       setComposerDraftEnvironmentContexts,
       setComposerDraftCabinetQuotes,
+      setComposerDraftCabinetItems,
       setComposerCursor,
       setComposerTrigger,
       setComposerHighlightedItemId,
@@ -3217,6 +3263,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         threadContexts: composerThreadContexts,
         environmentContexts: composerEnvironmentContexts,
         cabinetQuotes: composerCabinetQuotes,
+        cabinetItems: composerCabinetItems,
         selectedPromptEffort,
         selectedModelSelection,
         multipleModelSelections:
@@ -3273,6 +3320,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       composerThreadContexts,
       composerEnvironmentContexts,
       composerCabinetQuotes,
+      composerCabinetItems,
       focusComposer,
       environmentId,
       primaryEnvironmentId,

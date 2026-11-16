@@ -9,25 +9,34 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import {
+  parseScopedThreadKey,
+  scopedThreadKey,
+  scopeProjectRef,
+} from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
 import { msg, useGT, useMessages } from "gt-react";
 import { MessageSquareIcon } from "lucide-react";
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { FileSurfaceLoading } from "~/components/files/fileSurfaceChrome";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { isElectron } from "~/env";
+import { useShownThreadRouteTarget } from "~/hooks/useShownThreadRouteTarget";
 import { cn } from "~/lib/utils";
 import { useProject } from "~/state/entities";
+import { buildThreadRouteParams } from "~/threadRoutes";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
+import { CabinetStatusChips } from "../CabinetStatusChips";
 import { useCabinetItemTitles } from "../data/useCabinet";
-import { boardKey, DEFAULT_LAYOUT } from "./board.logic";
+import { boardKey, canResizeCardWidth, DEFAULT_LAYOUT, layoutSlots } from "./board.logic";
 import {
   PRIMARY_CARD_ID,
   type BoardCard as BoardCardModel,
   type BoardLayout,
+  type BoardLayoutPreset,
   type BoardPresetId,
   type BoardSlot,
 } from "./board.types";
@@ -38,7 +47,10 @@ import {
   SLOT_PLACEMENT_CLASS,
   slotStyle,
 } from "./BoardCard";
+import { BoardAddCardMenu } from "./BoardAddCardMenu";
+import { BoardResizeHandle } from "./BoardResizeHandle";
 import { selectBoardLayout, useBoardStore } from "./boardStore";
+import { ThreadBoardCard } from "./cards/ThreadCard";
 import { BOARD_PRESET_IDS, BOARD_PRESET_PLACEMENTS } from "./presets";
 import { useActiveProjectRef } from "./useActiveProjectRef";
 
@@ -78,7 +90,11 @@ export function BoardView(props: { readonly primary: ReactNode }) {
   const project = useProject(
     active === null ? null : scopeProjectRef(active.environmentId, active.projectId),
   );
+  const navigate = useNavigate();
+  const primaryIsServer = useShownThreadRouteTarget().shownTarget?.kind === "server";
+  const primaryThreadKey = active === null ? "" : scopedThreadKey(active.threadRef);
   const [dragId, setDragId] = useState<string | null>(null);
+  const outlineRef = useRef<HTMLDivElement | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const multi = active !== null && layout.preset !== "focus";
@@ -91,9 +107,24 @@ export function BoardView(props: { readonly primary: ReactNode }) {
     layout.cards.flatMap((card) => (card.source === "cabinet" && card.ref ? [card.ref] : [])),
   );
   const titleOf = (card: BoardCardModel) =>
-    card.source === "cabinet"
-      ? (cabinetTitles[card.ref ?? ""] ?? gt("Cabinet item"))
-      : boardCardTitle(card);
+    card.kind === "thread"
+      ? gt("Thread")
+      : card.kind === "diff"
+        ? gt("Diff")
+        : card.source === "cabinet"
+          ? (cabinetTitles[card.ref ?? ""] ?? gt("Cabinet item"))
+          : boardCardTitle(card);
+
+  const openDiff = (threadKey: string) => {
+    if (key !== null) useBoardStore.getState().openDiff(key, threadKey);
+  };
+  // The primary ChatView stays mounted: only its route changes, and the card takes the old thread.
+  const promote = (card: BoardCardModel) => {
+    const target = card.ref === null ? null : parseScopedThreadKey(card.ref);
+    if (key === null || target === null) return;
+    useBoardStore.getState().promoteThread(key, card.id, primaryIsServer ? primaryThreadKey : null);
+    void navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(target) });
+  };
 
   const onDragStart = (event: DragStartEvent) => setDragId(String(event.active.id));
   const onDragEnd = (event: DragEndEvent) => {
@@ -107,9 +138,21 @@ export function BoardView(props: { readonly primary: ReactNode }) {
     <div className="@container/board flex min-h-0 min-w-0 flex-1 flex-col">
       {active === null ? null : (
         <BoardPresetBar
+          environmentId={active.environmentId}
           preset={layout.preset}
           hasFileCards={layout.cards.length > 1}
           onPresetChange={(preset) => useBoardStore.getState().setPreset(key!, preset)}
+          addCard={
+            <BoardAddCardMenu
+              environmentId={active.environmentId}
+              projectId={active.projectId}
+              primaryThreadKey={primaryThreadKey}
+              onOpenPrimaryDiff={primaryIsServer ? () => openDiff(primaryThreadKey) : null}
+              onOpenThread={(threadKey) =>
+                useBoardStore.getState().openThread(key!, threadKey, primaryThreadKey)
+              }
+            />
+          }
         />
       )}
       <DndContext
@@ -126,35 +169,71 @@ export function BoardView(props: { readonly primary: ReactNode }) {
             multi &&
               "cabinet-board-dots gap-2 p-2 @max-[900px]/board:gap-0 @max-[900px]/board:bg-none @max-[900px]/board:p-0",
           )}
+          data-board-grid=""
           data-board-preset={active === null ? undefined : layout.preset}
         >
-          {placed.map(({ card, slot }) => (
-            <BoardCard
-              key={card.id}
-              card={card}
-              slot={slot}
-              active={active !== null}
-              multi={multi}
-              title={titleOf(card)}
-              onClose={() => useBoardStore.getState().closeCard(key!, card.id)}
-            >
-              {card.id === PRIMARY_CARD_ID ? (
-                props.primary
-              ) : active !== null && card.ref !== null ? (
-                <FileCardBody
-                  kind={card.kind}
-                  source={card.source}
-                  environmentId={active.environmentId}
-                  boardKey={key!}
-                  cwd={project?.workspaceRoot ?? null}
-                  itemRef={card.ref}
-                  threadRef={active.threadRef}
-                />
-              ) : null}
-            </BoardCard>
-          ))}
+          {placed.map(({ card, slot }) =>
+            card.id !== PRIMARY_CARD_ID && (card.kind === "thread" || card.kind === "diff") ? (
+              <ThreadBoardCard
+                key={card.id}
+                card={card}
+                slot={slot}
+                active={active !== null}
+                multi={multi}
+                primaryThreadKey={primaryThreadKey}
+                onPromote={() => promote(card)}
+                onOpenDiff={() => card.ref !== null && openDiff(card.ref)}
+                onClose={() => useBoardStore.getState().closeCard(key!, card.id)}
+              />
+            ) : (
+              <BoardCard
+                key={card.id}
+                card={card}
+                slot={slot}
+                active={active !== null}
+                multi={multi}
+                title={titleOf(card)}
+                onClose={() => useBoardStore.getState().closeCard(key!, card.id)}
+              >
+                {card.id === PRIMARY_CARD_ID ? (
+                  props.primary
+                ) : active !== null && card.ref !== null ? (
+                  <FileCardBody
+                    kind={card.kind}
+                    source={card.source}
+                    environmentId={active.environmentId}
+                    boardKey={key!}
+                    cwd={project?.workspaceRoot ?? null}
+                    itemRef={card.ref}
+                    threadRef={active.threadRef}
+                  />
+                ) : null}
+              </BoardCard>
+            ),
+          )}
           {multi
-            ? BOARD_PRESET_PLACEMENTS[layout.preset].map((slot, index) => (
+            ? placed.map(({ card, slot }) =>
+                canResizeCardWidth(layout, card.id) ? (
+                  <BoardResizeHandle
+                    key={`resize:${card.id}`}
+                    boardKey={key!}
+                    cardId={card.id}
+                    slot={slot}
+                    outlineRef={outlineRef}
+                  />
+                ) : null,
+              )
+            : null}
+          {multi ? (
+            <div
+              ref={outlineRef}
+              hidden
+              aria-hidden
+              className="pointer-events-none z-20 rounded-md border-2 border-primary bg-primary/10"
+            />
+          ) : null}
+          {multi
+            ? layoutSlots(layout).map((slot, index) => (
                 <BoardSlotTarget
                   key={`${layout.preset}:${slot.col}:${slot.row}`}
                   index={index}
@@ -260,17 +339,21 @@ function FileCardBody(props: {
 }
 
 function BoardPresetBar(props: {
-  readonly preset: BoardPresetId;
+  readonly environmentId: EnvironmentId;
+  readonly preset: BoardLayoutPreset;
   readonly hasFileCards: boolean;
   readonly onPresetChange: (preset: BoardPresetId) => void;
+  readonly addCard: ReactNode;
 }) {
   const gt = useGT();
   const m = useMessages();
   return (
     <div
       className={cn(
-        "flex h-9 shrink-0 items-center gap-3 border-b border-border bg-background px-3 wco:pr-(--workspace-native-controls-inset) @max-[900px]/board:hidden",
-        isElectron && "drag-region",
+        // Native window controls (macOS traffic lights, Windows overlay) are laid out for the
+        // workspace topbar height, so the bar takes it wherever those controls exist.
+        "flex h-9 shrink-0 items-center gap-3 border-b border-border bg-background px-3 wco:h-(--workspace-topbar-height) wco:pr-(--workspace-native-controls-inset) @max-[900px]/board:hidden",
+        isElectron && "drag-region h-(--workspace-topbar-height)",
         COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
       )}
     >
@@ -292,11 +375,16 @@ function BoardPresetBar(props: {
           </Toggle>
         ))}
       </ToggleGroup>
+      {props.preset === "custom" ? (
+        <span className="shrink-0 text-2xs text-muted-foreground">{gt("Custom")}</span>
+      ) : null}
+      {props.addCard}
       {props.hasFileCards ? null : (
         <span className="min-w-0 truncate text-2xs text-muted-foreground">
           {gt("Open Markdown or PDF files from the Files drawer")}
         </span>
       )}
+      <CabinetStatusChips environmentId={props.environmentId} />
     </div>
   );
 }

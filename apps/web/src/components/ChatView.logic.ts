@@ -38,6 +38,7 @@ import {
   type ScopedProjectRef,
   type ScopedThreadRef,
   type ThreadContextRecord,
+  type CabinetItemContextRecord,
   type CabinetQuoteContextRecord,
   type EnvironmentContextRecord,
   type ResponseContextRecord,
@@ -1272,6 +1273,7 @@ export interface ComposerSendContents {
   readonly threadContexts: ReadonlyArray<ThreadContextRecord>;
   readonly environmentContexts: ReadonlyArray<EnvironmentContextRecord>;
   readonly cabinetQuotes: ReadonlyArray<CabinetQuoteContextRecord>;
+  readonly cabinetItems: ReadonlyArray<CabinetItemContextRecord>;
   /** The response the message replies to. `prompt` already leads with its reference. */
   readonly replyTo: ResponseContextRecord | null;
 }
@@ -1303,6 +1305,7 @@ export function snapshotComposerSend(contents: ComposerSendContents) {
     threadContexts: [...contents.threadContexts],
     environmentContexts: [...contents.environmentContexts],
     cabinetQuotes: [...contents.cabinetQuotes],
+    cabinetItems: [...contents.cabinetItems],
     replyTo: contents.replyTo,
     messageText,
     /** What a failed send puts back in the composer: the reply returns above it, not in the text. */

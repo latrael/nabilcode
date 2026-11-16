@@ -125,6 +125,7 @@ export function useComposerContextImport(input: {
     (store) => store.addEnvironmentContexts,
   );
   const addComposerDraftCabinetQuotes = useComposerDraftStore((store) => store.addCabinetQuotes);
+  const addComposerDraftCabinetItems = useComposerDraftStore((store) => store.addCabinetItems);
   const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, { reportFailure: false });
   const loadThreadTranscript = useAtomCommand(orchestrationEnvironment.threadTranscript, {
     reportFailure: false,
@@ -431,6 +432,12 @@ export function useComposerContextImport(input: {
         case "cabinet-quote": {
           if (questionAttachmentTarget !== null) break;
           addComposerDraftCabinetQuotes(composerDraftTarget, [record], { appendReference: false });
+          rewritten.set(record.contextId, record.contextId);
+          break;
+        }
+        case "cabinet-item": {
+          if (questionAttachmentTarget !== null) break;
+          addComposerDraftCabinetItems(composerDraftTarget, [record], { appendReference: false });
           rewritten.set(record.contextId, record.contextId);
           break;
         }

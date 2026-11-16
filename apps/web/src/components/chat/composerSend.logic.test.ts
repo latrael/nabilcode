@@ -40,6 +40,7 @@ it("detects draft edits during upload preparation without treating upload metada
     threadContexts: [],
     environmentContexts: [],
     cabinetQuotes: [],
+    cabinetItems: [],
     replyTo: null,
     modelSelectionByProvider: {},
     activeProvider: null,

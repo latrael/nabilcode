@@ -57,6 +57,10 @@ const DEFINITIONS = [
     capabilities: { details: "tooltip", expanded: "none", defaultDraftView: "compact" },
   },
   {
+    kind: "cabinet-item",
+    capabilities: { details: "tooltip", expanded: "none", defaultDraftView: "compact" },
+  },
+  {
     kind: "response",
     capabilities: { details: "none", expanded: "inline-block", defaultDraftView: "compact" },
   },

@@ -19,6 +19,7 @@ import {
 } from "../../composer-logic";
 import { type PendingUserInput } from "../../session-logic";
 import {
+  type CabinetItemContextRecord,
   type CabinetQuoteContextRecord,
   type EnvironmentContextRecord,
   type PreviewAnnotationPayload,
@@ -82,6 +83,10 @@ export function composerCommandKeyHandler(input: {
     target: ChatComposerProps["composerDraftTarget"],
     records: ReadonlyArray<CabinetQuoteContextRecord>,
   ) => void;
+  readonly setComposerDraftCabinetItems: (
+    target: ChatComposerProps["composerDraftTarget"],
+    records: ReadonlyArray<CabinetItemContextRecord>,
+  ) => void;
   readonly setComposerCursor: Dispatch<SetStateAction<number>>;
   readonly setComposerTrigger: (trigger: ComposerTrigger | null) => void;
   readonly setComposerHighlightedItemId: Dispatch<SetStateAction<string | null>>;
@@ -133,6 +138,7 @@ export function composerCommandKeyHandler(input: {
     setComposerDraftThreadContexts,
     setComposerDraftEnvironmentContexts,
     setComposerDraftCabinetQuotes,
+    setComposerDraftCabinetItems,
     setComposerCursor,
     setComposerTrigger,
     setComposerHighlightedItemId,
@@ -161,6 +167,7 @@ export function composerCommandKeyHandler(input: {
     setComposerDraftThreadContexts(composerDraftTarget, mentions.threadContexts);
     setComposerDraftEnvironmentContexts(composerDraftTarget, mentions.environmentContexts);
     setComposerDraftCabinetQuotes(composerDraftTarget, mentions.cabinetQuotes);
+    setComposerDraftCabinetItems(composerDraftTarget, mentions.cabinetItems);
     setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
     setComposerTrigger(null);
     setComposerHighlightedItemId(null);

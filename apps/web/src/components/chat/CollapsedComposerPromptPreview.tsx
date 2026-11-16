@@ -22,6 +22,7 @@ import type {
   ComposerDraftContextRecords,
 } from "../composerContextPresentation";
 import { ContextChip, ContextChipLabel } from "../ContextChip";
+import { CabinetTypeIcon } from "~/cabinet/CabinetTypeIcon";
 import { ContextChipShell } from "../contextChipParts";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { SkillChipIcon } from "./SkillInlineText";
@@ -30,7 +31,7 @@ type Theme = "light" | "dark";
 
 // Upload progress and PR state stay with the editor, so the row shows each reference by kind.
 const CONTEXT_REFERENCE_ICONS: Record<
-  ComposerDraftContextRecord["kind"],
+  Exclude<ComposerDraftContextRecord["kind"], "cabinet-item">,
   (label: string, theme: Theme) => ReactElement
 > = {
   image: () => <ImageIcon />,
@@ -98,8 +99,18 @@ export function CollapsedComposerPromptPreview(props: {
         return entry ? (
           <ContextChipShell
             key={key}
-            kind={entry.kind === "cabinet-quote" ? "citation" : entry.kind}
-            icon={CONTEXT_REFERENCE_ICONS[entry.kind](segment.label, props.theme)}
+            kind={
+              entry.kind === "cabinet-quote" || entry.kind === "cabinet-item"
+                ? "citation"
+                : entry.kind
+            }
+            icon={
+              entry.kind === "cabinet-item" ? (
+                <CabinetTypeIcon type={entry.record.type} />
+              ) : (
+                CONTEXT_REFERENCE_ICONS[entry.kind](segment.label, props.theme)
+              )
+            }
             label={segment.label}
           />
         ) : (

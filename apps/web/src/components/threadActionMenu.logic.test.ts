@@ -32,6 +32,7 @@ describe("buildThreadActionMenuItems", () => {
       const items = buildThreadActionMenuItems({
         ...baseState,
         canOperate: false,
+        canOpenInCard: true,
         isPinned: reversed,
         isSettled: reversed,
         isSnoozed: reversed,
@@ -58,6 +59,8 @@ describe("buildThreadActionMenuItems", () => {
             "delete",
           ];
       expect(items.filter((item) => item.disabled).map((item) => item.id)).toEqual(expected);
+      // Opening a board card is local, so read-only clients keep it.
+      expect(items.some((item) => item.id === "open-in-card")).toBe(true);
       expect(
         items.find((item) => item.id === "snooze")?.children?.every((child) => child.disabled) ??
           true,

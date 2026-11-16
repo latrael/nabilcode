@@ -1,4 +1,6 @@
 export type BoardPresetId = "focus" | "split" | "bento" | "grid";
+/** `custom` is a hand-resized layout: it carries its own `slots` instead of a preset's. */
+export type BoardLayoutPreset = BoardPresetId | "custom";
 export type BoardCardKind = "thread" | "markdown" | "pdf" | "diff";
 
 /** 1-based grid placement on the 12-column by 2-row board. */
@@ -17,7 +19,10 @@ export interface BoardCard {
   id: string;
   kind: BoardCardKind;
   source: BoardCardSource;
-  /** Repo-relative path (repo source) or Cabinet item id (cabinet source); null for the primary thread card. */
+  /**
+   * Repo-relative path (repo source), Cabinet item id (cabinet source), or a scoped thread key
+   * (`scopedThreadKey`) for secondary thread and diff cards; null for the primary thread card.
+   */
   ref: string | null;
   /** null means docked: kept in the layout but not rendered. */
   slot: BoardSlot | null;
@@ -25,7 +30,9 @@ export interface BoardCard {
 }
 
 export interface BoardLayout {
-  preset: BoardPresetId;
+  preset: BoardLayoutPreset;
+  /** Present exactly when `preset` is `"custom"`: a tiling of the grid, empty slots included. */
+  slots?: BoardSlot[];
   cards: BoardCard[];
 }
 

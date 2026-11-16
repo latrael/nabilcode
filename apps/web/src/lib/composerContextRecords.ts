@@ -12,6 +12,7 @@ import {
 import type {
   ComposerContextId,
   ComposerContextRecord,
+  CabinetItemContextRecord,
   CabinetQuoteContextRecord,
   EnvironmentContextRecord,
   EnvironmentId,
@@ -271,6 +272,29 @@ export function cabinetQuoteContextRecord(
   };
 }
 
+export function cabinetItemContextReference(
+  record: CabinetItemContextRecord,
+): ComposerContextReference {
+  return { kind: "cabinet-item", contextId: record.contextId, label: record.label };
+}
+
+/** One record per Cabinet item, so mentioning it twice reuses the chip. */
+export function cabinetItemContextRecord(
+  input: Pick<CabinetItemContextRecord, "itemId" | "title" | "type" | "path">,
+): CabinetItemContextRecord {
+  const title = input.title.trim() || input.path;
+  return {
+    version: 1,
+    kind: "cabinet-item",
+    contextId: toKindScopedComposerContextId("cabinet-item", input.itemId),
+    label: sanitizeComposerContextLabel(title, "cabinet-item"),
+    itemId: input.itemId,
+    title,
+    type: input.type,
+    path: input.path,
+  };
+}
+
 export function terminalContextRecord(context: TerminalContextDraft): TerminalContextRecord {
   return {
     version: 1,
@@ -419,6 +443,7 @@ export function buildMessageContext(input: {
   threadContexts?: ReadonlyArray<ThreadContextRecord>;
   environmentContexts?: ReadonlyArray<EnvironmentContextRecord>;
   cabinetQuotes?: ReadonlyArray<CabinetQuoteContextRecord>;
+  cabinetItems?: ReadonlyArray<CabinetItemContextRecord>;
   replyTo?: ResponseContextRecord | null;
   attachments?: ReadonlyArray<BoundComposerAttachment>;
 }): OrchestrationMessageContext | undefined {
@@ -433,6 +458,7 @@ export function buildMessageContext(input: {
     ...(input.threadContexts ?? []),
     ...(input.environmentContexts ?? []),
     ...(input.cabinetQuotes ?? []),
+    ...(input.cabinetItems ?? []),
     ...(input.replyTo ? [input.replyTo] : []),
     ...input.previewAnnotations.map((annotation) =>
       previewAnnotationContextRecord(annotation, {

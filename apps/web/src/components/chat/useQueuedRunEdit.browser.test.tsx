@@ -187,6 +187,7 @@ const savedContent = (prompt: string) => ({
   threadContexts: [],
   environmentContexts: [],
   cabinetQuotes: [],
+  cabinetItems: [],
 });
 
 const promptOf = (ref: ScopedThreadRef) =>

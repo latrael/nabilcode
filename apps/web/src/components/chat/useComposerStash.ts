@@ -151,6 +151,7 @@ export function useComposerStash(input: {
     (store) => store.setEnvironmentContexts,
   );
   const setComposerDraftCabinetQuotes = useComposerDraftStore((store) => store.setCabinetQuotes);
+  const setComposerDraftCabinetItems = useComposerDraftStore((store) => store.setCabinetItems);
   const [isStashMenuOpen, setIsStashMenuOpen] = useState(false);
   // Each stash bumps the key; the badge replays its one-shot pulse animation per key.
   const [stashPulseKey, setStashPulseKey] = useState(0);
@@ -502,6 +503,7 @@ export function useComposerStash(input: {
       ...composerThreadContexts,
       ...(getComposerDraft(composerDraftTarget)?.environmentContexts ?? []),
       ...(getComposerDraft(composerDraftTarget)?.cabinetQuotes ?? []),
+      ...(getComposerDraft(composerDraftTarget)?.cabinetItems ?? []),
       ...readTerminalContexts().map(terminalContextRecord),
       ...composerReviewComments.map(reviewCommentContextRecord),
       ...composerPreviewAnnotations.map((annotation) =>
@@ -617,6 +619,7 @@ export function useComposerStash(input: {
       setComposerDraftThreadContexts(stashTarget, []);
       setComposerDraftEnvironmentContexts(stashTarget, []);
       setComposerDraftCabinetQuotes(stashTarget, []);
+      setComposerDraftCabinetItems(stashTarget, []);
       setComposerDraftReplyTo(stashTarget, null);
       for (const comment of composerReviewComments) {
         removeComposerDraftReviewComment(stashTarget, comment.id);
