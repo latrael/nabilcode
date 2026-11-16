@@ -88,17 +88,16 @@ this never overlaps child turns.
 is `standard`, `flex`, `fast`, or `ultrafast`, from Codex's tier option or
 Claude's fast mode, and is absent when the selection does not set one. `observedModel` and
 `mixedModels` appear only when the provider reported the models for the counted
-work (Codex thread settings and reroutes, Claude root messages, OpenCode steps).
+work (Codex thread settings and reroutes, Claude root messages).
 `mixedModels: false` without `reportVersion` was never checked. Model labels
-come from the bundled model manifest and the Cursor and Grok catalogs, also for
+come from the bundled model manifest and the Grok catalog, also for
 routed ids such as `anthropic/claude-opus-5-5`, and efforts come from a closed
 list, so user-configured names stay out.
 
 Status and counters answer different questions. `usageReported: false` means
 the adapter attached no usage; a harness where every row says so is unsupported,
 not idle. `partial` keeps valid counts that cannot establish a whole-turn total,
-such as an OpenCode step that ended without a report, an OpenCode stream
-reconnect, or an interrupted segment.
+such as an interrupted segment.
 Explicit zeros are sent and unknown counts stay absent. `localCommand` marks a
 provider-local command such as Claude's `/compact`, whose result counters are not
 model work. Reasoning tokens are a subset of output.
@@ -123,8 +122,8 @@ itself, with no `surface`.
 Agent tool events report driver kinds, never instance ids: users name
 instances, so an instance id can identify an account or employer.
 [Provider dimensions](../../apps/server/src/telemetry/ProviderDimensions.ts)
-report a model only when it is a non-custom entry in a vendor catalog. OpenCode,
-Pi, and ACP agents list models from user configuration, such as local Ollama
+report a model only when it is a non-custom entry in a vendor catalog. ACP
+agents list models from user configuration, such as local Ollama
 tags, so their models stay out. Handoff settings come from closed enums and
 booleans in tool arguments; prompts, titles, and ids are never read. Thread ids
 are used only to look up the threads on each side and never leave the server,

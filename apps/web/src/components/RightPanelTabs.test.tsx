@@ -27,7 +27,7 @@ describe("surface shortcuts", () => {
     { shortcut: "B", available: true, label: "Browser" },
     { shortcut: "D", available: false, label: "Diff" },
     { shortcut: "T", available: true, label: "Terminal" },
-    { shortcut: "M", available: true, label: "Device" },
+    { shortcut: "F", available: true, label: "Files" },
   ] as const;
 
   it("falls back to the physical key when the layout types a non-Latin letter or mark", () => {
@@ -71,8 +71,8 @@ describe("surface shortcuts", () => {
   });
 
   it("keeps punctuation typed on a letter key", () => {
-    // French AZERTY: the M key types ",".
-    expect(surfaceShortcutActionForKey(actions, shortcutEvent(",", { code: "KeyM" }))).toBeNull();
+    // A letter key can type punctuation on some layouts.
+    expect(surfaceShortcutActionForKey(actions, shortcutEvent(",", { code: "KeyF" }))).toBeNull();
   });
 
   it("keeps a dead key on a letter key", () => {
@@ -94,11 +94,11 @@ describe("surface shortcuts", () => {
 
   it("leaves AltGr text alone unless it is a plain letter", () => {
     const getModifierState = (key: string) => key === "AltGraph";
-    // German layout: AltGr+M types "\u00b5" and sets only AltGraph on Linux and Windows.
+    // AltGr types "\u00b5" on a German layout and sets only AltGraph on Linux and Windows.
     expect(
       surfaceShortcutActionForKey(
         actions,
-        shortcutEvent("\u00b5", { code: "KeyM", getModifierState }),
+        shortcutEvent("\u00b5", { code: "KeyF", getModifierState }),
       ),
     ).toBeNull();
     // Finnish layout: AltGr+B types "b", which still matches, as it does in keybindings.ts.

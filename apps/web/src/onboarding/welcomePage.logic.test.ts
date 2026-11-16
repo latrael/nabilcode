@@ -1,5 +1,4 @@
 import {
-  type ManagedPolicySummary,
   ProjectId,
   resolveProviderInstanceEnabled,
   ProviderDriverKind,
@@ -15,7 +14,6 @@ import {
   codexNeedsSetup,
   groupWelcomeAgents,
   turnedOnInstance,
-  welcomeOffersPhone,
 } from "./welcomePage.logic";
 
 function provider(name: string, overrides: Partial<ServerProvider> = {}): ServerProvider {
@@ -67,19 +65,19 @@ describe("groupWelcomeAgents", () => {
     const acpRegistry = ProviderDriverKind.make("acpRegistry");
     const settings: Pick<ServerSettings, "providerInstances" | "projectSettingsOverrides"> = {
       providerInstances: {
-        [ProviderInstanceId.make("pi")]: { driver: ProviderDriverKind.make("pi") },
+        [ProviderInstanceId.make("grok")]: { driver: ProviderDriverKind.make("grok") },
         [ProviderInstanceId.make("registry")]: { driver: acpRegistry },
       },
       projectSettingsOverrides: {
         [ProjectId.make("project-a")]: {
-          providerInstances: { [ProviderInstanceId.make("pi")]: { enabled: true } },
+          providerInstances: { [ProviderInstanceId.make("grok")]: { enabled: true } },
         },
       },
     };
     const groups = groupWelcomeAgents(
       [
-        // The server checks Pi because project A turns it on; new projects still cannot use it.
-        provider("Pi"),
+        // The server checks Grok because project A turns it on; new projects still cannot use it.
+        provider("Grok"),
         provider("Broken", {
           enabled: false,
           installed: false,
@@ -110,7 +108,7 @@ describe("groupWelcomeAgents", () => {
     );
 
     expect(names(groups.found)).toEqual(["Broken", "Codex", "Registry"]);
-    expect(names(groups.available)).toEqual(["Pi"]);
+    expect(names(groups.available)).toEqual(["Grok"]);
     expect(groups.readyCount).toBe(0);
     expect(groups.checking).toBe(false);
   });
@@ -235,31 +233,5 @@ describe("codexCardProvider", () => {
         settings: undefined,
       }),
     ).toBeNull();
-  });
-});
-
-describe("welcomeOffersPhone", () => {
-  it("offers the phone only through T3 Connect on the primary computer, and only when allowed", () => {
-    const policy = (limits: ManagedPolicySummary["limits"]): ManagedPolicySummary => ({
-      organization: "Acme",
-      lockedSettings: [],
-      ...(limits === undefined ? {} : { limits }),
-    });
-    const offers = (input: Partial<Parameters<typeof welcomeOffersPhone>[0]>) =>
-      welcomeOffersPhone({
-        isPrimary: true,
-        cloud: true,
-        canShare: true,
-        policy: undefined,
-        ...input,
-      });
-
-    expect(offers({})).toBe(true);
-    // There is no pairing-code fallback; without T3 Connect the page leaves the phone out.
-    expect(offers({ cloud: false })).toBe(false);
-    expect(offers({ canShare: false })).toBe(false);
-    expect(offers({ policy: policy({ connect: false }) })).toBe(false);
-    expect(offers({ policy: policy({ clients: ["desktop"] }) })).toBe(false);
-    expect(offers({ isPrimary: false })).toBe(false);
   });
 });

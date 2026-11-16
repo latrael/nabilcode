@@ -6,7 +6,7 @@ No. A harness is what turns an LLM into an agent: it gives the model tools, a wa
 
 Chef = LLM. Kitchen = harness. T3 Code = the restaurant that lets you bring whatever kitchen you want. Our MCP is a cookbook we hand the kitchen, but the chef won't open it unless you tell them to :) I wrote the long version here: [What is a harness?](https://t3.gg/blog/post/what-is-a-harness)
 
-Bring your own: Claude Code, Codex, Cursor, Grok Build, OpenCode, Google Antigravity, Kiro, Pi, Muse Code, or fx. [Provider setup](./install.md#providers)
+Bring your own: Claude Code, Codex, Grok Build, Google Antigravity, Kiro, or fx. [Provider setup](./install.md#providers)
 
 ## Why use T3 Code instead of Claude Code or the Codex app?
 
@@ -49,7 +49,7 @@ T3 Connect is our built-in alternative to Tailscale for remote connections. If i
 
 ## Will I get banned for using my subscription?
 
-No. We work with all of the labs and T3 Code is within the TOS of Claude Code, Codex, and Google Antigravity. We worked directly with [SpaceXAI](https://x.com/SpaceXSI/status/2070195830192320600) to collaborate on the Grok Build and Cursor integrations. Everything else uses official ACP bindings.
+No. We work with all of the labs and T3 Code is within the TOS of Claude Code, Codex, and Google Antigravity. We worked directly with [SpaceXAI](https://x.com/SpaceXSI/status/2070195830192320600) to collaborate on the Grok Build integration. Everything else uses official ACP bindings.
 
 If it works in T3 Code, you can trust it is safe.
 

@@ -267,8 +267,8 @@ fi
 
 step "Setting up the t3 command..."
 mkdir -p "$bin_dir"
-# Exec by absolute path: through a symlink, argv0 is the link, and the Cursor SDK looks for its
-# helpers beside it. t3 update and t3 install write the same script.
+# Exec by absolute path: through a symlink, argv0 is the link, and helpers are looked up beside
+# it. t3 update and t3 install write the same script.
 nl='
 '
 launcher_head="#!/bin/sh${nl}exec '"

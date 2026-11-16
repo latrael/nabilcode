@@ -1670,7 +1670,6 @@ function OpenCommandPaletteDialog(props: {
       "claude",
       "chatgpt",
       "grok",
-      "muse",
       "instinct",
       "openclaw",
       "hermes",

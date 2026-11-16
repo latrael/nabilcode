@@ -35,17 +35,17 @@ describe("ProviderSettingsForm helpers", () => {
   });
 
   it("preserves unknown config keys while omitting empty configurable fields", () => {
-    const opencode = providerClients.get(ProviderDriverKind.make("opencode"));
-    expect(opencode).toBeDefined();
+    const grok = providerClients.get(ProviderDriverKind.make("grok"));
+    expect(grok).toBeDefined();
 
-    const serverUrl = deriveProviderSettingsFields(opencode!).find(
-      (field) => field.key === "serverUrl",
+    const binaryPath = deriveProviderSettingsFields(grok!).find(
+      (field) => field.key === "binaryPath",
     );
-    expect(serverUrl).toBeDefined();
+    expect(binaryPath).toBeDefined();
 
     const next = nextProviderConfigWithFieldValue(
-      { forkOwned: 1, serverUrl: "http://127.0.0.1:4096" },
-      serverUrl!,
+      { forkOwned: 1, binaryPath: "/opt/grok" },
+      binaryPath!,
       "",
     );
 

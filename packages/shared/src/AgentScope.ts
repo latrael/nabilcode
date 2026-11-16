@@ -31,7 +31,7 @@ export interface AgentScopeShape {
   /**
    * Forgets the thread's scope. The session manager calls it before it opens
    * a provider session, so a scope only answers for the session that launched
-   * it, even when the next session runs without one (Cursor, OpenCode).
+   * it, even when the next session runs without one.
    */
   readonly clear: (threadId: string) => Effect.Effect<void>;
 }

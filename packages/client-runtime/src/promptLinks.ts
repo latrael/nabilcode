@@ -18,9 +18,8 @@ import {
   visibleThreadPullRequests,
 } from "./threadPullRequests.ts";
 
-// A link's `owner/name` is GitHub's. GitCafe syncs a repository two-way with GitHub under the
-// same path, so a checkout cloned from git.cafe counts as the linked repository.
-const PROMPT_LINK_REPOSITORY_HOSTS = ["github.com", "git.cafe", "staging.git.cafe"];
+// A link's `owner/name` is GitHub's.
+const PROMPT_LINK_REPOSITORY_HOSTS = ["github.com"];
 
 /**
  * The repository's projects in the order given. Callers pass projects most recently active

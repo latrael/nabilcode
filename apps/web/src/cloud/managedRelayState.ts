@@ -15,7 +15,6 @@ import {
 import {
   DEFAULT_MANAGED_TUNNEL_LIMIT,
   T3CHAT_PLAN_TUNNEL_LIMITS,
-  type RelayClientDeviceRecord,
   type RelayClientEnvironmentRecord,
   type RelayT3ChatLinkResponse,
 } from "@t3tools/contracts/relay";
@@ -103,10 +102,6 @@ const EMPTY_ENVIRONMENTS_ATOM = Atom.make(
   AsyncResult.success<ReadonlyArray<RelayClientEnvironmentRecord>>([]),
 ).pipe(Atom.keepAlive, Atom.withLabel("managed-relay:web:environments:null"));
 
-const EMPTY_DEVICES_ATOM = Atom.make(
-  AsyncResult.success<ReadonlyArray<RelayClientDeviceRecord>>([]),
-).pipe(Atom.keepAlive, Atom.withLabel("managed-relay:web:devices:null"));
-
 export function useManagedRelayEnvironments() {
   const session = useAtomValue(managedRelaySessionAtom);
   const accountId = session?.accountId ?? null;
@@ -118,25 +113,6 @@ export function useManagedRelayEnvironments() {
   const refresh = () => {
     if (accountId) {
       managedRelayQueryManager.refreshEnvironments(appAtomRegistry, accountId);
-    }
-  };
-
-  return {
-    ...snapshot,
-    accountId,
-    refresh,
-  };
-}
-
-export function useManagedRelayDevices() {
-  const session = useAtomValue(managedRelaySessionAtom);
-  const accountId = session?.accountId ?? null;
-  const atom = accountId ? managedRelayQueryManager.devicesAtom(accountId) : EMPTY_DEVICES_ATOM;
-  const result = useAtomValue(atom);
-  const snapshot = readManagedRelaySnapshotState(result);
-  const refresh = () => {
-    if (accountId) {
-      managedRelayQueryManager.refreshDevices(appAtomRegistry, accountId);
     }
   };
 

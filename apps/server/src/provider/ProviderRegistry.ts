@@ -192,15 +192,6 @@ export function upsertProviderWorkspaceSnapshot(
 }
 
 const shouldRetainMissingProviderModels = (provider: ServerProvider): boolean => {
-  if (provider.driver === ProviderDriverKind.make("pi")) {
-    // Pi auth becomes known only after inventory discovery: empty means unauthenticated; failed/interactive discovery preserves unknown auth and cached models.
-    return !(
-      provider.installed &&
-      (provider.status === "ready" || provider.status === "warning") &&
-      provider.auth.status !== "unknown"
-    );
-  }
-
   if (provider.driver === ProviderDriverKind.make("acpRegistry")) {
     // Only completed ACP discovery provides nativeSessions and inventory; placeholder probes cannot establish auth for agents without sign-in.
     return !(
@@ -225,17 +216,13 @@ const shouldRetainMissingProviderModels = (provider: ServerProvider): boolean =>
 
   const isAntigravity = provider.driver === ProviderDriverKind.make("antigravity");
   const isCodex = provider.driver === ProviderDriverKind.make("codex");
-  const isOpenCode = provider.driver === ProviderDriverKind.make("opencode");
-  if (!isAntigravity && !isCodex && !isOpenCode) {
+  if (!isAntigravity && !isCodex) {
     // Any other driver must report ready only after a completed model listing, or opt out above:
     // a ready list is authoritative, and warning/error probes keep the old models.
     return !(provider.installed && provider.status === "ready");
   }
 
-  if (
-    (isAntigravity || isCodex) &&
-    (!provider.enabled || provider.auth.status === "unauthenticated")
-  ) {
+  if (!provider.enabled || provider.auth.status === "unauthenticated") {
     return false;
   }
 
@@ -244,16 +231,11 @@ const shouldRetainMissingProviderModels = (provider: ServerProvider): boolean =>
     isAntigravity && provider.status === "warning" && provider.auth.status === "unknown";
   const isPendingInitialProbe =
     provider.enabled && !provider.installed && provider.status === "warning";
-  // A cold OpenCode server can finish its probe as a warning before it lists any models.
   const isIncompleteInstalledProbe =
     provider.installed &&
-    (provider.status === "error" || ((isCodex || isOpenCode) && provider.status === "warning"));
+    (provider.status === "error" || (isCodex && provider.status === "warning"));
   return isPendingAntigravityAuthentication || isPendingInitialProbe || isIncompleteInstalledProbe;
 };
-
-const shouldRetainMissingOpenCodeMetadata = (provider: ServerProvider): boolean =>
-  provider.driver === ProviderDriverKind.make("opencode") &&
-  shouldRetainMissingProviderModels(provider);
 
 const mergeProviderModels = (
   provider: ServerProvider,
@@ -339,15 +321,6 @@ export const mergeProviderSnapshot = (
     ...(nextProvider.workspaceRescannedAt === undefined &&
     previousProvider.workspaceRescannedAt !== undefined
       ? { workspaceRescannedAt: previousProvider.workspaceRescannedAt }
-      : {}),
-    ...(shouldRetainMissingOpenCodeMetadata(nextProvider)
-      ? {
-          slashCommands:
-            nextProvider.slashCommands.length === 0
-              ? previousProvider.slashCommands
-              : nextProvider.slashCommands,
-          skills: nextProvider.skills.length === 0 ? previousProvider.skills : nextProvider.skills,
-        }
       : {}),
   };
 };

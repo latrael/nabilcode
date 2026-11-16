@@ -46,7 +46,7 @@ describe("closedViewStore", () => {
       id: "bad",
       kind: "panel-tab",
       threadRef: refA,
-      surface: { kind: "device", id: "device:x", target: {} },
+      surface: { kind: "device", id: "device" },
     },
     {
       id: "bad",

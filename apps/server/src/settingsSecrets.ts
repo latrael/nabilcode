@@ -3,23 +3,17 @@ import {
   ClaudeSettings,
   CloudSpeechCredentials,
   CodexSettings,
-  EasDeviceHostConfig,
   type ProviderInstanceConfig,
   type ServerSettings,
   type SettingsSecretValue,
-  SimlockDeviceHostConfig,
   TextGeneratorConfig,
   UsageLimitSourceConfig,
   isSecretReference,
   secretSettingsFields,
 } from "@t3tools/contracts";
 import { acpRegistryClient } from "@t3tools/provider-acp-registry/client";
-import { cursorClient } from "@t3tools/provider-cursor/client";
 import { grokClient } from "@t3tools/provider-grok/client";
 import { kiroClient } from "@t3tools/provider-kiro/client";
-import { museClient } from "@t3tools/provider-muse/client";
-import { openCodeClient } from "@t3tools/provider-opencode/client";
-import { piClient } from "@t3tools/provider-pi/client";
 import {
   readSecretFieldValues,
   SOURCE_CONTROL_HOST_SECRET_FIELDS,
@@ -33,15 +27,7 @@ const providerSecretFields = new Map([
   ["codex", secretSettingsFields(CodexSettings)],
   ["claudeAgent", secretSettingsFields(ClaudeSettings)],
   ["antigravity", secretSettingsFields(AntigravitySettings)],
-  ...[
-    cursorClient,
-    grokClient,
-    kiroClient,
-    museClient,
-    openCodeClient,
-    piClient,
-    acpRegistryClient,
-  ].map(
+  ...[grokClient, kiroClient, acpRegistryClient].map(
     (definition) =>
       [definition.driverKind, secretSettingsFields(definition.settingsSchema)] as const,
   ),
@@ -49,8 +35,6 @@ const providerSecretFields = new Map([
 const usageLimitSecretFields = secretSettingsFields(UsageLimitSourceConfig);
 const textGeneratorSecretFields = secretSettingsFields(TextGeneratorConfig);
 const voiceSecretFields = secretSettingsFields(CloudSpeechCredentials);
-const easDeviceHostSecretFields = secretSettingsFields(EasDeviceHostConfig);
-const simlockDeviceHostSecretFields = secretSettingsFields(SimlockDeviceHostConfig);
 const encode = (value: string) => Buffer.from(value, "utf8").toString("base64url");
 
 export interface SettingsSecret {
@@ -224,29 +208,6 @@ function mapSecretFieldGroups(
     ]),
   ) as ServerSettings["textGenerators"];
 
-  const easDeviceHosts = settings.easDeviceHosts.map(
-    (host) =>
-      mapFields(
-        host,
-        easDeviceHostSecretFields,
-        (field, serverHost) =>
-          `device-host-${encode(host.id)}-${encode(field)}` +
-          (serverHost === null ? "" : `-${encode(serverHost)}`),
-      ) as EasDeviceHostConfig,
-  );
-
-  // Its own prefix: an Expo and a Simlock host may share an id.
-  const simlockDeviceHosts = settings.simlockDeviceHosts.map(
-    (host) =>
-      mapFields(
-        host,
-        simlockDeviceHostSecretFields,
-        (field, serverHost) =>
-          `simlock-device-host-${encode(host.id)}-${encode(field)}` +
-          (serverHost === null ? "" : `-${encode(serverHost)}`),
-      ) as SimlockDeviceHostConfig,
-  );
-
   return {
     ...settings,
     cloudSpeechCredentials: mapFields(
@@ -258,8 +219,6 @@ function mapSecretFieldGroups(
     sourceControlHosts,
     usageLimitSources,
     textGenerators,
-    easDeviceHosts,
-    simlockDeviceHosts,
   };
 }
 

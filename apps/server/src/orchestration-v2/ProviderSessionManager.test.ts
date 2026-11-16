@@ -812,9 +812,6 @@ function makeBrowserAccessProject(projectId: ProjectId): Project {
 function runBrowserAccessScenario(input: {
   readonly enableAgentBrowserAccess: boolean;
   readonly projectOverride: boolean;
-  readonly deviceOverride?: boolean;
-  readonly enableAgentDeviceAccess?: boolean;
-  readonly enableDeviceSupport?: boolean;
   readonly createThread?: boolean;
   readonly projectExists?: boolean;
   readonly delegatedBy?: ThreadId;
@@ -869,18 +866,9 @@ function runBrowserAccessScenario(input: {
           projectServiceLayer: layerProjectService,
           serverSettingsLayer: ServerSettings.layerTest({
             enableAgentBrowserAccess: input.enableAgentBrowserAccess,
-            ...(input.enableAgentDeviceAccess === undefined
-              ? {}
-              : { enableAgentDeviceAccess: input.enableAgentDeviceAccess }),
-            ...(input.enableDeviceSupport === undefined
-              ? {}
-              : { enableDeviceSupport: input.enableDeviceSupport }),
             projectSettingsOverrides: {
               [projectId]: {
                 enableAgentBrowserAccess: input.projectOverride,
-                ...(input.deviceOverride === undefined
-                  ? {}
-                  : { enableAgentDeviceAccess: input.deviceOverride }),
               },
             },
           }),
@@ -5575,77 +5563,4 @@ it.effect(
         );
       }).pipe(Effect.provide(layerTest({ state, idleTimeoutMs: 60_000 })));
     }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
-);
-
-it.effect(
-  "ProviderSessionManagerV2 applies project device access independently of browser access",
-  () =>
-    Effect.gen(function* () {
-      const enabled = yield* runBrowserAccessScenario({
-        enableAgentBrowserAccess: false,
-        projectOverride: false,
-        deviceOverride: true,
-        enableDeviceSupport: true,
-      });
-      assert.isTrue(enabled?.capabilities?.has("device"));
-      assert.isFalse(enabled?.browserToolsAvailable);
-      const denied = yield* runBrowserAccessScenario({
-        enableAgentBrowserAccess: false,
-        projectOverride: false,
-        deviceOverride: true,
-        enableDeviceSupport: true,
-        projectExists: false,
-      });
-      assert.isFalse(denied?.capabilities?.has("device"));
-    }),
-);
-
-it.effect("ProviderSessionManagerV2 withholds device tools while device support is off", () =>
-  Effect.gen(function* () {
-    const global = yield* runBrowserAccessScenario({
-      enableAgentBrowserAccess: false,
-      projectOverride: false,
-      enableAgentDeviceAccess: true,
-      enableDeviceSupport: false,
-    });
-    assert.isFalse(
-      global?.capabilities?.has("device"),
-      "global agent device access granted device tools with device support off",
-    );
-    const project = yield* runBrowserAccessScenario({
-      enableAgentBrowserAccess: false,
-      projectOverride: false,
-      deviceOverride: true,
-      enableDeviceSupport: false,
-    });
-    assert.isFalse(
-      project?.capabilities?.has("device"),
-      "project agent device access granted device tools with device support off",
-    );
-    const missingProject = yield* runBrowserAccessScenario({
-      enableAgentBrowserAccess: false,
-      projectOverride: false,
-      enableAgentDeviceAccess: true,
-      enableDeviceSupport: false,
-      projectExists: false,
-    });
-    assert.isFalse(
-      missingProject?.capabilities?.has("device"),
-      "agent device access granted device tools with device support off for a missing project",
-    );
-  }),
-);
-
-// Device instructions reach delegated children only because their own sessions hold `device`.
-it.effect("ProviderSessionManagerV2 gives a delegated child its project's device access", () =>
-  Effect.gen(function* () {
-    const child = yield* runBrowserAccessScenario({
-      enableAgentBrowserAccess: false,
-      projectOverride: false,
-      deviceOverride: true,
-      enableDeviceSupport: true,
-      delegatedBy: ThreadId.make("thread-provider-session-manager-parent"),
-    });
-    assert.isTrue(child?.capabilities?.has("device"));
-  }),
 );

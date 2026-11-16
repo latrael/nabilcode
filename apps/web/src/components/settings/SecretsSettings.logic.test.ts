@@ -28,18 +28,6 @@ const settings = Schema.decodeSync(ServerSettings)({
   usageLimitSources: {
     hub: { kind: "cliproxy", url: "https://hub.test", managementKey: personal("op://hub") },
   },
-  easDeviceHosts: [
-    { kind: "eas", id: "eas", label: "Expo Simulators", accessToken: personal("op://expo") },
-  ],
-  simlockDeviceHosts: [
-    {
-      kind: "simlock",
-      id: "pool",
-      label: "Simlock Pool",
-      gatewayUrl: "https://simlock.test",
-      agentToken: personal("op://simlock"),
-    },
-  ],
   cloudSpeechCredentials: { openai: personal("op://voice"), xai: "" },
 });
 
@@ -51,8 +39,6 @@ it.each([
       "Codex · CODEX_TOKEN",
       "GitHub · github.com",
       "https://hub.test · Management Key",
-      "Expo Simulators · Access Token",
-      "Simlock Pool · Agent Token",
       "Voice · OpenAI",
     ],
   ],

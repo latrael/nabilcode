@@ -67,8 +67,6 @@ import * as ResetCreditCoordinator from "./provider/resetCreditCoordinator.ts";
 import * as EventNdjsonLogger from "./provider/EventNdjsonLogger.ts";
 import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
-import * as OpenCodeRuntime from "@t3tools/provider-opencode/server/OpenCodeRuntime";
-import * as OpenCodeServerLedger from "@t3tools/provider-opencode/server/OpenCodeServerLedger";
 import * as ProviderHostLive from "./provider/ProviderHostLive.ts";
 import * as DocumentText from "./provider/DocumentText.ts";
 import * as AcpRegistrySupport from "@t3tools/provider-acp-registry/server/AcpRegistrySupport";
@@ -92,8 +90,6 @@ import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as PeerMcpClient from "./peer/PeerMcpClient.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
-import * as DeviceService from "./device/DeviceService.ts";
-import * as DeviceHubProxy from "./device/DeviceHubProxy.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as ServerBrowser from "./preview/ServerBrowser.ts";
@@ -204,9 +200,6 @@ import * as ResourceMonitorBinary from "./resourceTelemetry/ResourceMonitorBinar
 import * as ProcessGroupMetrics from "./resourceTelemetry/ProcessGroupMetrics.ts";
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import * as AntigravityUsage from "./provider/Drivers/AntigravityUsage.ts";
-import { MuseUsageHome } from "@t3tools/provider-muse/server";
-import * as CursorAccountReader from "@t3tools/provider-cursor/server/CursorAccountReader";
-import * as CursorUsageAccounts from "@t3tools/provider-cursor/server/CursorUsageAccounts";
 import * as UsageService from "./usage/UsageService.ts";
 import * as CodexUsageHistory from "./usage/CodexUsageHistory.ts";
 import * as RuntimeLayer from "./orchestration-v2/runtimeLayer.ts";
@@ -304,12 +297,9 @@ const layerBackground = BackgroundPolicy.layer.pipe(
 
 const layerUsage = UsageService.layer.pipe(
   Layer.provide(
-    Layer.mergeAll(
-      AntigravityUsage.layer,
-      MuseUsageHome.layer,
-      CodexUsageHistory.layer,
-      CursorUsageAccounts.layer.pipe(Layer.provide(CursorAccountReader.layer)),
-    ).pipe(Layer.provide(ProviderHostLive.layer.pipe(Layer.provide(ServerSecretStore.layer)))),
+    Layer.mergeAll(AntigravityUsage.layer, CodexUsageHistory.layer).pipe(
+      Layer.provide(ProviderHostLive.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+    ),
   ),
   Layer.provide(layerServerSettings),
 );
@@ -524,12 +514,6 @@ const layerPreview = Layer.empty.pipe(
   Layer.provideMerge(layerPortScanner),
 );
 
-const layerDevice = DeviceService.layer.pipe(
-  Layer.provide(layerServerSettings),
-  Layer.provide(ProcessRunner.layer),
-  Layer.provide(NetService.layer),
-);
-
 const layerWorkspaceEntries = WorkspaceEntries.layer.pipe(Layer.provide(WorkspacePaths.layer));
 
 const layerWorkspaceFileSystem = WorkspaceFileSystem.layer.pipe(
@@ -730,7 +714,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.provideMerge(layerSourceControlProviderRegistry),
   Layer.provideMerge(layerGit),
   Layer.provideMerge(layerVcs),
-  Layer.provideMerge(Layer.mergeAll(layerTerminal, layerPreview, layerDevice)),
+  Layer.provideMerge(Layer.mergeAll(layerTerminal, layerPreview)),
   Layer.provideMerge(layerPersistence),
   Layer.provideMerge(Layer.mergeAll(Keybindings.layer, UsageLimitSources.layer)),
   Layer.provideMerge(ProviderRegistry.layer),
@@ -763,18 +747,6 @@ const layerRuntimeCoreDependencies = layerRuntimeCoreDependenciesBase.pipe(
       ResetCreditCoordinator.layer,
       ProviderLatestVersions.layer,
       McpProviderSessions.layer,
-    ),
-  ),
-  Layer.provideMerge(
-    OpenCodeRuntime.layer.pipe(
-      Layer.provide(
-        Layer.unwrap(
-          Effect.gen(function* () {
-            const config = yield* ServerConfig.ServerConfig;
-            return OpenCodeServerLedger.layer({ stateDir: config.stateDir });
-          }),
-        ),
-      ),
     ),
   ),
   Layer.provideMerge(layerWorkspace),
@@ -841,7 +813,6 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerAssetRoute,
     ServerHttp.layerAttachmentUploadRoute,
     GuestHttp.layer,
-    DeviceHubProxy.layer,
     ServerBrowserStream.routeLayer,
     ServerHttp.layerStaticAndDevRoute,
     Ws.layer,

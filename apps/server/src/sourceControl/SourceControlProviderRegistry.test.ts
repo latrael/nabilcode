@@ -201,8 +201,6 @@ it.effect("leaves a remote no integration claims unknown, with its server's addr
 
 it.effect.each([
   ["github.com:team/project.git", "github"],
-  ["gitlab.com:team/project.git", "gitlab"],
-  ["bitbucket.org:team/project.git", "bitbucket"],
   ["code.example.test:team/project.git", "unknown"],
 ] as const)(
   "reads the host of an SSH remote that leaves its user to ssh config: %s",
@@ -242,18 +240,6 @@ it.effect("refines the caller-selected remote instead of choosing another config
   }),
 );
 
-it.effect("falls back to a non-origin remote when origin is not configured", () =>
-  Effect.gen(function* () {
-    const registry = yield* makeRegistry({
-      remotes: [{ name: "upstream", url: "https://dev.azure.com/acme/project/_git/repo" }],
-    });
-
-    const provider = yield* registry.resolve({ cwd: "/repo" });
-
-    assert.strictEqual(provider.kind, "azure-devops");
-  }),
-);
-
 it.effect(
   "routes linked subjects to the host that serves them, independently of the checkout",
   () =>
@@ -261,19 +247,13 @@ it.effect(
       const registry = yield* makeRegistry({
         remotes: [{ name: "origin", url: "https://github.com/unrelated/checkout.git" }],
       });
-      for (const [url, host] of [
-        ["https://github.com/team/project/issues/1", "github"],
-        ["https://gitlab.com/team/sub/project/-/merge_requests/2", "gitlab"],
-      ] as const) {
+      for (const [url, host] of [["https://github.com/team/project/issues/1", "github"]] as const) {
         const lookup = registry.resolveLink({ cwd: "/unrelated", url: new URL(url) });
         assert.ok(lookup);
         assert.deepStrictEqual(yield* lookup, { title: `${host} subject`, body: null });
       }
       for (const url of [
         "https://example.test/team/project/issues/1",
-        "https://codeberg.org/team/project/issues/1",
-        "https://bitbucket.org/team/project/pull-requests/1",
-        "https://dev.azure.com/org/project/_git/repo/pullrequest/1",
         "http://github.com/team/project/issues/1",
         "https://user:secret@github.com/team/project/issues/1",
       ]) {

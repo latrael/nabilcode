@@ -100,7 +100,7 @@ const REPORTED_EFFORTS: ReadonlySet<string> = new Set([
 const defined = (entries: Properties): Properties =>
   Object.fromEntries(Object.entries(entries).filter(([, value]) => value !== undefined));
 
-// OpenCode names its effort option `variant`, and variants can be user-defined.
+// Some providers name their effort option `variant`, and variants can be user-defined.
 function selectedEffort(selection: ModelSelection): string | undefined {
   const effort =
     getModelSelectionStringOptionValue(selection, "reasoningEffort") ??

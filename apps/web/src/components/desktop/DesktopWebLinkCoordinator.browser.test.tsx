@@ -207,13 +207,10 @@ const sha = "a".repeat(40);
 const commitUrl = `https://github.com/Effect-TS/effect/pull/9339/commits/${sha}`;
 const threadRef = scopeThreadRef(environmentId, ThreadId.make("thread"));
 
-it.each([
-  ["github.com", "pull/9339/commits"],
-  ["code.example.com:8443", "commit"],
-])("opens a %s/%s commit in the active thread's Diff pane after discovery", async (host, path) => {
+it("opens a GitHub commit in the active thread's Diff pane after discovery", async () => {
   setup();
   state.routeParams = { environmentId: "local", threadId: "thread" };
-  await using _coordinator = await mount(`https://${host}/Effect-TS/effect/${path}/${sha}`);
+  await using _coordinator = await mount(commitUrl);
   expect(state.preview).not.toHaveBeenCalled();
 
   state.projects = [
@@ -221,10 +218,10 @@ it.each([
       ...project,
       repositoryIdentity: {
         ...project.repositoryIdentity,
-        canonicalKey: `${host}/effect-ts/effect`,
+        canonicalKey: "github.com/effect-ts/effect",
         locator: {
           ...project.repositoryIdentity?.locator,
-          remoteUrl: `https://${host}/Effect-TS/effect.git`,
+          remoteUrl: "https://github.com/Effect-TS/effect.git",
         },
       },
     } as EnvironmentProject,

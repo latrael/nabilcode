@@ -250,21 +250,6 @@ export function buildSelectOptionDescriptor(input: {
   };
 }
 
-export function buildBooleanOptionDescriptor(input: {
-  readonly id: string;
-  readonly label: string;
-  readonly currentValue?: boolean;
-  readonly description?: string;
-}) {
-  return {
-    id: input.id,
-    label: input.label,
-    type: "boolean" as const,
-    ...(input.description ? { description: input.description } : {}),
-    ...(typeof input.currentValue === "boolean" ? { currentValue: input.currentValue } : {}),
-  };
-}
-
 export function buildServerProvider(input: {
   driver?: ProviderDriverKind;
   presentation: ServerProviderPresentation;
@@ -318,7 +303,7 @@ export function buildServerProvider(input: {
   };
 }
 
-export const collectStreamAsString = <E>(
+const collectStreamAsString = <E>(
   stream: Stream.Stream<Uint8Array, E>,
   options?: { readonly maxBytes?: number | undefined },
 ): Effect.Effect<string, E> =>

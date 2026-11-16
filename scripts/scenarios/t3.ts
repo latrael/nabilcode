@@ -1,5 +1,5 @@
 // `test` for web scenarios: e2e's web test plus `t3`, which seeds state and opens the signed-in
-// app. `t3-mobile.ts` is the same for the iOS app.
+// app.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { test as base } from "@e2e-dev/web";
 import { expect } from "e2e";

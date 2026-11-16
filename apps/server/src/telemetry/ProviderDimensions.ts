@@ -8,13 +8,12 @@ import { BUNDLED_MODEL_MANIFEST } from "../provider/ModelManifest.ts";
 
 /**
  * Drivers whose model catalogs are published by the vendor. Other drivers
- * (OpenCode, Pi, ACP agents) list models from the user's own configuration,
+ * (ACP agents) list models from the user's own configuration,
  * such as local Ollama tags, so their model names stay out of analytics.
  */
 const VENDOR_CATALOG_DRIVERS: ReadonlySet<string> = new Set([
   "codex",
   "claudeAgent",
-  "cursor",
   "grok",
   "antigravity",
 ]);
@@ -52,12 +51,12 @@ const MANIFEST_LABELS: ReadonlyMap<string, string> = new Map(
     ),
   ),
 );
-const REGISTRY_LABEL_DRIVERS: ReadonlySet<string> = new Set(["cursor", "grok"]);
+const REGISTRY_LABEL_DRIVERS: ReadonlySet<string> = new Set(["grok"]);
 
 /**
  * The vendor catalog slug that a native or routed model id names, such as
  * `anthropic/claude-opus-5-5` or a dated snapshot. Models outside the bundled
- * manifest and the Cursor and Grok catalogs, including user-added ones, return undefined.
+ * manifest and the Grok catalog, including user-added ones, return undefined.
  */
 export function catalogModelLabel(
   providers: ReadonlyArray<ServerProvider>,

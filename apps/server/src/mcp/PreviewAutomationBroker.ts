@@ -163,7 +163,7 @@ const selectorDiagnosticsFromInput = (
   return {};
 };
 
-/** Codex/OpenCode share sessions across threads; include thread id to isolate tabs and ownership. */
+/** Codex shares sessions across threads; include thread id to isolate tabs and ownership. */
 const hostAssignmentKey = (scope: McpInvocationContext.McpThreadInvocationScope): string =>
   `${scope.environmentId}\u0000${scope.thread.providerSessionId}\u0000${scope.thread.threadId}`;
 

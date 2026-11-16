@@ -499,7 +499,7 @@ const make = Effect.gen(function* () {
         if (entry !== undefined && entry.target === null) {
           return yield* new PullRequestGuideFailedError({ detail: entry.failure ?? "" });
         }
-        // Hosts readable without a checkout (GitHub, Bitbucket, Forgejo) are read through the
+        // Hosts readable without a checkout (GitHub) are read through the
         // caller's project; PullRequestService decides whether the host allows that.
         const project = entry?.project ?? entry?.callerProject;
         if (entry === undefined || entry.target === null || project === undefined) {

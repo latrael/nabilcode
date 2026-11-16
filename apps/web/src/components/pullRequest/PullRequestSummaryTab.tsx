@@ -97,7 +97,6 @@ import {
   pullRequestCompletionScope,
 } from "./PullRequestMarkdownTextarea";
 import { PullRequestReactionBar } from "./PullRequestReactions";
-import { canReactPullRequestComment } from "@t3tools/client-runtime/pull-request-reactions";
 import { PullRequestResolveThreadButton } from "./PullRequestResolveThreadButton";
 import { PullRequestConversationGhost } from "./PullRequestGhosts";
 import { sectionCollapseAnchorScrollTop } from "./pullRequestSummaryScroll.logic";
@@ -696,7 +695,7 @@ export function PullRequestSummaryTab({
     <PullRequestReactionBar
       className="ml-auto justify-end"
       reactions={comment.reactions ?? []}
-      canReact={canReactPullRequestComment(detail, comment)}
+      canReact={detail.capabilities.reactions === true}
       subjectId={comment.id}
       environmentId={environmentId}
       reference={reference}

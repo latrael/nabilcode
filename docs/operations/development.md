@@ -47,7 +47,6 @@ the two forges; in text that reaches GitHub, use the GitHub number.
 
 Use `vp run dev` for server and web, or `vp run dev:desktop` for the Electron client.
 `dev:server` and `dev:web` start those processes separately.
-See the [mobile README](../../apps/mobile/README.md) for native builds and Metro.
 
 Flags go directly after the task name, for example `vp run dev --home-dir /tmp/t3code-dev`.
 Add `--browser` to open a browser automatically.
@@ -228,7 +227,7 @@ and runs in headless Chromium with the React Compiler on, like the app. There is
 
 TypeScript workspaces typecheck with `effect-tsgo tsrs --noEmit` from `@effect/tsgo`: the
 [tsrs](https://github.com/oxc-project/tsrs) checker with Effect diagnostics, quick fixes, and
-refactors built in. Only `apps/marketing` installs `typescript`, for Astro. VS Code's TypeScript 7
+refactors built in. VS Code's TypeScript 7
 extension starts the same checker through `.vscode/tsdk/tsgo` (`js/ts.tsdk.path`), a POSIX
 script, so on Windows open the workspace through WSL.
 

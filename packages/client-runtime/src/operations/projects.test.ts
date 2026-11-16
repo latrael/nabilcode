@@ -20,9 +20,6 @@ describe("add project shared logic", () => {
   it("offers only GitHub until other hosts are turned on", () => {
     const ready = () => ({ ready: true, hint: null });
     expect(sortAddProjectProviderSources(ready, {})).toEqual(["github"]);
-    expect(sortAddProjectProviderSources(ready, { gitlab: true, github: false })).toEqual([
-      "gitlab",
-    ]);
   });
 
   it("asks for a repository name when GitHub input is only an owner path", () => {
@@ -87,19 +84,12 @@ describe("add project shared logic", () => {
   it("clones the repository when given a page URL copied from the browser", () => {
     for (const [pageUrl, pageRoute, repository] of [
       ["https://github.com/pingdotgg/t3code/tree/main", "/tree/", "t3code"],
-      ["https://gitlab.com/gitlab-org/gitlab-runner/-/tree/main", "/-/", "gitlab-runner"],
-      ["https://git.cafe/pingdotgg/t3code/tree/main", "/tree/", "t3code"],
-      ["https://gitlab.example.test/g/p/-/blob/main/src/branch/x", "/-/", "p"],
-      ["https://code.company.test/g/p/-/tree/main", "/-/", "p"],
       ["https://github.com/pingdotgg/t3code/tree/release.git", "/tree/", "t3code"],
     ] as const) {
       const cloneUrl = normalizePastedCloneUrl(pageUrl);
       expect(cloneUrl).not.toContain(pageRoute);
       expect(getCloneDirectoryName(cloneUrl)).toBe(repository);
     }
-    expect(
-      normalizePastedCloneUrl("https://alice:example@bitbucket.org/workspace/repo/src/master/"),
-    ).toBe("https://alice:example@bitbucket.org/workspace/repo");
   });
 
   it("uses HTTPS for repositories selected through a provider", () => {
@@ -110,13 +100,6 @@ describe("add project shared logic", () => {
         sshUrl: "git@github.com:imputnet/helium.git",
       }),
     ).toBe("https://github.com/imputnet/helium");
-    expect(
-      getDefaultCloneUrl({
-        provider: SourceControlProviderKind.make("forgejo"),
-        url: "https://forgejo.example.test:8443/owner/repo.git",
-        sshUrl: "ssh://git@forgejo.example.test:2222/owner/repo.git",
-      }),
-    ).toBe("https://forgejo.example.test:8443/owner/repo.git");
   });
 
   it("derives the clone folder name from any pasted clone URL", () => {

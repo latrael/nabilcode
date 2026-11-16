@@ -29,7 +29,6 @@ export type SettingsPath =
   | "/settings/providers"
   | "/settings/threads"
   | "/settings/browser"
-  | "/settings/devices"
   | "/settings/scheduled-tasks"
   | "/settings/source-control"
   | "/settings/worktrees"
@@ -104,7 +103,6 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/providers": msg("Providers"),
   "/settings/threads": msg("Threads"),
   "/settings/browser": msg("Browser"),
-  "/settings/devices": msg("Devices"),
   "/settings/scheduled-tasks": msg("Scheduled tasks"),
   "/settings/source-control": msg("Source control"),
   "/settings/worktrees": msg("Worktrees"),
@@ -143,7 +141,6 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
       "/settings/providers",
       "/settings/threads",
       "/settings/browser",
-      "/settings/devices",
       "/settings/scheduled-tasks",
     ],
   },
@@ -525,13 +522,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["beta tab autocomplete predict next message claude codex ghost text"],
   },
   {
-    id: "simlock-hosts",
-    title: "Simlock device hosts (alpha)",
-    to: "/settings/labs",
-    scope: "environment",
-    searchTerms: ["beta alpha simlock callstack simulator emulator ios android pool lease gateway"],
-  },
-  {
     id: "worktree-fast-checkout",
     title: "Fast worktree checkout",
     to: "/settings/labs",
@@ -763,9 +753,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "provider-update-checks",
     title: "Provider update checks",
     to: "/settings/maintenance",
-    searchTerms: [
-      "installed cli versions newer available codex claude cursor grok fx kiro opencode",
-    ],
+    searchTerms: ["installed cli versions newer available codex claude grok fx kiro"],
     scope: "environment-defaults",
   },
   {
@@ -888,12 +876,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     desktopOnly: true,
   },
   {
-    id: "mobile-app",
-    title: "Mobile app",
-    to: "/settings/about",
-    searchTerms: ["phone tablet iPhone iPad iOS Android App Store Google Play QR"],
-  },
-  {
     id: "welcome-page",
     title: "Welcome page",
     to: "/settings/about",
@@ -976,7 +958,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Providers",
     to: "/settings/providers",
     searchTerms: [
-      "agents cli codex claude cursor grok fx kiro opencode antigravity google sign in sign out install subscription instances authentication api key models configuration binary path config directory codex_home shadow home endpoint arguments environment variables display name accent color custom favorite hidden auto compact native sessions import resume",
+      "agents cli codex claude grok fx kiro antigravity google sign in sign out install subscription instances authentication api key models configuration binary path config directory codex_home shadow home endpoint arguments environment variables display name accent color custom favorite hidden auto compact native sessions import resume",
     ],
   },
   {
@@ -1016,35 +998,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/browser",
     scope: "project-defaults",
     searchTerms: ["allow disable enable open drive preview tools sessions project override"],
-  },
-  {
-    id: "device-sources",
-    title: "Device sources",
-    to: "/settings/devices",
-    searchTerms: [
-      "device hosts ssh remote mac mini identity key connection eas expo cloud simlock pool gateway local simulators",
-    ],
-  },
-  {
-    id: "agent-device-access",
-    title: "Agents can use devices",
-    to: "/settings/devices",
-    targetId: "devices",
-    searchTerms: ["allow simulator emulator ios android drive tools sessions"],
-  },
-  {
-    id: "device-hub",
-    title: "Use devices",
-    to: "/settings/devices",
-    targetId: "devices",
-    searchTerms: ["device hub simulator emulator ios android install start version"],
-  },
-  {
-    id: "device-platform-support",
-    title: "Local simulators",
-    to: "/settings/devices",
-    targetId: "device-sources",
-    searchTerms: ["simulator support xcode android studio sdk avd runtime"],
   },
   {
     id: "browser-profiles",
@@ -1388,7 +1341,6 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/providers": null,
   "/settings/threads": null,
   "/settings/browser": null,
-  "/settings/devices": null,
   "/settings/source-control": "environment-defaults",
   "/settings/worktrees": "project-defaults",
   "/settings/connections": "connections",

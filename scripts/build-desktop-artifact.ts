@@ -985,10 +985,6 @@ interface StagePackageJson {
 export const STAGE_INSTALL_ARGS = ["install", "--prod"] as const;
 export const DESKTOP_ELECTRON_LANGUAGES = ["en-US"] as const;
 export const DESKTOP_FILE_EXCLUSIONS = [
-  // Cursor walks from argv[1] to platform assets; helpers and native addons need real paths outside ASAR.
-  "!**/node_modules/@cursor/sdk-*/**/*",
-  "!apps/desktop/prod-resources/cursor-sdk",
-  "!apps/desktop/prod-resources/cursor-sdk/**/*",
   // The installed Claude CLI is supplied explicitly; exclude optional bundled executables, retaining SDK JavaScript.
   "!**/node_modules/@anthropic-ai/claude-agent-sdk-*/**/*",
   "!**/*.map",
@@ -1039,8 +1035,6 @@ export const WINDOWS_SERVER_ASAR_UNPACK_GLOBS = [
 ] as const;
 // Keep sidecar exclusions aligned with the app; .bin symlinks are unused and unsupported by ASAR extraction.
 export const WINDOWS_SERVER_ASAR_IGNORE_GLOBS = [
-  "**/node_modules/@cursor/sdk-*",
-  "**/node_modules/@cursor/sdk-*/**",
   "**/node_modules/@anthropic-ai/claude-agent-sdk-*",
   "**/node_modules/@anthropic-ai/claude-agent-sdk-*/**",
   "**/node_modules/.bin",
@@ -1092,10 +1086,6 @@ export const WSL_RUNTIME_EXTRA_RESOURCES = [
   WSL_RUNTIME_ARCHIVE_HASH_EXTRA_RESOURCE,
 ] as const;
 export const DESKTOP_EXTRA_RESOURCES = [
-  {
-    from: "apps/desktop/prod-resources/cursor-sdk",
-    to: "node_modules/@cursor",
-  },
   {
     from: "apps/desktop/prod-resources/resource-monitor",
     to: "resource-monitor",
@@ -1443,23 +1433,6 @@ export function resolveMergedStageDependencies(input: {
     ...resolveFffNativeDependencies(input.platform, input.arch, input.fffNodeVersion),
   };
 }
-
-/** Cursor's helper lookup falls through the archive to this real resources tree. */
-export const stageCursorSdkPlatformPackages = Effect.fn("stageCursorSdkPlatformPackages")(
-  function* (nodeModulesDir: string, destination: string) {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    yield* fs.makeDirectory(destination, { recursive: true });
-    const sdkDirectory = path.join(nodeModulesDir, "@cursor/sdk");
-    if (!(yield* fs.exists(sdkDirectory))) return;
-    const cursorDirectory = path.dirname(yield* fs.realPath(sdkDirectory));
-    for (const name of yield* fs.readDirectory(cursorDirectory)) {
-      if (!name.startsWith("sdk-")) continue;
-      const source = yield* fs.realPath(path.join(cursorDirectory, name));
-      yield* fs.copy(source, path.join(destination, name));
-    }
-  },
-);
 
 export interface ClerkPasskeyNativeArtifact {
   readonly packageName: string;
@@ -2767,8 +2740,8 @@ export function resolvePackageManagerUserAgent(packageManager: string): string {
 
 export function resolveDesktopProductName(version: string): string {
   return resolveDesktopUpdateChannel(version) === "nightly"
-    ? "T3 Code (Nightly)"
-    : (desktopPackageJson.productName ?? "T3 Code");
+    ? "nabilinc (Nightly)"
+    : (desktopPackageJson.productName ?? "nabilinc");
 }
 
 export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
@@ -2844,19 +2817,19 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
         // macOS 26 offers Messages/Mail codes in every text field unless opted out.
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
         NSLocalNetworkUsageDescription:
-          "T3 Code connects to devices on your local network for remote environments and commands run by terminals and coding agents.",
+          "nabilinc connects to devices on your local network for remote environments and commands run by terminals and coding agents.",
         NSCalendarsUsageDescription:
-          "Commands you run in T3 Code may need access to your calendars.",
+          "Commands you run in nabilinc may need access to your calendars.",
         NSCalendarsFullAccessUsageDescription:
-          "Commands you run in T3 Code may need to read and write your calendar events.",
+          "Commands you run in nabilinc may need to read and write your calendar events.",
         NSCalendarsWriteOnlyAccessUsageDescription:
-          "Commands you run in T3 Code may need to add events to your calendars.",
+          "Commands you run in nabilinc may need to add events to your calendars.",
         NSScreenCaptureUsageDescription:
-          "T3 Code captures the active window when you use the window capture shortcut.",
+          "nabilinc captures the active window when you use the window capture shortcut.",
         NSCameraUsageDescription:
-          "T3 Code lets commands run by terminals and coding agents use the camera.",
+          "nabilinc lets commands run by terminals and coding agents use the camera.",
         NSMicrophoneUsageDescription:
-          "T3 Code lets commands run by terminals and coding agents use the microphone.",
+          "nabilinc lets commands run by terminals and coding agents use the microphone.",
         // macOS lists an app under Default web browser only when it opens web
         // pages as documents as well as http and https links (see protocols).
         CFBundleDocumentTypes: [
@@ -2870,7 +2843,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       },
       protocols: [
         {
-          name: "T3 Code",
+          name: "nabilinc",
           schemes: ["t3code", "t3code-dev"],
         },
         {
@@ -2923,7 +2896,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       maintainer: "T3 Tools <hello@t3.codes>",
       protocols: [
         {
-          name: "T3 Code",
+          name: "nabilinc",
           schemes: ["t3code", "t3code-dev"],
         },
       ],
@@ -3923,7 +3896,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     private: true,
     packageManager: rootPackageJson.packageManager,
     description:
-      "T3 Code is an open-source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop, web, or mobile to continue working remotely.",
+      "nabilinc is an open-source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop, web, or mobile to continue working remotely.",
     license: "MIT",
     homepage: "https://t3.codes",
     author: "T3 Tools",
@@ -3997,13 +3970,6 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
       verbose: options.verbose,
     });
   }
-  yield* stageCursorSdkPlatformPackages(
-    path.join(
-      options.platform === "win" ? path.join(stageRoot, "server") : stageAppDir,
-      "node_modules",
-    ),
-    path.join(stageProdResourcesDir, "cursor-sdk"),
-  );
   if (
     options.wslRuntime !== undefined &&
     bundlesWslRuntime({ platform: options.platform, runtimeArchivePath: options.wslRuntime })
@@ -4251,7 +4217,7 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
     Flag.optional,
   ),
 }).pipe(
-  Command.withDescription("Build a desktop artifact for T3 Code."),
+  Command.withDescription("Build a desktop artifact for nabilinc."),
   Command.withHandler((input) => Effect.flatMap(resolveBuildOptions(input), buildDesktopArtifact)),
 );
 

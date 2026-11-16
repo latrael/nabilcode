@@ -100,11 +100,7 @@ function candidate(
   } satisfies AgentSessionScanner.AgentSessionRecentThread;
 }
 
-const PI_MODEL_SELECTION = { instanceId: ProviderInstanceId.make("pi"), model: "default" };
-
-// Pi threads are owned by their session file path, not the session UUID.
-const nativeId = ({ source }: ReturnType<typeof candidate>) =>
-  source.provider === "pi" ? source.filePath : source.providerSessionId;
+const nativeId = ({ source }: ReturnType<typeof candidate>) => source.providerSessionId;
 
 function importId(source: ReturnType<typeof candidate>) {
   return ThreadId.make(
@@ -298,12 +294,10 @@ it.effect(
         "claudeAgent",
       );
       const deleted = candidate(CODEX_MODEL_SELECTION, "deleted");
-      const ownedPi = candidate(PI_MODEL_SELECTION, "owned-pi", "pi");
       const owners = [
         yield* seedOwner(active),
         yield* seedOwner(archived, "archived"),
         yield* seedOwner(deleted, "deleted"),
-        yield* seedOwner(ownedPi),
       ];
       const before = yield* Effect.forEach(owners, (id) =>
         projections.getThreadRecords(id, ["providerThreads"]),
@@ -316,19 +310,10 @@ it.effect(
       const unowned = candidate(CODEX_MODEL_SELECTION, "unowned");
       unowned.thread.omittedMessageCount = 1;
       unowned.worktree = { path: "/workspace/project/.claude/worktrees/feat", branch: "feat" };
-      const unownedPi = candidate(PI_MODEL_SELECTION, "unowned-pi", "pi");
-      const importer = yield* makeImporter([
-        active,
-        archived,
-        deleted,
-        ownedPi,
-        otherInstance,
-        unowned,
-        unownedPi,
-      ]);
+      const importer = yield* makeImporter([active, archived, deleted, otherInstance, unowned]);
 
-      expect(yield* importer.run).toEqual({ importedCount: 3, skippedCount: 0 });
-      for (const source of [active, archived, deleted, ownedPi]) {
+      expect(yield* importer.run).toEqual({ importedCount: 2, skippedCount: 0 });
+      for (const source of [active, archived, deleted]) {
         const threadId = importId(source);
         expect(yield* Effect.option(projections.getThread(threadId))).toEqual(Option.none());
         expect(yield* events.read({ threadId }).pipe(Stream.runCollect)).toEqual([]);
@@ -345,8 +330,8 @@ it.effect(
             "event" in stored ? [stored.event.threadId] : [],
           ),
         ),
-      ).toEqual(new Set([importId(otherInstance), importId(unowned), importId(unownedPi)]));
-      for (const source of [otherInstance, unowned, unownedPi]) {
+      ).toEqual(new Set([importId(otherInstance), importId(unowned)]));
+      for (const source of [otherInstance, unowned]) {
         const threadId = importId(source);
         const records = yield* projections.getThreadRecords(threadId, [
           "messages",
@@ -1018,12 +1003,6 @@ it.effect("repeated imports reach linked-worktree sessions behind the scan budge
                 [ProviderInstanceId.make("codex")]: {
                   driver: ProviderDriverKind.make("codex"),
                   config: { homePath: codexHome },
-                },
-                // Keeps the default Pi instance off the developer's real ~/.pi.
-                [ProviderInstanceId.make("pi")]: {
-                  driver: ProviderDriverKind.make("pi"),
-                  enabled: false,
-                  config: {},
                 },
               },
             }),
