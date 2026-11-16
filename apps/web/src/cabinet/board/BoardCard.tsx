@@ -1,15 +1,8 @@
 import { useDraggable } from "@dnd-kit/core";
-import {
-  FileDiffIcon,
-  FileIcon,
-  FileTextIcon,
-  GripHorizontalIcon,
-  GripVerticalIcon,
-  MessageSquareIcon,
-  XIcon,
-} from "lucide-react";
+import { FileDiffIcon, GripHorizontalIcon, MessageSquareIcon, XIcon } from "lucide-react";
 import { useGT } from "gt-react";
-import type { CSSProperties, ReactNode } from "react";
+import { createContext, use, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -31,14 +24,26 @@ const fileName = (path: string) =>
 export function BoardCardKindIcon(props: { readonly card: BoardCardModel }) {
   switch (props.card.kind) {
     case "pdf":
-      return <FileIcon aria-hidden className="size-3.5 shrink-0 text-destructive/80" />;
+      return <span aria-hidden className="size-2 shrink-0 rounded-xs bg-destructive/80" />;
     case "thread":
       return <MessageSquareIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />;
     case "diff":
       return <FileDiffIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />;
     case "markdown":
-      return <FileTextIcon aria-hidden className="size-3.5 shrink-0 text-warning-foreground" />;
+      return (
+        <span aria-hidden className="shrink-0 text-3xs leading-none text-warning-foreground">
+          ¶
+        </span>
+      );
   }
+}
+
+const HeaderSlotContext = createContext<HTMLElement | null>(null);
+
+/** Puts a card body's controls (view modes, page nav) in its card's header row. */
+export function BoardCardHeaderControls(props: { readonly children: ReactNode }) {
+  const slot = use(HeaderSlotContext);
+  return slot === null ? null : createPortal(props.children, slot);
 }
 
 export function boardCardTitle(card: BoardCardModel) {
@@ -64,6 +69,8 @@ export function BoardCard(props: {
   /** Makes the title a button, e.g. to promote a thread card. */
   readonly onActivateTitle?: (() => void) | undefined;
   readonly titleActionLabel?: string | undefined;
+  /** Chips that follow the title. */
+  readonly extras?: ReactNode;
   /** Header buttons before Close. */
   readonly actions?: ReactNode;
   readonly onClose: () => void;
@@ -78,6 +85,8 @@ export function BoardCard(props: {
     disabled: !draggable,
   });
   const title = props.title === undefined ? boardCardTitle(card) : props.title;
+  const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
+  const threadLike = card.kind === "thread" || props.onActivateTitle !== undefined;
 
   let header: ReactNode = null;
   if (primary) {
@@ -97,16 +106,16 @@ export function BoardCard(props: {
     }
   } else {
     header = (
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-(--cabinet-card-head) pr-1.5 pl-1">
+      <div className="flex h-[34px] shrink-0 items-center gap-2 border-b border-border bg-(--cabinet-card-head) pr-1.5 pl-1.5">
         <button
           type="button"
           ref={setActivatorNodeRef}
           {...attributes}
           {...listeners}
           aria-label={gt("Move {title}", { title: title ?? "" })}
-          className="flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm text-muted-foreground/70 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing"
+          className="flex h-6 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm px-0.5 text-xs leading-none text-muted-foreground/70 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing"
         >
-          <GripVerticalIcon aria-hidden className="size-3.5" />
+          <span aria-hidden>⠿</span>
         </button>
         {props.leading ?? <BoardCardKindIcon card={card} />}
         {props.onActivateTitle ? (
@@ -116,7 +125,7 @@ export function BoardCard(props: {
                 <button
                   type="button"
                   onClick={props.onActivateTitle}
-                  className="min-w-0 flex-1 truncate rounded-sm text-left text-xs font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="min-w-0 truncate rounded-sm text-left text-13 font-semibold text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   {title}
                 </button>
@@ -128,7 +137,12 @@ export function BoardCard(props: {
           <Tooltip>
             <TooltipTrigger
               render={
-                <span className="min-w-0 flex-1 truncate font-mono text-2xs text-foreground">
+                <span
+                  className={cn(
+                    "min-w-0 truncate text-foreground",
+                    threadLike ? "text-13 font-semibold" : "font-mono text-xs",
+                  )}
+                >
                   {title}
                 </span>
               }
@@ -138,6 +152,9 @@ export function BoardCard(props: {
             </TooltipPopup>
           </Tooltip>
         )}
+        {props.extras}
+        <div ref={setHeaderSlot} className="contents" />
+        <span className="min-w-0 flex-1" />
         {props.actions}
         <Button
           variant="ghost"
@@ -177,7 +194,7 @@ export function BoardCard(props: {
             "@min-[900px]/board:[contain:layout] @min-[900px]/board:[--workspace-controls-right:0.75rem] @min-[900px]/board:[--workspace-controls-top:0px] @min-[900px]/board:[--workspace-native-controls-inset:0px]",
         )}
       >
-        {props.children}
+        <HeaderSlotContext value={headerSlot}>{props.children}</HeaderSlotContext>
       </div>
     </section>
   );

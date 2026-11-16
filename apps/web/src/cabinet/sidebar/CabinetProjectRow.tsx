@@ -23,14 +23,9 @@ import { CabinetIngestDialog } from "./CabinetIngestDialog";
 const REVEAL_CLASS =
   "opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100 pointer-coarse:opacity-100";
 
-function RowAction(props: {
-  label: string;
-  onClick: () => void;
-  visible?: boolean;
-  children: ReactNode;
-}) {
+function RowAction(props: { label: string; onClick: () => void; children: ReactNode }) {
   return (
-    <span className={props.visible ? undefined : REVEAL_CLASS}>
+    <span>
       <Tooltip>
         <TooltipTrigger
           render={
@@ -88,7 +83,7 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
         />
         <span
           className={cn(
-            "min-w-0 truncate text-xs font-medium",
+            "min-w-0 truncate text-xs font-semibold",
             props.containsActiveThread
               ? "text-sidebar-foreground"
               : "text-sidebar-muted-foreground",
@@ -97,33 +92,47 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
           {group.displayName}
         </span>
       </button>
-      <div className="flex shrink-0 items-center gap-0.5 pr-1">
-        <RowAction label={gt("New thread")} onClick={() => props.onNewThread(group)}>
-          <PlusIcon />
-        </RowAction>
-        {props.canPin ? (
-          <RowAction
-            label={group.pinned ? gt("Unpin project") : gt("Pin project")}
-            visible={group.pinned}
-            onClick={() => props.onTogglePin(group)}
-          >
-            {group.pinned ? <PinOffIcon /> : <PinIcon />}
+      <div className="relative flex shrink-0 items-center gap-1.5 pr-2.5">
+        {group.pinned && props.canPin ? (
+          <RowAction label={gt("Unpin project")} onClick={() => props.onTogglePin(group)}>
+            <PinOffIcon />
           </RowAction>
         ) : null}
-        <RowAction
-          label={linked ? gt("Linked to Cabinet. Re-ingest docs") : gt("Ingest into Cabinet")}
-          visible={linked}
-          onClick={() => setIngestOpen(true)}
-        >
-          {linked ? <LinkIcon /> : <LibraryIcon />}
-        </RowAction>
-        <RowAction label={gt("Project settings")} onClick={() => props.onOpenSettings(group)}>
-          <SettingsIcon />
-        </RowAction>
+        {linked ? (
+          <RowAction
+            label={gt("Linked to Cabinet. Re-ingest docs")}
+            onClick={() => setIngestOpen(true)}
+          >
+            <LinkIcon />
+          </RowAction>
+        ) : null}
         <MemoryBadge count={proposalCount} />
-        <span className="min-w-4 pr-1 text-right text-2xs tabular-nums text-sidebar-muted-foreground">
+        <span className="min-w-4 text-right text-2xs tabular-nums text-sidebar-muted-foreground">
           {props.threadCount}
         </span>
+        <div
+          className={cn(
+            "absolute inset-y-0 right-0 flex items-center gap-0.5 rounded-md bg-sidebar-row-hover pr-1 pl-1",
+            REVEAL_CLASS,
+          )}
+        >
+          <RowAction label={gt("New thread")} onClick={() => props.onNewThread(group)}>
+            <PlusIcon />
+          </RowAction>
+          {props.canPin && !group.pinned ? (
+            <RowAction label={gt("Pin project")} onClick={() => props.onTogglePin(group)}>
+              <PinIcon />
+            </RowAction>
+          ) : null}
+          {linked ? null : (
+            <RowAction label={gt("Ingest into Cabinet")} onClick={() => setIngestOpen(true)}>
+              <LibraryIcon />
+            </RowAction>
+          )}
+          <RowAction label={gt("Project settings")} onClick={() => props.onOpenSettings(group)}>
+            <SettingsIcon />
+          </RowAction>
+        </div>
       </div>
       {ingestOpen ? (
         <CabinetIngestDialog

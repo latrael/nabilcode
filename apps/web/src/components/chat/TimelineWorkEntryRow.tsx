@@ -67,6 +67,7 @@ import {
   workEntryRawCommand,
   buildToolCallExpandedBody,
   workEntryIconName,
+  isCabinetToolEntry,
   THINKING_PREVIEW_PLUGINS,
   THOUGHT_PREVIEW_PLUGINS,
   THOUGHT_PREVIEW_SOURCE_MAX_LENGTH,
@@ -449,6 +450,9 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       data-v2-item-type={workEntry.projectedItem?.item.type}
       data-v2-item-visibility={workEntry.projectedItem?.visibility}
       {...rowToggleProps}
+      {...(!isReasoning && workLogEntryIsToolLike(workEntry)
+        ? { pill: isCabinetToolEntry(workEntry) ? ("cabinet" as const) : ("default" as const) }
+        : {})}
       icon={
         <span
           className={iconWrapperClass}

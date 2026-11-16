@@ -20,7 +20,7 @@ import { useDelegatedUnderParent, useQuietThreadShells } from "~/state/entities"
 
 const RECENT_THREAD_LIMIT = 8;
 
-/** The board bar's Add card menu: another thread of this project, or the route thread's diff. */
+/** The top bar's Add card menu: another thread of this project, or the route thread's diff. */
 export function BoardAddCardMenu(props: {
   readonly environmentId: EnvironmentId;
   readonly projectId: ProjectId;
@@ -32,7 +32,7 @@ export function BoardAddCardMenu(props: {
   const gt = useGT();
   return (
     <Menu>
-      <MenuTrigger render={<Button variant="ghost" size="xs" />}>
+      <MenuTrigger render={<Button variant="outline" size="xs" />}>
         <PlusIcon />
         {gt("Add card")}
       </MenuTrigger>

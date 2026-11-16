@@ -50,7 +50,7 @@ function PendingList(props: {
           size="micro"
           variant="outline"
           onClick={() => {
-            useMemoryDockStore.getState().setExpanded(true);
+            useMemoryDockStore.getState().reveal();
             props.onClose();
           }}
         >
@@ -80,7 +80,7 @@ export function MemoryPendingChip(props: {
         aria-label={label}
         render={<button type="button" className={props.className} />}
       >
-        <span aria-hidden className="font-mono text-warning-foreground tabular-nums">
+        <span aria-hidden className="font-mono text-cabinet-amber-text tabular-nums">
           {`◆ ${total}`}
         </span>
         {gt("pending")}

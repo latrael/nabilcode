@@ -279,20 +279,21 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
 
       {item.type === "file_change" ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-muted-foreground">
+          <div className="flex min-h-7 flex-wrap items-center gap-2 rounded-md border border-border bg-input/40 px-2.5 font-mono text-xs">
+            <span className="text-muted-foreground">
               {formatWorkspaceRelativePath(item.fileName, props.workspaceRoot)}
             </span>
             {item.additions !== undefined || item.deletions !== undefined ? (
               <span>
                 <span className="text-diff-addition">+{formatDiffCount(item.additions ?? 0)}</span>{" "}
-                <span className="text-diff-deletion">-{formatDiffCount(item.deletions ?? 0)}</span>
+                <span className="text-diff-deletion">−{formatDiffCount(item.deletions ?? 0)}</span>
               </span>
             ) : null}
+            <span className="flex-1" />
             {props.onOpenToolDiff ? (
               <Button
                 size="xs"
-                variant="outline"
+                variant="ghost"
                 onClick={() =>
                   props.onOpenToolDiff?.({
                     threadId: props.projectedItem.sourceThreadId,

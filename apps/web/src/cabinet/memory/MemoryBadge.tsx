@@ -17,7 +17,7 @@ export function MemoryBadge(props: { readonly count: number; readonly className?
       aria-label={label}
       data-memory-badge={props.count}
       className={cn(
-        "shrink-0 font-mono text-2xs tabular-nums text-warning-foreground",
+        "shrink-0 font-mono text-2xs tabular-nums text-cabinet-amber-text",
         props.className,
       )}
     >

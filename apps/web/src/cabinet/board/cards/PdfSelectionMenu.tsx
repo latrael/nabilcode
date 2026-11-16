@@ -1,19 +1,19 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { useGT } from "gt-react";
-import { BookmarkPlusIcon, QuoteIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-import { Button } from "~/components/ui/button";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { cn } from "~/lib/utils";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { useEnvironmentSettings } from "~/hooks/useSettings";
 import { cabinetQuoteContextRecord } from "~/lib/composerContextRecords";
 import { cabinetEnvironment } from "~/state/cabinet";
 import { formatEnvironmentQueryError } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
+import { BoardCardHeaderControls } from "../BoardCard";
 import { useActiveProjectRef } from "../useActiveProjectRef";
 import {
   buildQuoteCapture,
@@ -160,31 +160,54 @@ export function PdfSelectionMenu(props: {
         : gt("Cabinet is not connected.");
   const citeBlockedReason = activeProject === null ? gt("Open a thread to cite into.") : null;
 
+  const citeButton = (
+    <button
+      type="button"
+      aria-disabled={selected === null || citeBlockedReason !== null}
+      // Keeps the PDF selection alive while the button is pressed.
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => {
+        if (selected !== null && citeBlockedReason === null) cite(selected);
+      }}
+      className="inline-flex h-[22px] shrink-0 items-center gap-1.25 rounded-sm bg-warning px-2.25 text-11_5 font-medium whitespace-nowrap text-white outline-none hover:bg-warning/90 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-disabled:cursor-default aria-disabled:opacity-60"
+    >
+      {gt("❝ Cite")}
+    </button>
+  );
+
   return (
     <div ref={root} className="contents">
+      <BoardCardHeaderControls>
+        <Tooltip>
+          <TooltipTrigger render={citeButton} />
+          <TooltipPopup side="bottom">
+            {citeBlockedReason ?? gt("Select text in the PDF, then cite it to the thread.")}
+          </TooltipPopup>
+        </Tooltip>
+      </BoardCardHeaderControls>
       {props.children}
       {selected
         ? createPortal(
             <div
               role="toolbar"
               aria-label={gt("Selected text")}
-              className="fixed z-50 flex gap-0.5 rounded-lg border bg-popover p-0.5 shadow-lg"
+              className="fixed z-50 flex items-center gap-0.5 rounded-md border border-foreground/20 bg-foreground p-0.75 text-11_5 text-background shadow-lg"
               style={{
                 top: Math.min(selected.top, window.innerHeight - 40),
-                left: Math.max(8, Math.min(selected.left, window.innerWidth - 280)),
+                left: Math.max(8, Math.min(selected.left, window.innerWidth - 340)),
               }}
               // Keeps the PDF selection alive while a button is pressed.
               onMouseDown={(event) => event.preventDefault()}
             >
               <MenuAction
-                icon={<QuoteIcon />}
-                label={gt("Cite to thread")}
+                label={gt("↗ Send excerpt to chat")}
                 blockedReason={citeBlockedReason}
                 onPress={() => cite(selected)}
               />
+              <span aria-hidden className="h-3.5 w-px bg-background/25" />
               <MenuAction
-                icon={<BookmarkPlusIcon />}
-                label={gt("Save quote to Cabinet")}
+                label={gt("◆ Save to Cabinet")}
+                accent
                 blockedReason={saveBlockedReason}
                 onPress={() => void save(selected)}
               />
@@ -197,23 +220,25 @@ export function PdfSelectionMenu(props: {
 }
 
 function MenuAction(props: {
-  readonly icon: ReactNode;
   readonly label: string;
+  readonly accent?: boolean;
   readonly blockedReason: string | null;
   readonly onPress: () => void;
 }) {
   // aria-disabled, not disabled, so the tooltip can still say why.
   const blocked = props.blockedReason !== null;
   const button = (
-    <Button
-      variant="ghost"
-      size="xs"
+    <button
+      type="button"
       aria-disabled={blocked}
       onClick={blocked ? undefined : props.onPress}
+      className={cn(
+        "inline-flex h-[22px] items-center rounded-sm px-2 whitespace-nowrap outline-none hover:bg-background/15 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-disabled:cursor-default aria-disabled:opacity-50",
+        props.accent && "text-warning",
+      )}
     >
-      {props.icon}
       {props.label}
-    </Button>
+    </button>
   );
   if (!blocked) return button;
   return (

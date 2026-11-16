@@ -212,7 +212,7 @@ export function ComposerControlsBar(props: {
       modelOptionsByInstance={modelOptionsByInstance}
       size={controlSize}
       triggerClassName={cn(
-        "group/model-trigger",
+        "group/model-trigger font-mono text-xs",
         MODEL_TRIGGER_STATES,
         composerControlsCollapsed ? "min-w-13 shrink text-xs!" : "min-w-13",
       )}

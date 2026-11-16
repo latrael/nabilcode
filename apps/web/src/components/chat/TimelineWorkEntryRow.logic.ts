@@ -265,3 +265,19 @@ export function remarkThoughtPreview(fallback: string) {
 
 export const THOUGHT_PREVIEW_PLUGINS: PluggableList = [[remarkThoughtPreview, "Thought"]];
 export const THINKING_PREVIEW_PLUGINS: PluggableList = [[remarkThoughtPreview, "Thinking"]];
+
+const CABINET_TOOL_NAME = /^(?:mcp__)?cabinet(?:[._]|$)/i;
+
+export function isCabinetToolEntry(workEntry: TimelineWorkEntry): boolean {
+  const payload = workEntry.structuredPayload;
+  if (payload?.type === "dynamic_tool" && CABINET_TOOL_NAME.test(payload.toolName ?? "")) {
+    return true;
+  }
+  const data = workEntry.toolData;
+  if (typeof data !== "object" || data === null) return false;
+  const { server, toolName } = data as { server?: unknown; toolName?: unknown };
+  return (
+    (typeof server === "string" && server.toLowerCase() === "cabinet") ||
+    (typeof toolName === "string" && CABINET_TOOL_NAME.test(toolName))
+  );
+}

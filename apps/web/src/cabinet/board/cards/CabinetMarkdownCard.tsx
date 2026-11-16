@@ -1,5 +1,6 @@
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
 import { useGT } from "gt-react";
 import { useRef, type MouseEvent } from "react";
 import type { PluggableList } from "unified";
@@ -11,6 +12,7 @@ import { cabinetEnvironment } from "~/state/cabinet";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 import { isStructuralCabinetEvent, useCabinetEvents, useCabinetItem } from "../../data/useCabinet";
+import { BoardCardHeaderControls } from "../BoardCard";
 import { useBoardStore } from "../boardStore";
 import { collectWikilinkRefs, parseWikilinkHref, remarkCabinetWikilinks } from "./cabinet-wikilink";
 import { CabinetCardNotice } from "./CabinetCardNotice";
@@ -37,9 +39,13 @@ function wikilinkPlugins(unresolved: ReadonlySet<string>): PluggableList {
   return plugins;
 }
 
-/** Unresolved wikilinks are anchors with a marker href; the sanitizer leaves no other hook. */
-const UNRESOLVED_LINK_CLASS =
-  "[&_a[href*='cabinet-unresolved/']]:pointer-events-none [&_a[href*='cabinet-unresolved/']]:cursor-default [&_a[href*='cabinet-unresolved/']]:text-muted-foreground [&_a[href*='cabinet-unresolved/']]:no-underline";
+// Wikilinks are anchors with a marker href; the sanitizer leaves no other hook. Resolved ones read
+// as amber with faint brackets and a dotted underline; unresolved ones are inert. String.raw keeps
+// the CSS escapes (\5b is "[", \5d is "]") single-backslashed for Tailwind's scanner.
+const WIKILINK_CLASS = String.raw`[&_a[href*='cabinet-wikilink/']]:text-warning-foreground [&_a[href*='cabinet-wikilink/']]:no-underline [&_a[href*='cabinet-wikilink/']]:border-b [&_a[href*='cabinet-wikilink/']]:border-dotted [&_a[href*='cabinet-wikilink/']]:border-warning/32 [&_a[href*='cabinet-wikilink/']]:before:opacity-50 [&_a[href*='cabinet-wikilink/']]:before:content-['\5b\5b'] [&_a[href*='cabinet-wikilink/']]:after:opacity-50 [&_a[href*='cabinet-wikilink/']]:after:content-['\5d\5d']`;
+const UNRESOLVED_LINK_CLASS = String.raw`[&_a[href*='cabinet-unresolved/']]:pointer-events-none [&_a[href*='cabinet-unresolved/']]:cursor-default [&_a[href*='cabinet-unresolved/']]:text-muted-foreground [&_a[href*='cabinet-unresolved/']]:no-underline [&_a[href*='cabinet-unresolved/']]:before:opacity-50 [&_a[href*='cabinet-unresolved/']]:before:content-['\5b\5b'] [&_a[href*='cabinet-unresolved/']]:after:opacity-50 [&_a[href*='cabinet-unresolved/']]:after:content-['\5d\5d']`;
+
+const NOTE_BODY_CLASS = String.raw`text-[13.5px] leading-[1.55] [&_h1]:text-[22px] [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_ul>li]:marker:text-muted-foreground/70 [&_ul>li]:marker:content-['\2013_']`;
 
 /**
  * A Cabinet note, read-only apart from ticking checklist items. It follows Cabinet live: the item
@@ -55,6 +61,8 @@ export default function CabinetMarkdownCard(props: {
   const { environmentId, itemId, boardKey } = props;
   const { view, refresh } = useCabinetItem(environmentId, itemId);
   const body = view.status === "ready" ? view.item.body : "";
+  const detail = useAtomValue(cabinetEnvironment.getItem({ environmentId, input: { id: itemId } }));
+  const backlinkCount = detail._tag === "Success" ? detail.value.backlinks?.length : undefined;
 
   const refs = collectWikilinkRefs(body);
   const unresolved = useUnresolvedWikilinks(environmentId, refs);
@@ -118,19 +126,28 @@ export default function CabinetMarkdownCard(props: {
   if (view.status !== "ready") return <CabinetCardNotice view={view} />;
   return (
     <div
-      className={`scrollbar-gutter-both min-h-0 flex-1 overflow-auto ${UNRESOLVED_LINK_CLASS}`}
+      className={`scrollbar-gutter-both min-h-0 flex-1 overflow-auto ${WIKILINK_CLASS} ${UNRESOLVED_LINK_CLASS}`}
       onClickCapture={onClickCapture}
     >
-      <CabinetFrontmatterBadges item={view.item} />
-      <ChatMarkdown
-        text={view.item.body}
-        cwd={undefined}
-        environmentId={environmentId}
-        threadRef={props.threadRef}
-        extraRemarkPlugins={remarkPlugins}
-        onTaskListChange={toggleTask}
-        className="mx-auto max-w-4xl px-6 py-4"
-      />
+      {backlinkCount === undefined ? null : (
+        <BoardCardHeaderControls>
+          <span className="shrink-0 text-2xs whitespace-nowrap text-muted-foreground/80">
+            {gt("↩ {count} backlinks", { count: backlinkCount })}
+          </span>
+        </BoardCardHeaderControls>
+      )}
+      <div className="max-w-[640px] px-5.5 pt-4 pb-5.5">
+        <CabinetFrontmatterBadges item={view.item} />
+        <ChatMarkdown
+          text={view.item.body}
+          cwd={undefined}
+          environmentId={environmentId}
+          threadRef={props.threadRef}
+          extraRemarkPlugins={remarkPlugins}
+          onTaskListChange={toggleTask}
+          className={NOTE_BODY_CLASS}
+        />
+      </div>
     </div>
   );
 }

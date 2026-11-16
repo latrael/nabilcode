@@ -23,13 +23,10 @@ import { createPortal } from "react-dom";
 
 import { FileSurfaceLoading } from "~/components/files/fileSurfaceChrome";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
-import { isElectron } from "~/env";
 import { useShownThreadRouteTarget } from "~/hooks/useShownThreadRouteTarget";
 import { cn } from "~/lib/utils";
 import { useProject } from "~/state/entities";
 import { buildThreadRouteParams } from "~/threadRoutes";
-import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
-import { CabinetStatusChips } from "../CabinetStatusChips";
 import { useCabinetItemTitles } from "../data/useCabinet";
 import { MemoryDock } from "../memory/MemoryDock";
 import { boardKey, canResizeCardWidth, DEFAULT_LAYOUT, layoutSlots } from "./board.logic";
@@ -48,7 +45,6 @@ import {
   SLOT_PLACEMENT_CLASS,
   slotStyle,
 } from "./BoardCard";
-import { BoardAddCardMenu } from "./BoardAddCardMenu";
 import { BoardResizeHandle } from "./BoardResizeHandle";
 import { selectBoardLayout, useBoardStore } from "./boardStore";
 import { ThreadBoardCard } from "./cards/ThreadCard";
@@ -139,21 +135,8 @@ export function BoardView(props: { readonly primary: ReactNode }) {
     <div className="@container/board flex min-h-0 min-w-0 flex-1 flex-col">
       {active === null ? null : (
         <BoardPresetBar
-          environmentId={active.environmentId}
           preset={layout.preset}
-          hasFileCards={layout.cards.length > 1}
           onPresetChange={(preset) => useBoardStore.getState().setPreset(key!, preset)}
-          addCard={
-            <BoardAddCardMenu
-              environmentId={active.environmentId}
-              projectId={active.projectId}
-              primaryThreadKey={primaryThreadKey}
-              onOpenPrimaryDiff={primaryIsServer ? () => openDiff(primaryThreadKey) : null}
-              onOpenThread={(threadKey) =>
-                useBoardStore.getState().openThread(key!, threadKey, primaryThreadKey)
-              }
-            />
-          }
         />
       )}
       <DndContext
@@ -166,9 +149,9 @@ export function BoardView(props: { readonly primary: ReactNode }) {
       >
         <div
           className={cn(
-            "grid min-h-0 min-w-0 flex-1 grid-cols-12 grid-rows-2",
+            "grid min-h-0 min-w-0 flex-1 grid-cols-12 grid-rows-2 has-[>[data-memory-dock]]:grid-rows-[minmax(0,1fr)_minmax(0,1fr)_auto]",
             multi &&
-              "cabinet-board-dots gap-2 p-2 @max-[900px]/board:gap-0 @max-[900px]/board:bg-none @max-[900px]/board:p-0",
+              "cabinet-board-dots gap-2 bg-background p-2 @max-[900px]/board:gap-0 @max-[900px]/board:bg-none @max-[900px]/board:p-0",
           )}
           data-board-grid=""
           data-board-preset={active === null ? undefined : layout.preset}
@@ -243,10 +226,14 @@ export function BoardView(props: { readonly primary: ReactNode }) {
                 />
               ))
             : null}
+          {active === null ? null : (
+            <MemoryDock
+              environmentId={active.environmentId}
+              projectId={active.projectId}
+              flush={!multi}
+            />
+          )}
         </div>
-        {active === null ? null : (
-          <MemoryDock environmentId={active.environmentId} projectId={active.projectId} />
-        )}
         {/* A header-sized ghost, never a clone of the card: cloning the primary would mount a second ChatView. */}
         {createPortal(
           <DragOverlay dropAnimation={null}>
@@ -343,25 +330,14 @@ function FileCardBody(props: {
 }
 
 function BoardPresetBar(props: {
-  readonly environmentId: EnvironmentId;
   readonly preset: BoardLayoutPreset;
-  readonly hasFileCards: boolean;
   readonly onPresetChange: (preset: BoardPresetId) => void;
-  readonly addCard: ReactNode;
 }) {
   const gt = useGT();
   const m = useMessages();
   return (
-    <div
-      className={cn(
-        // Native window controls (macOS traffic lights, Windows overlay) are laid out for the
-        // workspace topbar height, so the bar takes it wherever those controls exist.
-        "flex h-9 shrink-0 items-center gap-3 border-b border-border bg-background px-3 wco:h-(--workspace-topbar-height) wco:pr-(--workspace-native-controls-inset) @max-[900px]/board:hidden",
-        isElectron && "drag-region h-(--workspace-topbar-height)",
-        COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
-      )}
-    >
-      <span className="shrink-0 text-3xs font-semibold tracking-wider text-muted-foreground uppercase">
+    <div className="flex h-9 shrink-0 items-center gap-2.5 border-b border-border bg-(--app-chrome-background) px-3 @max-[900px]/board:hidden">
+      <span className="shrink-0 text-10_5 font-semibold tracking-label whitespace-nowrap text-muted-foreground uppercase">
         {gt("Snap layout")}
       </span>
       <ToggleGroup
@@ -382,13 +358,10 @@ function BoardPresetBar(props: {
       {props.preset === "custom" ? (
         <span className="shrink-0 text-2xs text-muted-foreground">{gt("Custom")}</span>
       ) : null}
-      {props.addCard}
-      {props.hasFileCards ? null : (
-        <span className="min-w-0 truncate text-2xs text-muted-foreground">
-          {gt("Open Markdown or PDF files from the Files drawer")}
-        </span>
-      )}
-      <CabinetStatusChips environmentId={props.environmentId} />
+      <span className="flex-1" />
+      <span className="font-mono text-2xs whitespace-nowrap text-muted-foreground/80">
+        {gt("12 col × 2 row · 8px gap")}
+      </span>
     </div>
   );
 }

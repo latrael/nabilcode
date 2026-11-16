@@ -48,6 +48,7 @@ import {
   ProviderInstanceId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
+  PROVIDER_DISPLAY_NAMES,
 } from "@t3tools/contracts";
 import type { EnvironmentConnectionPresentation } from "@t3tools/client-runtime/connection";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
@@ -87,7 +88,7 @@ import {
   extendReplacementRangeForTrailingSpace,
   replaceTextRange,
 } from "../../composer-logic";
-import { DEFAULT_COMPOSER_PLACEHOLDER } from "../../composerPlaceholder";
+import { composerPlaceholderForProvider } from "../../composerPlaceholder";
 import { deriveComposerSendState, getAntigravitySendBlockReason } from "../ChatView.logic";
 import { threadHasStarted } from "../../lib/chatThreadActions";
 import {
@@ -3398,6 +3399,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       focusComposer={focusComposer}
     />
   ) : null;
+  const composerMentionButton = (
+    <button
+      type="button"
+      aria-label="Mention a file or Cabinet note"
+      className="me-2 inline-flex h-6 min-w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border px-1.5 font-mono text-xs text-warning-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      onPointerDown={(event) => event.preventDefault()}
+      onClick={() => {
+        insertComposerTextAtEndStable("@", { ensureLeadingBoundary: true });
+      }}
+    >
+      @
+    </button>
+  );
   return (
     <form
       ref={composerFormRef}
@@ -3497,7 +3511,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             data-chat-composer-surface="true"
             data-chat-composer-mobile-collapsed={isComposerCollapsedMobile ? "true" : "false"}
             className={cn(
-              "rounded-2xl transition-[background-color] duration-200",
+              "rounded-lg transition-[background-color] duration-200",
               "in-data-[thread-context-over]:bg-accent/45 in-data-[thread-context-over]:ring-1 in-data-[thread-context-over]:ring-inset in-data-[thread-context-over]:ring-primary/70",
               isDragOverComposer ? "bg-accent/45 ring-1 ring-inset ring-primary/70" : null,
               projectSelectionRequired ? "opacity-75" : null,
@@ -3527,7 +3541,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   ) : showProviderUnavailable ? (
                     "Enable a provider in Settings"
                   ) : (
-                    "Ask anything..."
+                    composerPlaceholderForProvider(selectedProvider, PROVIDER_DISPLAY_NAMES)
                   )}
                 </button>
                 {collapsedComposerImagePreviews}
@@ -3711,7 +3725,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                             ? "Choose a project above to start a thread"
                             : showProviderUnavailable
                               ? "Enable a provider in Settings to send a message"
-                              : (offeredPromptSuggestion ?? DEFAULT_COMPOSER_PLACEHOLDER)
+                              : (offeredPromptSuggestion ??
+                                composerPlaceholderForProvider(
+                                  selectedProvider,
+                                  PROVIDER_DISPLAY_NAMES,
+                                ))
                     }
                     placeholderSuffix={
                       offeredPromptSuggestion !== null ? (
@@ -3784,6 +3802,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 {composerAttachButton && !dictationTakesFooter ? (
                   <div className="me-2">{composerAttachButton}</div>
                 ) : null}
+                {!dictationTakesFooter && !activePendingProgress ? composerMentionButton : null}
                 <div
                   data-chat-composer-actions="right"
                   data-chat-composer-transition-actions="true"
@@ -3797,12 +3816,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     data-chat-composer-controls="footer"
                     data-chat-composer-footer-controls="true"
                     className={cn(
-                      "relative flex min-w-0 flex-1 items-center justify-end gap-0.5",
+                      "relative flex min-w-0 flex-1 items-center justify-start gap-0.5",
                       dictationTakesFooter && "hidden",
                     )}
                   >
                     {composerControls}
                   </div>
+                  {composerSendState.hasSendableContent && !dictationTakesFooter ? (
+                    <span className="hidden shrink-0 text-2xs text-muted-foreground/70 @min-[480px]/composer-surface:inline">
+                      ⏎ send
+                    </span>
+                  ) : null}
                   <ComposerFooterPrimaryActions
                     // Stop state belongs to one thread; the composer stays mounted across threads.
                     key={`${environmentId}:${activeThreadId ?? "new"}`}

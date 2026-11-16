@@ -19,9 +19,8 @@ import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent } from 
 import { canShareWithGuestAtom } from "~/components/chat/guestShareAvailability";
 import { SidebarChromeFooter, SidebarChromeHeader } from "~/components/sidebar/SidebarChrome";
 import { SidebarFolderDrop } from "~/components/sidebar/SidebarFolderDrop";
-import { SidebarThreadHeader } from "~/components/sidebar/SidebarThreadHeader";
 import { useActiveRowReveal, type SidebarRouteReveal } from "~/components/sidebar/routeReveal";
-import { SidebarContent, SidebarGroup, useSidebar } from "~/components/ui/sidebar";
+import { SidebarContent, useSidebar } from "~/components/ui/sidebar";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { openCommandPalette } from "~/commandPaletteBus";
 import { useComposerDraftStore } from "~/composerDraftStore";
@@ -53,6 +52,7 @@ import { boardKey } from "../board/board.logic";
 import { useBoardStore } from "../board/boardStore";
 import { useActiveProjectRef } from "../board/useActiveProjectRef";
 import { CabinetProjectRow } from "./CabinetProjectRow";
+import { CabinetSidebarHeader } from "./CabinetSidebarHeader";
 import { CabinetThreadRow } from "./CabinetThreadRow";
 import { FilesDrawer } from "./FilesDrawer";
 import { cabinetProviderEntriesAtom } from "./providerEntries";
@@ -135,7 +135,7 @@ function ParkedGroupHeader(props: {
       type="button"
       data-sidebar-row={PARKED_ROW_KEY}
       aria-expanded={props.expanded}
-      className="mx-1.5 mt-2 flex h-7 w-[calc(100%-0.75rem)] items-center gap-1.5 rounded-md pl-2 text-left text-2xs font-semibold tracking-wider text-sidebar-muted-foreground uppercase outline-none hover:bg-sidebar-row-hover focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
+      className="mx-1.5 mt-2 flex h-7 w-[calc(100%-0.75rem)] items-center gap-1.5 rounded-md pl-2 text-left text-3xs font-semibold tracking-wider text-sidebar-muted-foreground uppercase outline-none hover:bg-sidebar-row-hover focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
       onClick={props.onToggle}
     >
       <ChevronRightIcon
@@ -409,26 +409,22 @@ export default function CabinetSidebar({ routeReveal }: { routeReveal: SidebarRo
       <SidebarChromeHeader isElectron={isElectron} />
       <SidebarContent
         fixedHeader={
-          <SidebarGroup className="z-[1]">
-            <SidebarThreadHeader
-              hasProjects={model.projectGroups.length > 0}
-              projectScope={null}
-              onNewProject={() => openCommandPalette({ open: "add-project" })}
-              onNewThread={handleNewThreadClick}
-              newThreadDisabled={projects.length === 0}
-              newThreadShortcutLabel={keybindingLabel}
-              newThreadInProjectShortcutLabel={null}
-              showNewThreadInProjectHint={false}
-              searchInputRef={searchInputRef}
-              searchQuery={query}
-              onSearchQueryChange={setQuery}
-              onSearchKeyDown={handleSearchKeyDown}
-              isSearching={query.trim().length > 0}
-              searchResultCount={0}
-              activeSearchResultIndex={0}
-              onClearSearch={() => setQuery("")}
-            />
-          </SidebarGroup>
+          <CabinetSidebarHeader
+            ingestTarget={drawerTarget}
+            hasProjects={model.projectGroups.length > 0}
+            newThreadDisabled={projects.length === 0}
+            newThreadLabel={
+              keybindingLabel
+                ? gt("New thread ({shortcut})", { shortcut: keybindingLabel })
+                : gt("New thread")
+            }
+            searchInputRef={searchInputRef}
+            query={query}
+            onQueryChange={setQuery}
+            onSearchKeyDown={handleSearchKeyDown}
+            onNewProject={() => openCommandPalette({ open: "add-project" })}
+            onNewThread={handleNewThreadClick}
+          />
         }
       >
         <div ref={attachSidebarTree} className="flex flex-col gap-0.5 pb-2" role="presentation">

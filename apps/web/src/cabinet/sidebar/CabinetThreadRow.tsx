@@ -26,7 +26,7 @@ import type { CabinetProviderEntry } from "./providerEntries";
 
 // Static dots only: a continuously repainting animation pegs the GPU on high-refresh displays.
 export const DOT_CLASS: Record<CabinetThreadStatus, string> = {
-  working: "bg-success",
+  working: "bg-success ring-[3px] ring-success/25",
   waiting: "bg-warning",
   failed: "bg-destructive",
   idle: "bg-sidebar-muted-foreground/40",
@@ -118,7 +118,7 @@ export const CabinetThreadRow = memo(function CabinetThreadRow(props: {
   const currentInstanceId = resolveThreadProviderStack(thread).at(-1) ?? thread.providerInstanceId;
   const provider = providerEntry?.instanceId === currentInstanceId ? providerEntry : null;
   const rowClass = cn(
-    "mx-1.5 flex w-[calc(100%-0.75rem)] min-w-0 items-start gap-2 rounded-md px-2 pt-1.5 pb-1.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70",
+    "mx-1.5 flex w-[calc(100%-0.75rem)] min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70",
     selected ? "bg-sidebar-row-selected" : "hover:bg-sidebar-row-hover",
   );
   const body = (
@@ -126,11 +126,11 @@ export const CabinetThreadRow = memo(function CabinetThreadRow(props: {
       <span
         aria-hidden
         data-cabinet-status={status}
-        className={cn("mt-[7px] size-[7px] shrink-0 rounded-full", DOT_CLASS[status])}
+        className={cn("mt-[7px] ml-[3px] size-[7px] shrink-0 rounded-full", DOT_CLASS[status])}
       />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex min-w-0 items-center gap-1.5">
-          <span className="flex size-3.5 shrink-0 items-center justify-center">
+          <span className="flex size-3.5 shrink-0 items-center justify-center text-xs">
             {provider ? (
               <ProviderInstanceIcon
                 driverKind={provider.driverKind}

@@ -56,6 +56,8 @@ export function MemoryProposalRow(props: {
   /** Refetch the lists after a decision. */
   readonly onChanged: () => void;
   readonly onThreadOpened?: () => void;
+  /** `card` is the board dock's tile; `row` the pending popover's list item. */
+  readonly layout?: "row" | "card";
 }) {
   const gt = useGT();
   const navigate = useNavigate();
@@ -102,6 +104,98 @@ export function MemoryProposalRow(props: {
     setFailure(failed);
   };
 
+  const failureNote =
+    failure === "forbidden" ? (
+      <p role="alert" className="text-2xs text-warning-foreground">
+        {gt(
+          "Your Cabinet token can't review proposals. Create one with 'Can review memory proposals' in Cabinet → Settings → Agents, and paste it in Settings → Cabinet.",
+        )}{" "}
+        <Button
+          type="button"
+          variant="link"
+          size="micro"
+          onClick={() => void navigate({ to: "/settings/cabinet" })}
+        >
+          {gt("Open Cabinet settings")}
+        </Button>
+      </p>
+    ) : failure === "other" ? (
+      <p role="alert" className="text-2xs text-destructive-foreground">
+        {gt("Couldn't update this proposal. Try again.")}
+      </p>
+    ) : null;
+
+  if (props.layout === "card") {
+    return (
+      <li
+        data-testid="memory-proposal"
+        data-proposal-id={proposal.id}
+        className="flex h-full w-95 min-w-0 shrink-0 flex-col gap-1.5 rounded-md border border-border bg-background px-3 py-2"
+      >
+        <div className="truncate font-mono text-2xs text-cabinet-amber-text">{`◆ ${proposal.path}`}</div>
+        {mode === "edit" ? (
+          <Textarea
+            size="sm"
+            rows={3}
+            aria-label={gt("Proposal text")}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        ) : (
+          <p className="line-clamp-3 min-h-0 flex-1 text-12_5 whitespace-pre-wrap text-foreground">
+            {proposal.text}
+          </p>
+        )}
+        {failureNote}
+        <div className="flex items-center gap-1.5">
+          <span className="flex min-w-0 flex-1 items-center gap-1 text-2xs text-muted-foreground">
+            <span className="shrink-0">{gt("from")}</span>
+            {proposal.thread_id === null ? (
+              <span className="truncate">{proposal.agent}</span>
+            ) : (
+              <SourceThread
+                environmentId={environmentId}
+                threadId={proposal.thread_id}
+                onOpened={props.onThreadOpened}
+              />
+            )}
+          </span>
+          <Button
+            type="button"
+            size="micro"
+            variant="ghost-muted"
+            disabled={busy || !canApprove}
+            onClick={() => {
+              if (mode === "edit") {
+                setDraft(proposal.text);
+                setMode("view");
+              } else setMode("edit");
+            }}
+          >
+            {mode === "edit" ? gt("Cancel edit") : gt("Edit")}
+          </Button>
+          <Button
+            type="button"
+            size="micro"
+            variant="ghost-muted"
+            disabled={busy || !canReject}
+            onClick={() => void submit("reject")}
+          >
+            {gt("Dismiss")}
+          </Button>
+          <Button
+            type="button"
+            size="micro"
+            disabled={busy || !canApprove || (mode === "edit" && draft.trim() === "")}
+            onClick={() => void submit("approve")}
+          >
+            {gt("Save")}
+          </Button>
+        </div>
+      </li>
+    );
+  }
+
   return (
     <li
       data-testid="memory-proposal"
@@ -140,25 +234,7 @@ export function MemoryProposalRow(props: {
           onChange={(event) => setReason(event.target.value)}
         />
       ) : null}
-      {failure === "forbidden" ? (
-        <p role="alert" className="text-2xs text-warning-foreground">
-          {gt(
-            "Your Cabinet token can't review proposals. Create one with 'Can review memory proposals' in Cabinet → Settings → Agents, and paste it in Settings → Cabinet.",
-          )}{" "}
-          <Button
-            type="button"
-            variant="link"
-            size="micro"
-            onClick={() => void navigate({ to: "/settings/cabinet" })}
-          >
-            {gt("Open Cabinet settings")}
-          </Button>
-        </p>
-      ) : failure === "other" ? (
-        <p role="alert" className="text-2xs text-destructive-foreground">
-          {gt("Couldn't update this proposal. Try again.")}
-        </p>
-      ) : null}
+      {failureNote}
       <div className="flex items-center gap-1.5">
         {mode === "reject" ? (
           <>

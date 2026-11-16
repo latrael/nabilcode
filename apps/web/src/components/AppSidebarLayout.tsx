@@ -40,6 +40,7 @@ import {
 import { BackgroundThreadAnnouncer } from "./BackgroundThreadAnnouncer";
 import { HistorySwipeNavigation } from "./HistorySwipeNavigation";
 import ThreadSidebar from "../cabinet/sidebar/CabinetSidebar";
+import { TopBar } from "../cabinet/TopBar";
 import { SidebarBrandWidthProbe } from "./sidebar/SidebarChrome";
 import { isAppModalPage } from "./sidebar/mainAppLocation";
 import type { SidebarRouteReveal } from "./sidebar/routeReveal";
@@ -382,10 +383,7 @@ function SidebarControl({ showSidebar }: { readonly showSidebar: boolean }) {
   return (
     <div
       ref={appShellCommandsRef}
-      className={cn(
-        "pointer-events-none fixed left-[var(--workspace-controls-left)] top-[var(--workspace-controls-top)] z-50 ml-px flex h-[var(--workspace-topbar-height)] items-center",
-        mobileSidebarSheetMounted && "hidden",
-      )}
+      className={cn("flex shrink-0 items-center", mobileSidebarSheetMounted && "hidden")}
       data-sidebar-control=""
     >
       {showSidebar ? (
@@ -395,7 +393,6 @@ function SidebarControl({ showSidebar }: { readonly showSidebar: boolean }) {
               <SidebarTrigger
                 variant={isSidebarVisible && stageBackdropVariant ? "media-navigation" : "ghost"}
                 className={cn(
-                  "pointer-events-auto",
                   isSidebarVisible && stageBackdropVariant && "relative top-auto translate-y-0",
                 )}
                 aria-label="Toggle main sidebar"
@@ -455,46 +452,52 @@ export function AppSidebarLayout({
   const sidebarProviderStyle = {
     "--sidebar-width": `${clampThreadSidebarWidth(sidebarWidth, sidebarMinimumWidth, sidebarMaximumWidth)}px`,
     "--panel-animation-duration": `${panelAnimationDurationMs}ms`,
+    // The sidebar toggle lives in the top bar, so headers no longer clear a floating control.
+    "--workspace-titlebar-content-left": "var(--workspace-gutter-start)",
     ...windowControlsInsetStyle,
   } as CSSProperties;
 
   return (
     <PanelAnimationSuppressionProvider value={panelAnimationsSuppressed}>
       <SidebarProvider
-        className="h-dvh! min-h-0!"
+        className="h-dvh! min-h-0! flex-col"
         data-panel-animations={routePanelAnimationsActive ? "true" : "false"}
         storageKey="chat_thread_sidebar_open"
         style={sidebarProviderStyle}
       >
-        {showSidebar ? (
-          <>
-            <SidebarBrandWidthProbe isElectron={isElectron} onWidthChange={setBrandWidth} />
-            <Sidebar
-              side="left"
-              collapsible="offcanvas"
-              data-app-sidebar=""
-              {...sidebarArea}
-              role="navigation"
-              aria-label="Threads"
-              resizable={{
-                maxWidth: sidebarMaximumWidth,
-                minWidth: sidebarMinimumWidth,
-                shouldAcceptWidth: ({ currentWidth, nextWidth, wrapper }) =>
-                  nextWidth <= currentWidth ||
-                  wrapper.clientWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
-                storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
-                onResize: setSidebarWidth,
-              }}
-              style={windowControlsInsetStyle}
-            >
-              <ThreadSidebar routeReveal={sidebarRouteReveal} />
-              <SidebarRail onDoubleClick={resetSidebarWidth} />
-            </Sidebar>
-          </>
-        ) : null}
-        {children}
+        {showSidebar ? <TopBar leading={<SidebarControl showSidebar />} /> : null}
+        <div className="flex min-h-0 min-w-0 flex-1">
+          {showSidebar ? (
+            <>
+              <SidebarBrandWidthProbe isElectron={isElectron} onWidthChange={setBrandWidth} />
+              <Sidebar
+                side="left"
+                collapsible="offcanvas"
+                data-app-sidebar=""
+                {...sidebarArea}
+                role="navigation"
+                aria-label="Threads"
+                resizable={{
+                  maxWidth: sidebarMaximumWidth,
+                  minWidth: sidebarMinimumWidth,
+                  shouldAcceptWidth: ({ currentWidth, nextWidth, wrapper }) =>
+                    nextWidth <= currentWidth ||
+                    wrapper.clientWidth - nextWidth >= THREAD_MAIN_CONTENT_MIN_WIDTH,
+                  storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
+                  onResize: setSidebarWidth,
+                }}
+                className="top-(--workspace-topbar-height)! h-[calc(100svh-var(--workspace-topbar-height))]!"
+                style={windowControlsInsetStyle}
+              >
+                <ThreadSidebar routeReveal={sidebarRouteReveal} />
+                <SidebarRail onDoubleClick={resetSidebarWidth} />
+              </Sidebar>
+            </>
+          ) : null}
+          {children}
+        </div>
         <BackgroundThreadAnnouncer />
-        <SidebarControl showSidebar={showSidebar} />
+        {showSidebar ? null : <SidebarControl showSidebar={false} />}
         {isElectron ? <HistorySwipeNavigation /> : null}
       </SidebarProvider>
     </PanelAnimationSuppressionProvider>

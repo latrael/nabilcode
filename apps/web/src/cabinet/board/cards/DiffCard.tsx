@@ -17,6 +17,17 @@ import {
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
 import { useThreadCheckpointSummaries } from "~/state/entities";
 import { useCheckpointDiff } from "~/state/queries";
+import { BoardCardHeaderControls } from "../BoardCard";
+
+function countPatchLines(patch: string) {
+  let added = 0;
+  let removed = 0;
+  for (const line of patch.split("\n")) {
+    if (line.startsWith("+") && !line.startsWith("+++")) added++;
+    else if (line.startsWith("-") && !line.startsWith("---")) removed++;
+  }
+  return { added, removed };
+}
 
 /**
  * A read-only full-thread diff (turn 0 to the latest checkpoint) through the same query the diff
@@ -59,8 +70,15 @@ export default function DiffCard(props: { readonly threadRef: ScopedThreadRef })
   if (renderable === null) return <DiffCardEmpty text={gt("No changes")} />;
 
   const truncated = patch?.endsWith(CHECKPOINT_DIFF_TRUNCATED_MARKER) === true;
+  const counts = countPatchLines(patch ?? "");
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <BoardCardHeaderControls>
+        <span className="flex shrink-0 gap-2 font-mono text-11_5">
+          <span className="text-success-foreground">+{counts.added}</span>
+          <span className="text-destructive-foreground">−{counts.removed}</span>
+        </span>
+      </BoardCardHeaderControls>
       {truncated ? (
         <FileSurfaceNotice>{gt("This diff is large, so it is cut short.")}</FileSurfaceNotice>
       ) : null}

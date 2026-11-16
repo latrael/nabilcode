@@ -1,11 +1,8 @@
-import { useAtomValue } from "@effect/atom-react";
 import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
-import { resolveThreadProviderStack } from "@t3tools/client-runtime/state/models";
 import { useGT, useMessages } from "gt-react";
-import { FileDiffIcon, Maximize2Icon } from "lucide-react";
+import { FileDiffIcon } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 
-import { ProviderInstanceIcon } from "~/components/chat/ProviderInstanceIcon";
 import { FileSurfaceLoading } from "~/components/files/fileSurfaceChrome";
 import { resolveSidebarRowStatus, resolveThreadLastVisitedAt } from "~/components/Sidebar.logic";
 import { Button } from "~/components/ui/button";
@@ -15,8 +12,8 @@ import { useQuietThreadShell } from "~/state/entities";
 import { useUiStateStore } from "~/uiStateStore";
 import { cabinetRowStatus } from "../../sidebar/cabinetStatus.logic";
 import { DOT_CLASS } from "../../sidebar/CabinetThreadRow";
-import { cabinetProviderEntriesAtom } from "../../sidebar/providerEntries";
 import SecondaryThreadBody from "./SecondaryThreadBody";
+import { ThreadHeaderChips } from "./ThreadHeaderChips";
 import type { BoardCard as BoardCardModel, BoardSlot } from "../board.types";
 import { BoardCard } from "../BoardCard";
 
@@ -46,7 +43,6 @@ export function ThreadBoardCard(props: {
   const threadRef = parseScopedThreadKey(threadKey);
   const shell = useQuietThreadShell(threadRef);
   const localLastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[threadKey]);
-  const providerEntries = useAtomValue(cabinetProviderEntriesAtom);
   const [visible, setVisible] = useState(false);
   const isDiff = card.kind === "diff";
   const threadTitle = shell?.title ?? gt("Thread");
@@ -57,32 +53,13 @@ export function ThreadBoardCard(props: {
     const status = shell
       ? cabinetRowStatus(resolveSidebarRowStatus({ ...shell, lastVisitedAt }))
       : null;
-    const instanceId = shell
-      ? (resolveThreadProviderStack(shell).at(-1) ?? shell.providerInstanceId)
-      : null;
-    const provider =
-      shell && instanceId
-        ? (providerEntries.get(shell.environmentId)?.get(instanceId) ?? null)
-        : null;
     leading = (
-      <>
-        <span
-          aria-label={status?.text ? m(status.text) : undefined}
-          role={status?.text ? "img" : undefined}
-          data-cabinet-status={status?.status ?? "idle"}
-          className={cn("size-[7px] shrink-0 rounded-full", DOT_CLASS[status?.status ?? "idle"])}
-        />
-        {provider ? (
-          <ProviderInstanceIcon
-            driverKind={provider.driverKind}
-            displayName={provider.displayName}
-            accentColor={provider.accentColor}
-            acpRegistryAgentId={provider.acpRegistryAgentId}
-            acpRegistryIconUrl={provider.acpRegistryIconUrl}
-            size="compact"
-          />
-        ) : null}
-      </>
+      <span
+        aria-label={status?.text ? m(status.text) : undefined}
+        role={status?.text ? "img" : undefined}
+        data-cabinet-status={status?.status ?? "idle"}
+        className={cn("size-[7px] shrink-0 rounded-full", DOT_CLASS[status?.status ?? "idle"])}
+      />
     );
   }
 
@@ -116,6 +93,7 @@ export function ThreadBoardCard(props: {
       {...(isDiff
         ? {}
         : {
+            extras: threadRef === null ? null : <ThreadHeaderChips threadRef={threadRef} />,
             onActivateTitle: props.onPromote,
             titleActionLabel: gt("Focus this thread"),
             actions: (
@@ -134,7 +112,9 @@ export function ThreadBoardCard(props: {
                   aria-label={gt("Focus {title}", { title: threadTitle })}
                   onClick={props.onPromote}
                 >
-                  <Maximize2Icon />
+                  <span aria-hidden className="text-2xs">
+                    ◇
+                  </span>
                 </Button>
               </>
             ),

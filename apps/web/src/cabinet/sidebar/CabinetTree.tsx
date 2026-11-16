@@ -1,9 +1,8 @@
 import { useGT } from "gt-react";
-import { ChevronRightIcon, CloudOffIcon, FileIcon, FileTextIcon } from "lucide-react";
+import { CloudOffIcon } from "lucide-react";
 import { useState } from "react";
 
 import { FileSurfaceLoading } from "~/components/files/fileSurfaceChrome";
-import { cn } from "~/lib/utils";
 import { useEnvironmentQuery } from "~/state/query";
 import { cabinetEnvironment } from "~/state/cabinet";
 import { boardKey } from "../board/board.logic";
@@ -45,7 +44,10 @@ export function CabinetTree({ target }: { target: RepoTreeTarget }) {
     );
   }
   return (
-    <ul className="min-h-0 flex-1 overflow-y-auto py-1" aria-label={gt("Cabinet items")}>
+    <ul
+      className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2 font-mono"
+      aria-label={gt("Cabinet items")}
+    >
       {folders.map(({ folder, items }) => {
         const open = !collapsed.has(folder);
         const label = folder === "" ? gt("library") : folder;
@@ -54,7 +56,7 @@ export function CabinetTree({ target }: { target: RepoTreeTarget }) {
             <button
               type="button"
               aria-expanded={open}
-              className="flex h-6 w-full items-center gap-1 px-2 text-left text-xs text-sidebar-muted-foreground outline-none hover:text-sidebar-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
+              className="flex h-[22px] w-full items-center gap-1.5 rounded-sm px-2 text-left text-xs text-sidebar-muted-foreground outline-none hover:text-sidebar-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
               onClick={() =>
                 setCollapsed((previous) => {
                   const next = new Set(previous);
@@ -63,14 +65,10 @@ export function CabinetTree({ target }: { target: RepoTreeTarget }) {
                 })
               }
             >
-              <ChevronRightIcon
-                aria-hidden
-                className={cn(
-                  "size-3 shrink-0 transition-transform motion-reduce:transition-none",
-                  open && "rotate-90",
-                )}
-              />
-              <span className="truncate">{label}</span>
+              <span aria-hidden className="w-3 text-center text-3xs">
+                {open ? "▾" : "▸"}
+              </span>
+              <span className="truncate">{`${label}/`}</span>
               <span className="ml-auto pl-2 text-3xs tabular-nums">{items.length}</span>
             </button>
             {open ? (
@@ -79,7 +77,7 @@ export function CabinetTree({ target }: { target: RepoTreeTarget }) {
                   <li key={item.id}>
                     <button
                       type="button"
-                      className="flex h-6 w-full items-center gap-1.5 pr-2 pl-6 text-left text-xs text-sidebar-foreground outline-none hover:bg-sidebar-row-hover focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
+                      className="flex h-[22px] w-full items-center gap-1.5 rounded-sm pr-2 pl-6 text-left text-xs text-sidebar-foreground outline-none hover:bg-sidebar-row-hover focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
                       onClick={() =>
                         useBoardStore
                           .getState()
@@ -87,12 +85,17 @@ export function CabinetTree({ target }: { target: RepoTreeTarget }) {
                       }
                     >
                       {item.type === "pdf" ? (
-                        <FileIcon aria-hidden className="size-3.5 shrink-0 text-destructive/80" />
-                      ) : (
-                        <FileTextIcon
+                        <span
                           aria-hidden
-                          className="size-3.5 shrink-0 text-warning-foreground"
+                          className="size-[7px] shrink-0 rounded-xs bg-destructive/70"
                         />
+                      ) : (
+                        <span
+                          aria-hidden
+                          className="w-[7px] shrink-0 text-center text-3xs text-warning-foreground/80"
+                        >
+                          ¶
+                        </span>
                       )}
                       <span className="truncate">{item.title}</span>
                     </button>

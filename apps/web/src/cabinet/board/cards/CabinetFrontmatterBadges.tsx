@@ -1,40 +1,34 @@
 import type { CabinetItem } from "@t3tools/contracts";
-import { useGT } from "gt-react";
 
-import { Badge } from "~/components/ui/badge";
 import { formatRelativeTimeLabel } from "~/timestampFormat";
 
 const MAX_TAGS = 4;
 
+function Chip(props: { readonly name: string; readonly value: string }) {
+  return (
+    <span className="inline-flex h-5 items-center gap-1.25 rounded-sm border border-border bg-accent/60 px-1.75 font-mono text-2xs">
+      <span className="text-muted-foreground/80">{props.name}:</span>
+      <span className="text-foreground">{props.value}</span>
+    </span>
+  );
+}
+
 export function CabinetFrontmatterBadges({ item }: { readonly item: CabinetItem }) {
-  const gt = useGT();
   const updated = item.updated ? formatRelativeTimeLabel(item.updated) : "";
   const tags = item.tags ?? [];
   return (
-    <div
-      className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-1.5 px-6 pt-4"
-      data-testid="cabinet-frontmatter"
-    >
-      <Badge variant="secondary" size="sm">
-        {item.type}
-      </Badge>
-      {item.status ? (
-        <Badge variant="outline" size="sm">
-          {item.status}
-        </Badge>
-      ) : null}
-      {updated ? (
-        <span className="text-2xs text-muted-foreground">
-          {gt("Updated {when}", { when: updated })}
-        </span>
-      ) : null}
-      {tags.slice(0, MAX_TAGS).map((tag) => (
-        <Badge key={tag} variant="label" size="sm">
-          {tag}
-        </Badge>
-      ))}
-      {tags.length > MAX_TAGS ? (
-        <span className="text-2xs text-muted-foreground">+{tags.length - MAX_TAGS}</span>
+    <div className="mb-3 flex flex-wrap items-center gap-1.25" data-testid="cabinet-frontmatter">
+      <Chip name="type" value={item.type} />
+      {item.status ? <Chip name="status" value={item.status} /> : null}
+      {updated ? <Chip name="updated" value={updated} /> : null}
+      {tags.length > 0 ? (
+        <Chip
+          name="tags"
+          value={
+            tags.slice(0, MAX_TAGS).join(", ") +
+            (tags.length > MAX_TAGS ? ` +${tags.length - MAX_TAGS}` : "")
+          }
+        />
       ) : null}
     </div>
   );

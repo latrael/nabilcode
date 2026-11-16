@@ -48,9 +48,29 @@ type RowContent = {
   label: ReactNode;
   trailing?: ReactNode;
   wrapLabel?: boolean;
+  /** Renders the line as a compact bordered tool pill; "cabinet" is the amber variant. */
+  pill?: "default" | "cabinet" | undefined;
 };
 
-function WorkLogLine({ icon, label, trailing, wrapLabel }: RowContent) {
+function WorkLogLine({ icon, label, trailing, wrapLabel, pill }: RowContent) {
+  if (pill) {
+    return (
+      <div
+        className={cn(
+          "inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md border px-2 font-mono text-xs select-none [&_*]:select-none",
+          pill === "cabinet"
+            ? "border-warning/35 bg-warning-surface text-warning-foreground"
+            : "border-border bg-card text-muted-foreground",
+        )}
+      >
+        {icon ? (
+          <span className="flex size-3.5 shrink-0 items-center justify-center">{icon}</span>
+        ) : null}
+        <div className="min-w-0 flex-1 truncate [&_*]:whitespace-nowrap">{label}</div>
+        {trailing}
+      </div>
+    );
+  }
   return (
     <div
       className={cn(
@@ -113,13 +133,20 @@ export function WorkLogRow({
   label,
   trailing,
   wrapLabel = false,
+  pill,
   children,
   ...rowProps
 }: RowContent & Omit<ComponentProps<"div">, "className" | "style">) {
   const className = useRowClassName(rowProps.onClick !== undefined);
   return (
     <div {...rowProps} className={className}>
-      <WorkLogLine icon={icon} label={label} trailing={trailing} wrapLabel={wrapLabel} />
+      <WorkLogLine
+        icon={icon}
+        label={label}
+        trailing={trailing}
+        wrapLabel={wrapLabel}
+        pill={pill}
+      />
       {children}
     </div>
   );

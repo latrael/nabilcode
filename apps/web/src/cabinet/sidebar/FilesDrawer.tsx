@@ -1,6 +1,5 @@
 import { useGT } from "gt-react";
 import * as Schema from "effect/Schema";
-import { ChevronRightIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useCabinetState } from "../data/useCabinet";
@@ -41,20 +40,16 @@ export function FilesDrawer({ target }: { target: RepoTreeTarget | null }) {
       )}
       style={open ? { flexBasis: "30%" } : { height: COLLAPSED_HEIGHT_PX }}
     >
-      <div className="flex h-[33px] shrink-0 items-center justify-between pr-2 pl-1">
+      <div className="flex h-[33px] shrink-0 items-center justify-between pr-2.5 pl-2.5">
         <button
           type="button"
           aria-expanded={open}
-          className="flex h-full items-center gap-1 rounded-md px-1.5 text-2xs font-semibold tracking-wider text-sidebar-muted-foreground uppercase outline-none hover:text-sidebar-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
+          className="flex h-full items-center gap-1 rounded-md px-1.5 text-3xs font-semibold tracking-wider text-sidebar-muted-foreground uppercase outline-none hover:text-sidebar-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
           onClick={() => setOpen((value) => !value)}
         >
-          <ChevronRightIcon
-            aria-hidden
-            className={cn(
-              "size-3 transition-transform motion-reduce:transition-none",
-              open && "rotate-90",
-            )}
-          />
+          <span aria-hidden className="w-2.5 text-4xs">
+            {open ? "▾" : "▸"}
+          </span>
           {gt("Files")}
         </button>
         <ToggleGroup

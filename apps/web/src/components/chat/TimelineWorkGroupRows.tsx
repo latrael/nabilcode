@@ -701,7 +701,7 @@ function WorkGroupHeader(props: {
           muted
         />
       }
-      label={<span className="block truncate">{props.label}</span>}
+      label={<span className="block truncate text-xs">{props.label}</span>}
       trailing={
         <TimelineRowTimestamp createdAt={props.createdAt} timestampFormat={props.timestampFormat} />
       }

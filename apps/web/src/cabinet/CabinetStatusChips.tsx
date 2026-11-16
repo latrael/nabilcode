@@ -22,10 +22,12 @@ const DOT_CLASS: Record<CabinetChipTone, string> = {
   off: "bg-muted-foreground/40",
 };
 
-const CHIP_CLASS =
-  "inline-flex h-5 shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-1.5 text-2xs text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+const FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+const STATUS_CLASS = `inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent ${FOCUS}`;
+const MCP_CHIP_CLASS = `inline-flex h-5.5 shrink-0 items-center gap-1.5 rounded-md border border-border px-2 font-mono text-2xs text-muted-foreground hover:bg-accent ${FOCUS}`;
+const PENDING_CHIP_CLASS = `inline-flex h-5.5 shrink-0 items-center gap-1.5 rounded-md border border-cabinet-amber-border bg-cabinet-amber-surface px-2 text-xs text-cabinet-amber-text hover:bg-cabinet-amber-surface ${FOCUS}`;
 
-/** Cabinet connection and agent-tools status for the board bar. Hidden while Cabinet is off. */
+/** Cabinet connection, agent-tools and pending-memory status for the top bar. Hidden while Cabinet is off. */
 export function CabinetStatusChips(props: { readonly environmentId: EnvironmentId }) {
   const gt = useGT();
   const m = useMessages();
@@ -42,15 +44,14 @@ export function CabinetStatusChips(props: { readonly environmentId: EnvironmentI
   const openSettings = () => void navigate({ to: "/settings/cabinet" });
   const detail = cabinetStatusDetail(status);
   return (
-    <div className="ml-auto flex shrink-0 items-center gap-1.5">
-      <MemoryPendingChip environmentId={props.environmentId} className={CHIP_CLASS} />
+    <div className="flex shrink-0 items-center gap-1">
       <Tooltip>
         <TooltipTrigger
           render={
-            <button type="button" className={CHIP_CLASS} onClick={openSettings}>
+            <button type="button" className={STATUS_CLASS} onClick={openSettings}>
               <span
                 aria-hidden
-                className={cn("size-1.5 rounded-full", DOT_CLASS[view.connection.tone])}
+                className={cn("size-1.75 rounded-full", DOT_CLASS[view.connection.tone])}
               />
               {m(view.connection.label)}
             </button>
@@ -64,7 +65,7 @@ export function CabinetStatusChips(props: { readonly environmentId: EnvironmentI
       <Tooltip>
         <TooltipTrigger
           render={
-            <button type="button" className={CHIP_CLASS} onClick={openSettings}>
+            <button type="button" className={MCP_CHIP_CLASS} onClick={openSettings}>
               <span aria-hidden className={cn("size-1.5 rounded-full", DOT_CLASS[view.mcp.tone])} />
               {gt("MCP")}
               <span className="sr-only">{view.mcp.active ? gt("active") : gt("off")}</span>
@@ -77,6 +78,7 @@ export function CabinetStatusChips(props: { readonly environmentId: EnvironmentI
             : m(CABINET_AGENT_TOOLS_OFF_REASONS[agentToolsOff])}
         </TooltipPopup>
       </Tooltip>
+      <MemoryPendingChip environmentId={props.environmentId} className={PENDING_CHIP_CLASS} />
     </div>
   );
 }
