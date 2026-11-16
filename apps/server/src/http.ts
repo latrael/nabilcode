@@ -30,6 +30,7 @@ import { OtlpTracer, OtlpSerialization } from "effect/observability";
 
 import * as ServerConfig from "./config.ts";
 import { ASSET_ROUTE_PREFIX, readMcpAppHtml, resolveAsset } from "./assets/AssetAccess.ts";
+import { cabinetFileResponse } from "./assets/cabinetFileResponse.ts";
 import { sourceControlMediaResponse } from "./assets/sourceControlMediaResponse.ts";
 import { statMediaFile, streamMediaFile, type OpenMediaFile } from "./assets/MediaFile.ts";
 import {
@@ -441,6 +442,9 @@ export const layerAssetRoute = HttpRouter.add(
         contentType: asset.mimeType,
         headers: { "cache-control": "private, max-age=3600", "x-content-type-options": "nosniff" },
       });
+    }
+    if (asset.kind === "cabinet-file") {
+      return yield* cabinetFileResponse(asset, request.headers);
     }
     if (asset.kind === "source-control-media") {
       return yield* sourceControlMediaResponse(asset, request.headers).pipe(

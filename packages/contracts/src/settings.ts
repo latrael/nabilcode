@@ -1234,7 +1234,11 @@ export const ProjectSettingsOverrides = Schema.Struct({
   providerInstances: Schema.optionalKey(
     Schema.Record(ProviderInstanceId, ProjectProviderInstanceOverride),
   ),
-} satisfies Record<ProjectScopedServerSettingKey | "providerInstances", unknown>);
+  cabinetProjectRef: Schema.optionalKey(TrimmedNonEmptyString),
+} satisfies Record<
+  ProjectScopedServerSettingKey | "providerInstances" | "cabinetProjectRef",
+  unknown
+>);
 export type ProjectSettingsOverrides = typeof ProjectSettingsOverrides.Type;
 
 // Whole-entry writers must round-trip unknown keys; keep the type closed to catch misspellings.
@@ -1353,6 +1357,17 @@ export const CloudSpeechCredentials = Schema.Struct({
   openrouter: CloudSpeechCredential,
 });
 
+export const CabinetMcpTransport = Schema.Literals(["http", "stdio"]);
+export type CabinetMcpTransport = typeof CabinetMcpTransport.Type;
+
+export const CabinetSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  baseUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed("http://127.0.0.1:4747"))),
+  token: SettingsSecretValue.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  mcpTransport: CabinetMcpTransport.pipe(Schema.withDecodingDefault(Effect.succeed("http"))),
+});
+export type CabinetSettings = typeof CabinetSettings.Type;
+
 export const ServerSettings = Schema.Struct({
   // Null means unmigrated; empty is authoritative and must not resurrect cleared preferences.
   favorites: Schema.NullOr(ModelFavorites).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
@@ -1388,6 +1403,16 @@ export const ServerSettings = Schema.Struct({
   enableAgentBrowserAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   cloudSpeechCredentials: CloudSpeechCredentials.pipe(
     Schema.withDecodingDefault(Effect.succeed({ openai: "", xai: "", openrouter: "" })),
+  ),
+  cabinet: CabinetSettings.pipe(
+    Schema.withDecodingDefault(
+      Effect.succeed({
+        enabled: false,
+        baseUrl: "http://127.0.0.1:4747",
+        token: "",
+        mcpTransport: "http" as const,
+      }),
+    ),
   ),
   speechModelId: Schema.String.pipe(
     Schema.withDecodingDefault(Effect.succeed("handy-computer/parakeet-unified-en-0.6b-gguf")),
@@ -1838,6 +1863,14 @@ export const ServerSettingsPatch = Schema.Struct({
       openai: Schema.optionalKey(SettingsSecretValue),
       xai: Schema.optionalKey(SettingsSecretValue),
       openrouter: Schema.optionalKey(SettingsSecretValue),
+    }),
+  ),
+  cabinet: Schema.optionalKey(
+    Schema.Struct({
+      enabled: Schema.optionalKey(Schema.Boolean),
+      baseUrl: Schema.optionalKey(TrimmedString),
+      token: Schema.optionalKey(SettingsSecretValue),
+      mcpTransport: Schema.optionalKey(CabinetMcpTransport),
     }),
   ),
   speechModelId: Schema.optionalKey(Schema.String),

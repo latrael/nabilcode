@@ -7,6 +7,7 @@ import * as NodeHttpServerRequest from "@effect/platform-node/NodeHttpServerRequ
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
+import * as CabinetService from "./cabinet/CabinetService.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 
 import * as DateTime from "effect/DateTime";
@@ -1535,6 +1536,7 @@ export const layerWsRpc = (
       const secretResolver = yield* SecretResolver.SecretResolver;
       const peerLinks = yield* PeerLinks.PeerLinks;
       const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
+      const cabinet = yield* CabinetService.CabinetService;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
@@ -2652,6 +2654,19 @@ export const layerWsRpc = (
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(peerLinkRequests.answer(input)),
           ),
+        [WS_METHODS.cabinetStatus]: (_input) => cabinet.status,
+        [WS_METHODS.cabinetTestConnection]: (input) => cabinet.testConnection(input),
+        [WS_METHODS.cabinetListItems]: (input) => cabinet.listItems(input),
+        [WS_METHODS.cabinetGetItem]: (input) => cabinet.getItem(input),
+        [WS_METHODS.cabinetGetRaw]: (input) => cabinet.getRaw(input),
+        [WS_METHODS.cabinetResolve]: (input) => cabinet.resolve(input),
+        [WS_METHODS.cabinetSearch]: (input) => cabinet.search(input),
+        [WS_METHODS.cabinetSuggest]: (input) => cabinet.suggest(input),
+        [WS_METHODS.cabinetCreateItem]: (input) => cabinet.createItem(input),
+        [WS_METHODS.cabinetUpdateItem]: (input) => cabinet.updateItem(input),
+        [WS_METHODS.cabinetAddToProject]: (input) => cabinet.addToProject(input),
+        [WS_METHODS.cabinetCapture]: (input) => cabinet.capture(input),
+        [WS_METHODS.cabinetSubscribeEvents]: (_input) => cabinet.events,
         [WS_METHODS.serverGetSettings]: (_input) =>
           Effect.map(serverSettings.getSettings, (settings) =>
             ServerSettings.redactServerSettingsForClient(settings, settingsClient),
@@ -3011,6 +3026,7 @@ export const layerWsRpc = (
               input.resource._tag === "native-app-icon" ||
               input.resource._tag === "tool-output-image" ||
               input.resource._tag === SOURCE_CONTROL_MEDIA_ASSET ||
+              input.resource._tag === "cabinet-file" ||
               // A network path is served only from the thread's project, looked up below.
               (input.resource._tag === "media-file" &&
                 path.isAbsolute(input.resource.path) &&
@@ -3525,6 +3541,7 @@ export const layer = Layer.unwrap(
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
     const peerLinks = yield* PeerLinks.PeerLinks;
     const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
+    const cabinet = yield* CabinetService.CabinetService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3620,6 +3637,7 @@ export const layer = Layer.unwrap(
               ),
               Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
               Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
+              Layer.provide(Layer.succeed(CabinetService.CabinetService, cabinet)),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(

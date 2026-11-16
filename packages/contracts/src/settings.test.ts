@@ -498,6 +498,21 @@ describe("voice settings", () => {
   });
 });
 
+describe("cabinet settings", () => {
+  it("is off and points at the local Cabinet until configured", () => {
+    expect(DEFAULT_SERVER_SETTINGS.cabinet).toEqual({
+      enabled: false,
+      baseUrl: "http://127.0.0.1:4747",
+      token: "",
+      mcpTransport: "http",
+    });
+    expect(decodeServerSettings({ cabinet: { enabled: true } }).cabinet).toEqual({
+      ...DEFAULT_SERVER_SETTINGS.cabinet,
+      enabled: true,
+    });
+  });
+});
+
 describe("server model preferences", () => {
   it("distinguishes unmigrated lists from deliberately cleared lists", () => {
     expect(decodeServerSettings({})).toMatchObject({

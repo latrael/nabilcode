@@ -1662,6 +1662,23 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         assert.deepEqual(tokens["github.com"], gitHubReference);
         assert.notEqual(tokens["ghe.acme.test"], "ghp_ghe");
 
+        const withCabinet = yield* serverSettings.updateSettings({
+          cabinet: { enabled: true, token: "cabinet-literal" },
+        });
+        assert.notInclude(
+          yield* fileSystem.readFileString(serverConfig.settingsPath),
+          "cabinet-literal",
+        );
+        assert.isTrue(Option.isSome(yield* secrets.get("cabinet-token")));
+        assert.equal(withCabinet.cabinet.token, "cabinet-literal");
+        const cabinetForClient = ServerSettingsModule.redactServerSettingsForClient(withCabinet, {
+          secretReferences: true,
+        }).cabinet;
+        assert.equal(cabinetForClient.token, SECRET_REDACTED);
+        // Saving the form back with the redacted token keeps the stored one.
+        const resaved = yield* serverSettings.updateSettings({ cabinet: cabinetForClient });
+        assert.deepEqual(resaved.cabinet, withCabinet.cabinet);
+
         // A client that cannot decode references sees saved secrets and can send them back.
         const usageReference = {
           provider: SecretProviderId.make("personal"),
@@ -1676,6 +1693,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         const router = ProviderInstanceId.make("openrouter");
         const withUsage = yield* serverSettings.updateSettings({
           cloudSpeechCredentials: { openai: usageReference, xai: "literal-fixture" },
+          cabinet: { token: usageReference },
           textGenerators: {
             [router]: {
               kind: "openaiCompatible",
@@ -1708,6 +1726,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
           xai: SECRET_REDACTED,
           openrouter: "",
         });
+        assert.equal(legacy.cabinet.token, SECRET_REDACTED);
         assert.equal(legacy.usageLimitSources[hub]?.managementKey, SECRET_REDACTED);
         assert.equal(legacy.textGenerators[router]?.apiKey, SECRET_REDACTED);
         const configOf = (settings: ServerSettings, id: ProviderInstanceId) =>
@@ -1715,6 +1734,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         assert.equal(configOf(legacy, antigravity)?.apiKey, SECRET_REDACTED);
         const echoed = yield* serverSettings.updateSettings({
           cloudSpeechCredentials: legacy.cloudSpeechCredentials,
+          cabinet: legacy.cabinet,
           sourceControlHosts: legacy.sourceControlHosts,
           usageLimitSources: legacy.usageLimitSources,
           textGenerators: legacy.textGenerators,
@@ -1724,6 +1744,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
           "github.com": gitHubReference,
           "ghe.acme.test": "ghp_ghe",
         });
+        assert.deepEqual(echoed.cabinet.token, usageReference);
         assert.deepEqual(echoed.usageLimitSources[hub]?.managementKey, usageReference);
         assert.deepEqual(echoed.textGenerators[router]?.apiKey, usageReference);
         assert.deepEqual(echoed.cloudSpeechCredentials, {
@@ -1767,6 +1788,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
           github: { tokens: { "github.com": personal("GitHub/token"), "ghe.acme.test": work } },
         },
         cloudSpeechCredentials: { openai: personal("Voice/key"), xai: work },
+        cabinet: { token: personal("Cabinet/token") },
         usageLimitSources: {
           [hub]: {
             kind: "cliproxy",
@@ -1800,6 +1822,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
       });
       assert.equal(removed.usageLimitSources[hub]?.managementKey, "");
       assert.deepEqual(removed.cloudSpeechCredentials, { openai: "", xai: work, openrouter: "" });
+      assert.equal(removed.cabinet.token, "");
       assert.deepEqual(Object.keys(removed.secretProviders), ["work"]);
     }).pipe(Effect.provide(layerServerSettingsWithSecrets())),
   );
@@ -1811,6 +1834,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         "cloudSpeechCredentials.openai",
         "cloudSpeechCredentials.xai",
         "cloudSpeechCredentials.openrouter",
+        "cabinet.token",
         "usageLimitSources.*.managementKey",
         "textGenerators.*.apiKey",
       ]);

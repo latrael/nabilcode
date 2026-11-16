@@ -348,6 +348,29 @@ import {
   TextGeneratorError,
 } from "./settings.ts";
 import {
+  CabinetAddToProjectInput,
+  CabinetCaptureInput,
+  CabinetCaptureResult,
+  CabinetCreateItemInput,
+  CabinetError,
+  CabinetEvent,
+  CabinetGetItemInput,
+  CabinetGetRawInput,
+  CabinetGetRawResult,
+  CabinetItemDetail,
+  CabinetListItemsInput,
+  CabinetListItemsResult,
+  CabinetResolveInput,
+  CabinetResolveResult,
+  CabinetSearchInput,
+  CabinetSearchResult,
+  CabinetStatus,
+  CabinetSuggestInput,
+  CabinetSuggestResult,
+  CabinetTestConnectionInput,
+  CabinetUpdateItemInput,
+} from "./cabinet.ts";
+import {
   ScheduledTaskDeleteInput,
   ScheduledTaskDeleteResult,
   ScheduledTaskError,
@@ -491,6 +514,20 @@ export const WS_METHODS = {
   peerLinksLink: "peerLinks.link",
   peerLinksUnlink: "peerLinks.unlink",
   peerLinksAnswerRequest: "peerLinks.answerRequest",
+
+  cabinetStatus: "cabinet.status",
+  cabinetTestConnection: "cabinet.testConnection",
+  cabinetListItems: "cabinet.listItems",
+  cabinetGetItem: "cabinet.getItem",
+  cabinetGetRaw: "cabinet.getRaw",
+  cabinetResolve: "cabinet.resolve",
+  cabinetSearch: "cabinet.search",
+  cabinetSuggest: "cabinet.suggest",
+  cabinetCreateItem: "cabinet.createItem",
+  cabinetUpdateItem: "cabinet.updateItem",
+  cabinetAddToProject: "cabinet.addToProject",
+  cabinetCapture: "cabinet.capture",
+  cabinetSubscribeEvents: "cabinet.subscribeEvents",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
   serverDiscoverSourceControl: "server.discoverSourceControl",
@@ -807,6 +844,87 @@ const WsServerGetDatabaseStorageRpc = Rpc.make(WS_METHODS.serverGetDatabaseStora
 const WsServerReclaimDatabaseSpaceRpc = Rpc.make(WS_METHODS.serverReclaimDatabaseSpace, {
   payload: Schema.Struct({}),
   error: Schema.Union([DatabaseReclaimError, EnvironmentAuthorizationError]),
+});
+
+const CabinetRpcError = Schema.Union([CabinetError, EnvironmentAuthorizationError]);
+
+const WsCabinetStatusRpc = Rpc.make(WS_METHODS.cabinetStatus, {
+  payload: Schema.Struct({}),
+  success: CabinetStatus,
+  error: EnvironmentAuthorizationError,
+});
+
+const WsCabinetTestConnectionRpc = Rpc.make(WS_METHODS.cabinetTestConnection, {
+  payload: CabinetTestConnectionInput,
+  success: CabinetStatus,
+  error: EnvironmentAuthorizationError,
+});
+
+const WsCabinetListItemsRpc = Rpc.make(WS_METHODS.cabinetListItems, {
+  payload: CabinetListItemsInput,
+  success: CabinetListItemsResult,
+  error: CabinetRpcError,
+});
+
+const WsCabinetGetItemRpc = Rpc.make(WS_METHODS.cabinetGetItem, {
+  payload: CabinetGetItemInput,
+  success: CabinetItemDetail,
+  error: CabinetRpcError,
+});
+
+const WsCabinetGetRawRpc = Rpc.make(WS_METHODS.cabinetGetRaw, {
+  payload: CabinetGetRawInput,
+  success: CabinetGetRawResult,
+  error: CabinetRpcError,
+});
+
+const WsCabinetResolveRpc = Rpc.make(WS_METHODS.cabinetResolve, {
+  payload: CabinetResolveInput,
+  success: CabinetResolveResult,
+  error: CabinetRpcError,
+});
+
+const WsCabinetSearchRpc = Rpc.make(WS_METHODS.cabinetSearch, {
+  payload: CabinetSearchInput,
+  success: CabinetSearchResult,
+  error: CabinetRpcError,
+});
+
+const WsCabinetSuggestRpc = Rpc.make(WS_METHODS.cabinetSuggest, {
+  payload: CabinetSuggestInput,
+  success: CabinetSuggestResult,
+  error: CabinetRpcError,
+});
+
+const WsCabinetCreateItemRpc = Rpc.make(WS_METHODS.cabinetCreateItem, {
+  payload: CabinetCreateItemInput,
+  success: CabinetItemDetail,
+  error: CabinetRpcError,
+});
+
+const WsCabinetUpdateItemRpc = Rpc.make(WS_METHODS.cabinetUpdateItem, {
+  payload: CabinetUpdateItemInput,
+  success: CabinetItemDetail,
+  error: CabinetRpcError,
+});
+
+const WsCabinetAddToProjectRpc = Rpc.make(WS_METHODS.cabinetAddToProject, {
+  payload: CabinetAddToProjectInput,
+  success: CabinetItemDetail,
+  error: CabinetRpcError,
+});
+
+const WsCabinetCaptureRpc = Rpc.make(WS_METHODS.cabinetCapture, {
+  payload: CabinetCaptureInput,
+  success: CabinetCaptureResult,
+  error: CabinetRpcError,
+});
+
+const WsCabinetSubscribeEventsRpc = Rpc.make(WS_METHODS.cabinetSubscribeEvents, {
+  payload: Schema.Struct({}),
+  success: CabinetEvent,
+  error: EnvironmentAuthorizationError,
+  stream: true,
 });
 
 const WsPeerLinksListRpc = Rpc.make(WS_METHODS.peerLinksList, {
@@ -2046,6 +2164,19 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerReclaimDatabaseSpaceRpc,
   WsServerUpdateSettingsRpc,
   WsPeerLinksListRpc,
+  WsCabinetStatusRpc,
+  WsCabinetTestConnectionRpc,
+  WsCabinetListItemsRpc,
+  WsCabinetGetItemRpc,
+  WsCabinetGetRawRpc,
+  WsCabinetResolveRpc,
+  WsCabinetSearchRpc,
+  WsCabinetSuggestRpc,
+  WsCabinetCreateItemRpc,
+  WsCabinetUpdateItemRpc,
+  WsCabinetAddToProjectRpc,
+  WsCabinetCaptureRpc,
+  WsCabinetSubscribeEventsRpc,
   WsPeerLinksLinkRpc,
   WsPeerLinksUnlinkRpc,
   WsPeerLinksAnswerRequestRpc,

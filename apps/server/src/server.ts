@@ -49,6 +49,7 @@ import * as NodePtyAdapter from "./terminal/NodePtyAdapter.ts";
 import * as PullRequestHttp from "./pullRequest/http.ts";
 import * as SpeechModelStore from "./speech/SpeechModelStore.ts";
 import * as SpeechService from "./speech/SpeechService.ts";
+import * as CabinetService from "./cabinet/CabinetService.ts";
 import * as CloudSpeech from "./speech/CloudSpeech.ts";
 import { speechHttpApiLayer } from "./speech/http.ts";
 import { speechStreamRouteLayer } from "./speech/stream.ts";
@@ -1311,6 +1312,14 @@ const layerMakeServer = Layer.unwrap(
     );
 
     return layerServerApplication.pipe(
+      // Route handlers take their services from here, so the asset route and the WebSocket share
+      // this instance, and with it the one upstream event connection.
+      Layer.provide(
+        CabinetService.layer.pipe(
+          Layer.provide(SecretResolver.layer),
+          Layer.provide(layerServerSettings),
+        ),
+      ),
       Layer.provide(CloudLink.layer.pipe(Layer.provideMerge(ConnectReachability.layer))),
       Layer.provideMerge(layerRuntimeServices),
       Layer.provideMerge(

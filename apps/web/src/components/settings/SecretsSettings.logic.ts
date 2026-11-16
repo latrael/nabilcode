@@ -19,6 +19,7 @@ type SecretUseSettings = Pick<
   | "usageLimitSources"
   | "textGenerators"
   | "cloudSpeechCredentials"
+  | "cabinet"
 >;
 
 interface SecretProviderUse {
@@ -103,5 +104,8 @@ export function secretProviderUses(
         ? [{ id: `voice:${provider}`, label: `Voice · ${CLOUD_SPEECH_LABELS[provider]}` }]
         : [];
     }),
+    ...(isSecretReference(settings.cabinet.token) && settings.cabinet.token.provider === providerId
+      ? [{ id: "cabinet:token", label: "Cabinet · Token" }]
+      : []),
   ];
 }

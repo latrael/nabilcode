@@ -35,6 +35,7 @@ export type SettingsPath =
   | "/settings/connections"
   | "/settings/access"
   | "/settings/secrets"
+  | "/settings/cabinet"
   | "/settings/maintenance"
   | "/settings/labs"
   | "/settings/about"
@@ -109,6 +110,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/connections": msg("Environments"),
   "/settings/access": msg("Sharing & access"),
   "/settings/secrets": msg("Secrets"),
+  "/settings/cabinet": msg("Cabinet"),
   "/settings/maintenance": msg("Maintenance"),
   "/settings/labs": msg("Labs"),
   "/settings/about": msg("About"),
@@ -153,6 +155,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
     paths: [
       "/settings/connections",
       "/settings/access",
+      "/settings/cabinet",
       ...(isSecretsFeatureEnabled ? (["/settings/secrets"] as const) : []),
     ],
   },
@@ -225,6 +228,38 @@ const SOURCE_CONTROL_HOST_TERMS = sourceControlClients.definitions
   .join(" ");
 
 export const SETTINGS_SEARCH_ITEMS = [
+  {
+    id: "cabinet-enabled",
+    title: "Cabinet",
+    to: "/settings/cabinet",
+    scope: "environment-defaults",
+    environmentOnly: true,
+    searchTerms: ["library notes memory knowledge connect enable"],
+  },
+  {
+    id: "cabinet-base-url",
+    title: "Cabinet base URL",
+    to: "/settings/cabinet",
+    scope: "environment-defaults",
+    environmentOnly: true,
+    searchTerms: ["address host port 127.0.0.1 loopback server"],
+  },
+  {
+    id: "cabinet-token",
+    title: "Cabinet token",
+    to: "/settings/cabinet",
+    scope: "environment-defaults",
+    environmentOnly: true,
+    searchTerms: ["api key secret agent memory proposals review credential"],
+  },
+  {
+    id: "cabinet-mcp-transport",
+    title: "Cabinet MCP transport",
+    to: "/settings/cabinet",
+    scope: "environment-defaults",
+    environmentOnly: true,
+    searchTerms: ["http stdio agents tools model context protocol"],
+  },
   {
     id: "storage-worktree-keep-when",
     targetId: "storage-worktrees",
@@ -1346,6 +1381,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/connections": "connections",
   "/settings/access": "connections",
   "/settings/secrets": null,
+  "/settings/cabinet": "environment-defaults",
   "/settings/scheduled-tasks": null,
   "/settings/maintenance": null,
   "/settings/labs": null,

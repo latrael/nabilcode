@@ -71,6 +71,10 @@ export const AssetResource = Schema.Union([
     url: TrimmedNonEmptyString.check(Schema.isMaxLength(2048)),
     repository: Schema.optionalKey(TrimmedNonEmptyString.check(Schema.isMaxLength(512))),
   }),
+  // An attachment Cabinet serves under `attachments/`. The server holds Cabinet's address and token.
+  Schema.TaggedStruct("cabinet-file", {
+    path: TrimmedNonEmptyString.check(Schema.isMaxLength(ASSET_PATH_MAX_LENGTH)),
+  }),
 ]);
 export type AssetResource = typeof AssetResource.Type;
 
@@ -319,6 +323,15 @@ export class AssetSourceControlMediaUrlValidationError extends Schema.TaggedErro
   }
 }
 
+export class AssetCabinetFilePathValidationError extends Schema.TaggedError<AssetCabinetFilePathValidationError>()(
+  "AssetCabinetFilePathValidationError",
+  {},
+) {
+  override get message(): string {
+    return "Only files under Cabinet's attachments folder can be served.";
+  }
+}
+
 export const AssetAccessError = Schema.Union([
   AssetWorkspaceContextNotFoundError,
   AssetWorkspaceContextResolutionError,
@@ -333,6 +346,7 @@ export const AssetAccessError = Schema.Union([
   AssetProjectFaviconInspectionError,
   AssetProjectFaviconNotFoundError,
   AssetSourceControlMediaUrlValidationError,
+  AssetCabinetFilePathValidationError,
   AssetSigningKeyLoadError,
 ]);
 export type AssetAccessError = typeof AssetAccessError.Type;

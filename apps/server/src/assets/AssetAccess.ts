@@ -1,6 +1,7 @@
 import type { AssetResource } from "@t3tools/contracts";
 import {
   AssetAttachmentNotFoundError,
+  AssetCabinetFilePathValidationError,
   AssetSourceControlMediaUrlValidationError,
   AssetPreviewTypeValidationError,
   AssetProjectFaviconInspectionError,
@@ -185,6 +186,13 @@ const AssetClaimsSchema = Schema.Union([
     repository: Schema.optionalKey(Schema.String),
     expiresAt: Schema.Number,
   }),
+  Schema.Struct({
+    version: Schema.Literal(1),
+    kind: Schema.Literal("cabinet-file"),
+    /** Relative to Cabinet; where Cabinet is and its token stay in settings, out of the claim. */
+    path: Schema.String,
+    expiresAt: Schema.Number,
+  }),
 ]);
 type AssetClaims = typeof AssetClaimsSchema.Type;
 
@@ -212,6 +220,11 @@ export type ResolvedAsset =
       readonly url: string;
       readonly cwd: string;
       readonly repository?: string;
+      readonly expiresAt: number;
+    }
+  | {
+      readonly kind: "cabinet-file";
+      readonly path: string;
       readonly expiresAt: number;
     };
 
@@ -860,6 +873,18 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
       fileName = media.fileName;
       break;
     }
+    case "cabinet-file": {
+      const segments = input.resource.path.split("/");
+      if (
+        segments[0] !== "attachments" ||
+        segments.some((segment) => segment === "" || segment === "." || segment === "..")
+      ) {
+        return yield* new AssetCabinetFilePathValidationError({});
+      }
+      claims = { version: 1, kind: "cabinet-file", path: input.resource.path, expiresAt };
+      fileName = segments[segments.length - 1]!;
+      break;
+    }
   }
 
   if (claims.kind === "project-favicon" || claims.kind === "project-favicon-external") {
@@ -966,6 +991,14 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
   if (claims.kind === SOURCE_CONTROL_MEDIA_ASSET) {
     const { version: _version, ...media } = claims;
     return { ...media, kind: "source-control-media" } satisfies ResolvedAsset;
+  }
+
+  if (claims.kind === "cabinet-file") {
+    return {
+      kind: "cabinet-file",
+      path: claims.path,
+      expiresAt: claims.expiresAt,
+    } satisfies ResolvedAsset;
   }
 
   if (claims.kind === "tool-output-image") {

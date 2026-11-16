@@ -65,6 +65,32 @@ describe("RPC authorization scopes", () => {
     }
   });
 
+  it("lets readers browse Cabinet, but writing to it takes operate and trying a token takes settings", () => {
+    for (const method of [
+      WS_METHODS.cabinetStatus,
+      WS_METHODS.cabinetListItems,
+      WS_METHODS.cabinetGetItem,
+      WS_METHODS.cabinetGetRaw,
+      WS_METHODS.cabinetResolve,
+      WS_METHODS.cabinetSearch,
+      WS_METHODS.cabinetSuggest,
+      WS_METHODS.cabinetSubscribeEvents,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);
+    }
+    for (const method of [
+      WS_METHODS.cabinetCreateItem,
+      WS_METHODS.cabinetUpdateItem,
+      WS_METHODS.cabinetAddToProject,
+      WS_METHODS.cabinetCapture,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
+    }
+    expect(requiredScopeForRpcMethod(WS_METHODS.cabinetTestConnection)).toBe(
+      AuthSettingsWriteScope,
+    );
+  });
+
   it("lets thread readers observe and refresh checkout branches", () => {
     for (const method of [WS_METHODS.subscribeVcsBranch, WS_METHODS.vcsRefreshBranch]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationReadScope);

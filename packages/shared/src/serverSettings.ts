@@ -262,7 +262,7 @@ function pickOverrideKeys(entry: ProjectSettingsOverrides | undefined, known: bo
   );
 }
 
-// Older clients omit providerInstances during whole-entry replacement; preserve it to avoid wiping overrides.
+// Older clients omit providerInstances and cabinetProjectRef during whole-entry replacement; preserve them to avoid wiping overrides.
 function mergeProjectSettingsOverridesPatch(
   current: Readonly<Record<string, ProjectSettingsOverrides>>,
   patch: Readonly<Record<string, ProjectSettingsOverrides | null>>,
@@ -274,6 +274,7 @@ function mergeProjectSettingsOverridesPatch(
       continue;
     }
     const storedProviderInstances = current[projectId]?.providerInstances;
+    const storedCabinetProjectRef = current[projectId]?.cabinetProjectRef;
     next.set(projectId, {
       // Preserve downgraded storage, but reject new unknown writes so clients can detect unsupported settings.
       ...pickOverrideKeys(current[projectId], false),
@@ -281,6 +282,9 @@ function mergeProjectSettingsOverridesPatch(
       ...(Object.hasOwn(entry, "providerInstances") || storedProviderInstances === undefined
         ? {}
         : { providerInstances: storedProviderInstances }),
+      ...(Object.hasOwn(entry, "cabinetProjectRef") || storedCabinetProjectRef === undefined
+        ? {}
+        : { cabinetProjectRef: storedCabinetProjectRef }),
     });
   }
   return Object.fromEntries(next);

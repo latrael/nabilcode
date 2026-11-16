@@ -1628,4 +1628,31 @@ describe("AssetAccess", () => {
       }
     }).pipe(Effect.provide(layerTest)),
   );
+  it.effect("signs a Cabinet attachment path alone and refuses paths outside attachments", () =>
+    Effect.gen(function* () {
+      const issued = yield* issueAssetUrl({
+        resource: { _tag: "cabinet-file", path: "attachments/2026/06/lamp spec.pdf" },
+      });
+      expect(issued.relativeUrl.endsWith("/lamp%20spec.pdf")).toBe(true);
+      const suffix = issued.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length);
+      const separator = suffix.indexOf("/");
+      const claims = JSON.parse(
+        Buffer.from(suffix.slice(0, separator).split(".")[0]!, "base64url").toString("utf8"),
+      );
+      // Where Cabinet is and its token stay in settings.
+      expect(Object.keys(claims).toSorted()).toEqual(["expiresAt", "kind", "path", "version"]);
+      expect(yield* resolveAsset(suffix.slice(0, separator), suffix.slice(separator + 1))).toEqual({
+        kind: "cabinet-file",
+        path: "attachments/2026/06/lamp spec.pdf",
+        expiresAt: issued.expiresAt,
+      });
+
+      for (const path of ["notes/a.md", "attachments/../notes/a.md", "attachments//a.pdf"]) {
+        const error = yield* issueAssetUrl({
+          resource: { _tag: "cabinet-file", path },
+        }).pipe(Effect.flip);
+        expect(error._tag).toBe("AssetCabinetFilePathValidationError");
+      }
+    }).pipe(Effect.provide(layerTest)),
+  );
 });

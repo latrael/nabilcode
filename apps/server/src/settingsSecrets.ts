@@ -1,5 +1,6 @@
 import {
   AntigravitySettings,
+  CabinetSettings,
   ClaudeSettings,
   CloudSpeechCredentials,
   CodexSettings,
@@ -34,6 +35,7 @@ const providerSecretFields = new Map([
 ]);
 const usageLimitSecretFields = secretSettingsFields(UsageLimitSourceConfig);
 const textGeneratorSecretFields = secretSettingsFields(TextGeneratorConfig);
+const cabinetSecretFields = secretSettingsFields(CabinetSettings);
 const voiceSecretFields = secretSettingsFields(CloudSpeechCredentials);
 const encode = (value: string) => Buffer.from(value, "utf8").toString("base64url");
 
@@ -210,6 +212,11 @@ function mapSecretFieldGroups(
 
   return {
     ...settings,
+    cabinet: mapFields(
+      settings.cabinet,
+      cabinetSecretFields,
+      (field) => `cabinet-${field}`,
+    ) as ServerSettings["cabinet"],
     cloudSpeechCredentials: mapFields(
       settings.cloudSpeechCredentials,
       voiceSecretFields,
