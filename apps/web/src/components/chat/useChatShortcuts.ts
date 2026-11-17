@@ -7,6 +7,7 @@ import {
   preventRepeatedTerminalCloseShortcut,
   preventTerminalCloseShortcut,
 } from "../../lib/terminalCloseShortcut";
+import { isInLocalShortcutScope } from "../../lib/editableFocus";
 import { isInSideChatPane } from "../../lib/sideChatPane";
 import { getTerminalFocusOwner, type TerminalFocusOwner } from "../../lib/terminalFocus";
 import type { ComposerHandleRef } from "../../composerHandleContext";
@@ -71,7 +72,7 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
       event.stopPropagation();
       return;
     }
-    if (!input.enabled || isCommandPaletteOpen()) return;
+    if (!input.enabled || isCommandPaletteOpen() || isInLocalShortcutScope(event.target)) return;
     const inSideChatPane = isInSideChatPane(event.target);
     const terminalFocusOwner = getTerminalFocusOwner();
     if (event.defaultPrevented && terminalFocusOwner === null) return;
@@ -109,7 +110,8 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
       event.isComposing ||
       event.keyCode === 229 ||
       isCommandPaletteOpen() ||
-      isInSideChatPane(event.target)
+      isInSideChatPane(event.target) ||
+      isInLocalShortcutScope(event.target)
     )
       return;
     const context = input.getShortcutContext(event.target);

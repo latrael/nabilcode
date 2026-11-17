@@ -1,7 +1,7 @@
 import type { KeybindingCommand, ResolvedKeybindingsConfig } from "@t3tools/contracts";
 
 import { resolveShortcutCommand, type ShortcutMatchContext } from "../keybindings";
-import { isEditableFocused } from "../lib/editableFocus";
+import { isEditableFocused, isInLocalShortcutScope } from "../lib/editableFocus";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { isModelPickerOpen } from "../modelPickerVisibility";
@@ -102,6 +102,7 @@ function runScopes(scopes: readonly CommandScope[], event: KeyboardEvent): boole
 }
 
 function dispatchCaptureKeyDown(event: KeyboardEvent): void {
+  if (isInLocalShortcutScope(event.target)) return;
   runScopes(captureScopes, event);
 }
 

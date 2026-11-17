@@ -14,3 +14,8 @@ export function isEditableFocused(target: EventTarget | null = document.activeEl
   while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
   return element !== null && element.closest(EDITABLE_SELECTOR) !== null;
 }
+
+/** Whether a key event started in a surface that owns its shortcuts (`data-local-shortcuts`), such as a note editor. */
+export function isInLocalShortcutScope(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest("[data-local-shortcuts]") !== null;
+}

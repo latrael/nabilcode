@@ -130,6 +130,24 @@ describe("command dispatcher", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it("leaves keys from a local-shortcut surface to that surface, even for capture scopes", () => {
+    const command = vi.fn();
+    const editor = document.createElement("div");
+    editor.setAttribute("data-local-shortcuts", "");
+    const field = document.createElement("textarea");
+    editor.append(field);
+    document.body.append(editor);
+    using stack = new DisposableStack();
+    stack.defer(() => editor.remove());
+    stack.defer(registerCommands({ "chat.new": command }, { keybindings, capture: true }));
+
+    const event = new KeyboardEvent("keydown", { key: "k", cancelable: true, bubbles: true });
+    field.dispatchEvent(event);
+
+    expect(command).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it("routes a menu action to its newest handler", () => {
     const older = vi.fn();
     const newer = vi.fn();

@@ -139,7 +139,7 @@ export function BoardCard(props: {
               render={
                 <span
                   className={cn(
-                    "min-w-0 truncate text-foreground",
+                    "min-w-16 truncate text-foreground",
                     threadLike ? "text-13 font-semibold" : "font-mono text-xs",
                   )}
                 >
