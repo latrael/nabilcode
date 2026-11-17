@@ -56,7 +56,7 @@ export function CabinetTree({ target }: { target: RepoTreeTarget }) {
             <button
               type="button"
               aria-expanded={open}
-              className="flex h-[22px] w-full items-center gap-1.5 rounded-sm px-2 text-left text-xs text-sidebar-muted-foreground outline-none hover:text-sidebar-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
+              className="flex h-[22px] w-full items-center gap-1.5 rounded-sm px-2 text-left text-12_5 text-sidebar-muted-foreground outline-none hover:text-sidebar-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
               onClick={() =>
                 setCollapsed((previous) => {
                   const next = new Set(previous);
@@ -77,7 +77,7 @@ export function CabinetTree({ target }: { target: RepoTreeTarget }) {
                   <li key={item.id}>
                     <button
                       type="button"
-                      className="flex h-[22px] w-full items-center gap-1.5 rounded-sm pr-2 pl-6 text-left text-xs text-sidebar-foreground outline-none hover:bg-sidebar-row-hover focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
+                      className="flex h-[22px] w-full items-center gap-1.5 rounded-sm pr-2 pl-6 text-left text-12_5 text-sidebar-foreground outline-none hover:bg-sidebar-row-hover focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
                       onClick={() =>
                         useBoardStore
                           .getState()

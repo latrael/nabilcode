@@ -44,7 +44,7 @@ export function FilesDrawer({ target }: { target: RepoTreeTarget | null }) {
         <button
           type="button"
           aria-expanded={open}
-          className="flex h-full items-center gap-1 rounded-md px-1.5 text-3xs font-semibold tracking-wider text-sidebar-muted-foreground uppercase outline-none hover:text-sidebar-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
+          className="flex h-full items-center gap-1 rounded-md px-1.5 text-10_5 font-semibold tracking-label text-sidebar-muted-foreground uppercase outline-none hover:text-sidebar-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
           onClick={() => setOpen((value) => !value)}
         >
           <span aria-hidden className="w-2.5 text-4xs">

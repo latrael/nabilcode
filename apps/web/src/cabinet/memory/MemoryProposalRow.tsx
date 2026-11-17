@@ -142,7 +142,7 @@ export function MemoryProposalRow(props: {
             onChange={(event) => setDraft(event.target.value)}
           />
         ) : (
-          <p className="line-clamp-3 min-h-0 flex-1 text-12_5 whitespace-pre-wrap text-foreground">
+          <p className="line-clamp-2 min-h-0 flex-1 text-12_5 whitespace-pre-wrap text-foreground">
             {proposal.text}
           </p>
         )}

@@ -83,7 +83,7 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
         />
         <span
           className={cn(
-            "min-w-0 truncate text-xs font-semibold",
+            "min-w-0 truncate text-13 font-semibold",
             props.containsActiveThread
               ? "text-sidebar-foreground"
               : "text-sidebar-muted-foreground",

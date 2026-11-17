@@ -3541,7 +3541,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   ) : showProviderUnavailable ? (
                     "Enable a provider in Settings"
                   ) : (
-                    composerPlaceholderForProvider(selectedProvider, PROVIDER_DISPLAY_NAMES)
+                    composerPlaceholderForProvider(
+                      selectedProvider,
+                      PROVIDER_DISPLAY_NAMES,
+                      selectedProviderEntry?.snapshot.displayName,
+                    )
                   )}
                 </button>
                 {collapsedComposerImagePreviews}
@@ -3729,6 +3733,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                                 composerPlaceholderForProvider(
                                   selectedProvider,
                                   PROVIDER_DISPLAY_NAMES,
+                                  selectedProviderEntry?.snapshot.displayName,
                                 ))
                     }
                     placeholderSuffix={

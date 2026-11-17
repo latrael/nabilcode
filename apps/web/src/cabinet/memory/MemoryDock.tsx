@@ -50,13 +50,13 @@ function ConnectedDock(props: {
       data-memory-dock=""
       className={cn(
         "col-span-full row-start-3 flex min-w-0 flex-col overflow-hidden rounded-md border border-border bg-card shadow-(--cabinet-card-shadow)",
-        expanded && "h-37.5",
+        expanded && "max-h-60",
         props.flush && "m-2",
       )}
     >
       <div
         className={cn(
-          "flex h-8 shrink-0 items-center gap-2 bg-(--cabinet-card-head) pr-1 pl-2",
+          "flex h-[34px] shrink-0 items-center gap-2 bg-(--cabinet-card-head) pr-1 pl-2",
           expanded && "border-b border-border",
         )}
       >

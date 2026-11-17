@@ -42,7 +42,7 @@ function WorkspaceLabel() {
       >
         C
       </span>
-      <span className="font-mono text-xs">nabilcode</span>
+      <span className="font-mono text-12_5">nabilcode</span>
       {pillLabel ? (
         <Badge data-environment-identification="pill" size="sm" variant="secondary">
           {pillLabel}

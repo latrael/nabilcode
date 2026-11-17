@@ -135,7 +135,7 @@ function ParkedGroupHeader(props: {
       type="button"
       data-sidebar-row={PARKED_ROW_KEY}
       aria-expanded={props.expanded}
-      className="mx-1.5 mt-2 flex h-7 w-[calc(100%-0.75rem)] items-center gap-1.5 rounded-md pl-2 text-left text-3xs font-semibold tracking-wider text-sidebar-muted-foreground uppercase outline-none hover:bg-sidebar-row-hover focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
+      className="mx-1.5 mt-2 flex h-7 w-[calc(100%-0.75rem)] items-center gap-1.5 rounded-md pl-2 text-left text-10_5 font-semibold tracking-label text-sidebar-muted-foreground uppercase outline-none hover:bg-sidebar-row-hover focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
       onClick={props.onToggle}
     >
       <ChevronRightIcon

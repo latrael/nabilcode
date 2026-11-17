@@ -57,7 +57,7 @@ function WorkLogLine({ icon, label, trailing, wrapLabel, pill }: RowContent) {
     return (
       <div
         className={cn(
-          "inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md border px-2 font-mono text-xs select-none [&_*]:select-none",
+          "inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md border px-2 font-mono text-xs select-none [&_*]:select-none [&_p]:text-xs",
           pill === "cabinet"
             ? "border-warning/35 bg-warning-surface text-warning-foreground"
             : "border-border bg-card text-muted-foreground",

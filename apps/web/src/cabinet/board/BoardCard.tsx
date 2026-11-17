@@ -1,5 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { FileDiffIcon, GripHorizontalIcon, MessageSquareIcon, XIcon } from "lucide-react";
+import { FileDiffIcon, MessageSquareIcon, XIcon } from "lucide-react";
 import { useGT } from "gt-react";
 import { createContext, use, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -51,8 +51,8 @@ export function boardCardTitle(card: BoardCardModel) {
 }
 
 /**
- * The primary card holds ChatView, which keeps its own titlebar header, so it gets only a grip
- * strip. While the board shows chrome, the body's layout containment makes ChatView's
+ * The primary card holds ChatView, which keeps its own titlebar header, so the card adds only a
+ * drag handle over that header's left edge. While the board shows chrome, the body's layout containment makes ChatView's
  * `position: fixed` titlebar controls resolve to the card, placed by the overridden insets.
  */
 export function BoardCard(props: {
@@ -98,9 +98,9 @@ export function BoardCard(props: {
           {...attributes}
           {...listeners}
           aria-label={gt("Move thread card")}
-          className="flex h-3 shrink-0 cursor-grab touch-none items-center justify-center border-b border-border bg-(--cabinet-card-head) text-muted-foreground/70 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing @max-[900px]/board:hidden"
+          className="absolute top-0 left-0 z-10 flex h-[34px] w-6 cursor-grab touch-none items-center justify-center text-xs leading-none text-muted-foreground/70 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing @max-[900px]/board:hidden"
         >
-          <GripHorizontalIcon aria-hidden className="size-3" />
+          <span aria-hidden>⠿</span>
         </button>
       );
     }
@@ -190,6 +190,10 @@ export function BoardCard(props: {
       <div
         className={cn(
           "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+          primary &&
+            chrome &&
+            "@min-[900px]/board:[--workspace-topbar-height:34px] @min-[900px]/board:[&_[data-chat-header]]:border-b @min-[900px]/board:[&_[data-chat-header]]:border-border @min-[900px]/board:[&_[data-chat-header]]:bg-(--cabinet-card-head)!",
+          primary && draggable && "@min-[900px]/board:[&_[data-chat-header]]:pl-7!",
           active &&
             "@min-[900px]/board:[contain:layout] @min-[900px]/board:[--workspace-controls-right:0.75rem] @min-[900px]/board:[--workspace-controls-top:0px] @min-[900px]/board:[--workspace-native-controls-inset:0px]",
         )}

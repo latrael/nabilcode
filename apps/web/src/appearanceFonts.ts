@@ -101,7 +101,7 @@ export function applyAppearanceFontVariables(
   root.style.fontSize = `${clampInterfaceFontSize(preferences.sizeInterface)}px`;
   root.style.setProperty(
     "--font-size-prompt",
-    preferences.separate ? `${clampPromptFontSize(preferences.sizePrompt)}px` : "var(--text-sm)",
+    preferences.separate ? `${clampPromptFontSize(preferences.sizePrompt)}px` : "var(--text-13)",
   );
   const code = clampCodeFontSize(preferences.sizeCode);
   root.style.setProperty("--font-size-code", `${code}px`);

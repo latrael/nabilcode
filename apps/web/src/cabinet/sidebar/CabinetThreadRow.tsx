@@ -153,7 +153,7 @@ export const CabinetThreadRow = memo(function CabinetThreadRow(props: {
           ) : (
             <span
               className={cn(
-                "min-w-0 flex-1 truncate text-sm",
+                "min-w-0 flex-1 truncate text-13",
                 selected || status !== "idle"
                   ? "font-medium text-sidebar-foreground"
                   : "text-sidebar-muted-foreground",
@@ -163,7 +163,7 @@ export const CabinetThreadRow = memo(function CabinetThreadRow(props: {
             </span>
           )}
         </span>
-        <span className="flex min-w-0 items-center gap-1.5 pl-5 text-2xs text-sidebar-muted-foreground">
+        <span className="flex min-w-0 items-center gap-1.5 pl-5 text-11_5 text-sidebar-muted-foreground">
           {jumpLabel ? (
             <Kbd aria-hidden data-jump-hint>
               {jumpLabel}

@@ -17,7 +17,7 @@ function renderedFontSize(style: (probe: HTMLElement) => void): string {
 const composerFontSize = () =>
   renderedFontSize((probe) => {
     // The composer editor's own size class.
-    probe.className = "text-(length:--font-size-prompt,var(--text-sm))";
+    probe.className = "text-(length:--font-size-prompt,var(--text-13))";
   });
 
 const touchComposerFontSize = () =>
@@ -40,8 +40,8 @@ describe("applyAppearanceFontVariables", () => {
     };
     try {
       applyAppearanceFontVariables(root, { ...preferences, separate: false });
-      expect(composerFontSize()).toBe("17.5px");
-      expect(touchComposerFontSize()).toBe("17.5px");
+      expect(composerFontSize()).toBe("16.25px");
+      expect(touchComposerFontSize()).toBe("16.25px");
 
       applyAppearanceFontVariables(root, { ...preferences, separate: true });
       expect(composerFontSize()).toBe("14px");

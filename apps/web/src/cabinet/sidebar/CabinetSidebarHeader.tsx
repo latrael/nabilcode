@@ -91,7 +91,7 @@ export function CabinetSidebarHeader(props: {
   return (
     <div className="flex flex-col gap-2 px-2.5 pt-2.5 pb-1.5">
       <div className="flex items-center justify-between pl-1">
-        <span className="flex-none text-3xs font-semibold tracking-wider whitespace-nowrap text-sidebar-muted-foreground uppercase">
+        <span className="flex-none text-10_5 font-semibold tracking-label whitespace-nowrap text-sidebar-muted-foreground uppercase">
           {gt("Cabinet Projects")}
         </span>
         <IngestProjectButton target={props.ingestTarget} />
