@@ -34,7 +34,6 @@ import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
 import { isElectron } from "../../env";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { usePersistEnvironmentProviderInstanceMutation } from "../../hooks/useSettings";
-import { PRIVACY_POLICY_URL } from "../../legalLinks";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
 import { completeOnboarding } from "../../onboarding/firstRun";
 import {
@@ -69,7 +68,6 @@ import { newProjectId, randomUUID } from "../../lib/utils";
 import { agentSessionImport } from "../../state/agentSessions";
 import { readProjects, useProjects, waitForProject } from "../../state/entities";
 import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environments";
-import { managedTelemetryOffMessage, useManagedPolicy } from "../../state/managedPolicy";
 import { useProjectScans } from "../../onboarding/useProjectScans";
 import { projectEnvironment } from "../../state/projects";
 import { serverEnvironment } from "../../state/server";
@@ -291,30 +289,10 @@ export function WelcomePage({
                 </Button>
               </div>
             </div>
-            <TelemetryNotice environmentId={environmentId} />
           </div>
         </div>
       </div>
     </SidebarInset>
-  );
-}
-
-function TelemetryNotice({ environmentId }: { readonly environmentId: EnvironmentId }) {
-  const telemetryOff = managedTelemetryOffMessage(useManagedPolicy(environmentId));
-  return (
-    <p className="mt-auto pt-12 text-2xs leading-relaxed text-muted-foreground/70">
-      {telemetryOff ?? "T3 Code collects anonymous usage data to improve the app."}{" "}
-      {telemetryOff === undefined ? "To opt out, see the" : "See the"}{" "}
-      <a
-        className="underline decoration-current/40 underline-offset-2 hover:text-muted-foreground"
-        href={PRIVACY_POLICY_URL}
-        target="_blank"
-        rel="noreferrer noopener"
-      >
-        privacy policy
-      </a>
-      .
-    </p>
   );
 }
 
