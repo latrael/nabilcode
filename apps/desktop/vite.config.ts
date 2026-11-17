@@ -41,10 +41,11 @@ export default defineConfig({
         dependsOn: ["t3#build"],
         cache: false,
       },
-      dev: {
+      // t3#dev:desktop keeps the server bundle fresh afterwards; dev-electron restarts on it.
+      "dev:desktop": {
         command:
           "node scripts/build-browser-secret.mjs && node scripts/build-preview-annotation-css.mjs && cross-env T3CODE_DESKTOP_DEV=1 vp pack --watch",
-        dependsOn: ["t3#build"],
+        dependsOn: ["t3#build:bundle"],
         cache: false,
       },
       "dev:bundle": {

@@ -218,6 +218,10 @@ function startWatchers() {
         if (typeof filename !== "string" || !files.has(filename)) {
           return;
         }
+        // Watch rebuilds delete the old output first; restart once the new file lands.
+        if (!NodeFS.existsSync(NodePath.join(desktopDir, directory, filename))) {
+          return;
+        }
 
         scheduleRestart();
       },

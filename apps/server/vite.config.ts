@@ -89,6 +89,12 @@ export default mergeConfig(
           dependsOn: ["@t3tools/web#build"],
           cache: false,
         },
+        // build:bundle runs first so dev-electron never boots a bundle left from an older checkout.
+        "dev:desktop": {
+          command: "vp pack --watch",
+          dependsOn: ["build:bundle"],
+          cache: false,
+        },
       },
     },
     pack: {
