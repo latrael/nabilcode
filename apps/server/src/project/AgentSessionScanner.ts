@@ -14,6 +14,7 @@ import {
   type AgentSessionProjectGit,
   type AgentSessionScanResult,
   type ProviderInstanceConfig,
+  type ServerSettings as ContractServerSettings,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -47,6 +48,14 @@ import {
   createTranscriptJsonSelector,
   TranscriptJsonLimitError,
 } from "./AgentSessionJson.ts";
+import {
+  ANTIGRAVITY_CONVERSATION_SUFFIX,
+  ANTIGRAVITY_CONVERSATIONS_PATH,
+  ANTIGRAVITY_META_SUFFIX,
+  parseAntigravityMeta,
+  readAntigravityConversation,
+  type AntigravityMessage,
+} from "./AntigravityConversations.ts";
 
 const TRANSCRIPT_PREFIX_BYTES = 32 * 1024;
 
@@ -394,6 +403,45 @@ function deriveTitle(source: AgentSessionSource, text: string): string | undefin
     "$1",
   );
   return request.trim().split("\n")[0]?.slice(0, 100).trim() || undefined;
+}
+
+function isoFromMs(ms: number | null, fallback: string): string {
+  if (ms === null) return fallback;
+  const parsed = DateTime.make(ms);
+  return Option.isSome(parsed) ? DateTime.formatIso(parsed.value) : fallback;
+}
+
+/** Returns null when the conversation never got a user message. */
+function antigravityThreadFromMessages(input: {
+  readonly providerInstanceId: ProviderInstanceId;
+  readonly providerSessionId: string;
+  readonly messages: ReadonlyArray<AntigravityMessage>;
+  readonly lastActiveAtMs: number;
+}): AgentSessionThread | null {
+  const updatedAt = isoFromMs(input.lastActiveAtMs, "1970-01-01T00:00:00.000Z");
+  const messages = input.messages.map((message): AgentSessionThreadMessage => ({
+    role: message.role,
+    text: message.text,
+    createdAt: isoFromMs(message.createdAtMs, updatedAt),
+  }));
+  const firstUserIndex = messages.findIndex((message) => message.role === "user");
+  const firstUser = messages[firstUserIndex];
+  if (firstUser === undefined) return null;
+  const retained =
+    messages.length <= MAX_IMPORTED_MESSAGES
+      ? messages
+      : [firstUser, ...messages.slice(firstUserIndex + 1).slice(-(MAX_IMPORTED_MESSAGES - 1))];
+  return {
+    source: "antigravity",
+    providerInstanceId: input.providerInstanceId,
+    providerSessionId: input.providerSessionId,
+    title: deriveTitle("antigravity", firstUser.text) ?? "Imported thread",
+    model: null,
+    createdAt: retained[0]?.createdAt ?? updatedAt,
+    updatedAt,
+    messages: retained,
+    omittedMessageCount: messages.length - retained.length,
+  };
 }
 
 export function parseAgentSessionTranscript(
@@ -1537,6 +1585,61 @@ export const make = Effect.gen(function* () {
     }));
   });
 
+  // T3's own Antigravity profile lives under its state dir; this is the one other clients share.
+  const antigravityConversationsDir = path.join(
+    homeDir,
+    ".gemini",
+    ...ANTIGRAVITY_CONVERSATIONS_PATH,
+  );
+  const collectAntigravityCandidates = Effect.fn(
+    "AgentSessionScanner.collectAntigravityCandidates",
+  )(function* (providerInstances: ContractServerSettings["providerInstances"]) {
+    // Explicit instances only: an imported thread continues in this instance's profile.
+    const instanceId = Object.entries(providerInstances).find(
+      ([, instance]) =>
+        instance.driver === "antigravity" && resolveProviderInstanceEnabled(instance),
+    )?.[0];
+    if (instanceId === undefined) return [];
+    const providerInstanceId = ProviderInstanceId.make(instanceId);
+    const entries = yield* fileSystem
+      .readDirectory(antigravityConversationsDir)
+      .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+    const byCwd = new Map<string, Array<RawCandidate["transcripts"][number]>>();
+    for (const entry of entries
+      .filter((name) => name.endsWith(ANTIGRAVITY_CONVERSATION_SUFFIX))
+      .slice(0, MAX_TRANSCRIPTS_PER_SOURCE)) {
+      const filePath = path.join(antigravityConversationsDir, entry);
+      const stats = yield* statOption(filePath);
+      if (Option.isNone(stats) || stats.value.type !== "File") continue;
+      const meta = yield* fileSystem
+        .readFileString(
+          filePath.slice(0, -ANTIGRAVITY_CONVERSATION_SUFFIX.length) + ANTIGRAVITY_META_SUFFIX,
+        )
+        .pipe(Effect.option);
+      const cwd = Option.isSome(meta) ? parseAntigravityMeta(meta.value) : null;
+      if (cwd === null) continue;
+      const mtimeMs = Option.match(stats.value.mtime, {
+        onNone: () => null,
+        onSome: (date) => date.getTime(),
+      });
+      const transcripts = byCwd.get(cwd);
+      if (transcripts === undefined) byCwd.set(cwd, [{ filePath, mtimeMs }]);
+      else transcripts.push({ filePath, mtimeMs });
+    }
+    return Array.from(byCwd, ([cwd, transcripts]): RawCandidate => {
+      const latestMs = Math.max(0, ...transcripts.map((transcript) => transcript.mtimeMs ?? 0));
+      return {
+        cwd,
+        source: "antigravity",
+        providerInstanceId,
+        homePath: antigravityConversationsDir,
+        threadCount: transcripts.length,
+        lastActiveAtMs: latestMs > 0 ? latestMs : null,
+        transcripts,
+      };
+    });
+  });
+
   const collectCandidates = Effect.fn("AgentSessionScanner.collectCandidates")(function* () {
     const settings = yield* serverSettings.getSettings.pipe(
       Effect.mapError((cause) => new AgentSessionScanError({ operation: "read-settings", cause })),
@@ -1671,6 +1774,8 @@ export const make = Effect.gen(function* () {
       );
       metadataTruncated ||= metadataBudget.truncated;
     }
+
+    raw.push(...(yield* collectAntigravityCandidates(settings.providerInstances)));
 
     return { candidates: raw, truncated: truncated || metadataTruncated, metadataTruncated };
   });
@@ -1958,6 +2063,60 @@ export const make = Effect.gen(function* () {
           }
           transcriptsRemaining -= 1;
           bytesRemaining -= identity.size;
+          if (candidate.source === "antigravity") {
+            const messages = yield* Effect.gen(function* () {
+              const directory = yield* fileSystem.makeTempDirectoryScoped({
+                prefix: "t3-antigravity-read-",
+              });
+              const copy = path.join(directory, path.basename(transcript.filePath));
+              for (const suffix of ["-wal", ""]) {
+                if (yield* fileSystem.exists(transcript.filePath + suffix)) {
+                  yield* fileSystem.copyFile(transcript.filePath + suffix, copy + suffix);
+                }
+              }
+              return yield* Effect.try({
+                try: () => readAntigravityConversation(copy),
+                catch: (cause) =>
+                  new TranscriptParseError({ filePath: transcript.filePath, cause }),
+              });
+            }).pipe(Effect.scoped, Effect.option);
+            if (Option.isNone(messages)) {
+              return Option.some<AgentSessionRecentThread>({ _tag: "Skipped" });
+            }
+            const thread = antigravityThreadFromMessages({
+              providerInstanceId: candidate.providerInstanceId,
+              providerSessionId: path.basename(
+                transcript.filePath,
+                ANTIGRAVITY_CONVERSATION_SUFFIX,
+              ),
+              messages: messages.value,
+              lastActiveAtMs: transcript.mtimeMs,
+            });
+            if (thread === null) {
+              transcriptsRemaining += 1;
+              return Option.none<AgentSessionRecentThread>();
+            }
+            const source: AgentSessionImportSource = {
+              ...identity,
+              provider: "antigravity",
+              providerInstanceId: thread.providerInstanceId,
+              providerSessionId: thread.providerSessionId,
+            };
+            const sessionKey = `${thread.providerInstanceId}\0${thread.providerSessionId}`;
+            if (importedSessions.has(sessionKey)) {
+              return Option.some<AgentSessionRecentThread>({ _tag: "Duplicate", source });
+            }
+            importedSessions.add(sessionKey);
+            const worktree = yield* rootWorktree(
+              path.resolve(expandHomePath(candidate.cwd.trim(), homeDir)),
+            );
+            return Option.some<AgentSessionRecentThread>({
+              _tag: "Importable",
+              thread,
+              source,
+              worktree,
+            });
+          }
           const snapshot = yield* readTranscript(transcript.filePath, identity, candidate.source);
           if (snapshot === null) {
             return Option.some<AgentSessionRecentThread>({ _tag: "Skipped" });

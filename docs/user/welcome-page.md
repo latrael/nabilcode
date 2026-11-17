@@ -2,7 +2,7 @@
 
 T3 Code shows a Welcome page when you open a new installation. Existing
 workspaces skip it. It shows what T3 Code found on the computer you are using,
-on one page: your agents, projects from your Claude Code and Codex history,
+on one page: your agents, projects from your Claude Code, Codex, and Antigravity history,
 and the phone app. Only an agent is needed to start chatting.
 
 To see the page again, go to **Settings → About → Welcome page** and select
@@ -64,8 +64,10 @@ app with a code from **Settings → Sharing & access**.
 
 ## Projects
 
-T3 Code finds directories that Claude Code or Codex has used. Git repositories
-are listed first, newest activity on top. When the remote is on GitHub, the
+T3 Code finds directories that Claude Code, Codex, or Antigravity has used.
+Antigravity conversations are the ones editors such as Zed keep in
+`~/.gemini/antigravity-acp`; they appear once Antigravity is turned on in
+**Settings → Providers**. Git repositories are listed first, newest activity on top. When the remote is on GitHub, the
 group shows the repository as `owner/name`. Clones with the same remote share
 one group. Directories that are not git repositories sit under "Other folders".
 
@@ -82,8 +84,10 @@ anything under `Downloads` are not offered.
 A large or malformed history can reach the scan limit. T3 Code keeps the
 projects it found and warns when projects or conversations may be missing.
 
-Imported projects include Claude and Codex conversations active within the last
-30 days. You can continue those conversations in T3 Code.
+Imported projects include Claude, Codex, and Antigravity conversations active
+within the last 30 days. You can continue those conversations in T3 Code. An
+imported Antigravity conversation continues from a copy in T3 Code's own
+Antigravity profile, so the other editor's copy is never changed.
 
 Conversation import is best effort. T3 Code keeps the first user prompt and the
 newest remaining visible user and assistant messages, with 200 messages total.

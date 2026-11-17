@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import {
@@ -32,6 +33,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerConfig from "../config.ts";
+import { resolveAntigravityInstanceDirectories } from "../provider/antigravityAuthSupport.ts";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as EventStore from "../orchestration-v2/EventStore.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
@@ -222,12 +224,23 @@ const makeImporter = Effect.fn(function* (
       ),
     ),
   );
+  const serverConfig = Context.get(
+    yield* Layer.build(
+      ServerConfig.layerTest("/workspace/project", { prefix: "t3-import-config-" }).pipe(
+        Layer.provide(NodeServices.layer),
+      ),
+    ),
+    ServerConfig.ServerConfig,
+  );
   const context = yield* Layer.build(
     AgentSessionImporter.layer.pipe(
       Layer.provide(
         Layer.mergeAll(
           sinkLayer,
           settings,
+          NodeServices.layer,
+          NodeCrypto.layer,
+          Layer.succeed(ServerConfig.ServerConfig, serverConfig),
           Layer.succeed(IdAllocator.IdAllocatorV2, yield* IdAllocator.IdAllocatorV2),
           Layer.succeed(
             ProviderSessionRuntime.ProviderSessionRuntimeRepository,
@@ -277,6 +290,7 @@ const makeImporter = Effect.fn(function* (
     run: importer.importRecentAgentThreads({ projectId }),
     importNativeHistory: importer.importNativeHistory,
     published,
+    stateDir: serverConfig.stateDir,
   };
 });
 
@@ -370,6 +384,51 @@ it.effect(
         });
       }
     }).pipe(Effect.scoped, Effect.provide(persistence)),
+);
+
+it.effect("copies an imported Antigravity conversation into its instance profile once", () =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const zedConversations = yield* fileSystem.makeTempDirectoryScoped({
+      prefix: "t3-antigravity-zed-",
+    });
+    const selection = {
+      instanceId: ProviderInstanceId.make("antigravity"),
+      model: "default",
+    } satisfies typeof CODEX_MODEL_SELECTION;
+    const [fresh, continued] = ["fresh-session", "continued-session"].map((id) => {
+      const base = candidate(selection, id, "antigravity");
+      return {
+        ...base,
+        source: { ...base.source, filePath: path.join(zedConversations, `${id}.db`) },
+      };
+    });
+    for (const id of ["fresh-session", "continued-session"]) {
+      yield* fileSystem.writeFileString(path.join(zedConversations, `${id}.db`), `zed ${id}`);
+      yield* fileSystem.writeFileString(path.join(zedConversations, `${id}.meta`), "{}");
+    }
+    const importer = yield* makeImporter([fresh!, continued!]);
+    const { profile } = yield* resolveAntigravityInstanceDirectories(
+      importer.stateDir,
+      selection.instanceId,
+    );
+    const profileConversations = path.join(profile, "antigravity-acp", "conversations");
+    yield* fileSystem.makeDirectory(profileConversations, { recursive: true });
+    yield* fileSystem.writeFileString(
+      path.join(profileConversations, "continued-session.db"),
+      "already continued in T3",
+    );
+
+    expect(yield* importer.run).toEqual({ importedCount: 2, skippedCount: 0 });
+    const read = (name: string) => fileSystem.readFileString(path.join(profileConversations, name));
+    expect(yield* read("fresh-session.db")).toBe("zed fresh-session");
+    expect(yield* read("fresh-session.meta")).toBe("{}");
+    expect(yield* read("continued-session.db")).toBe("already continued in T3");
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(Layer.mergeAll(persistence, NodeServices.layer, NodeCrypto.layer)),
+  ),
 );
 
 it.effect("tolerates a missing transcript owner but propagates failed ownership reads", () =>

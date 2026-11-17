@@ -36,6 +36,11 @@ import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ProviderSessionRuntime from "../persistence/ProviderSessionRuntime.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AgentSessionScanner from "./AgentSessionScanner.ts";
+import {
+  replyStep,
+  userStep,
+  writeAntigravityConversation,
+} from "./AntigravityConversations.testkit.ts";
 
 const makeProjectShell = (workspaceRoot: string): OrchestrationProjectShell => ({
   id: ProjectId.make("project-1"),
@@ -1650,6 +1655,78 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
         ).toEqual([
           { path: projectDir, threadCount: 3 },
           { path: otherDir, threadCount: 1 },
+        ]);
+      }),
+    );
+
+    it.effect("imports Antigravity conversations other ACP clients keep in ~/.gemini", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dayMs = 24 * 60 * 60 * 1000;
+        const nowMs = Date.parse("2026-08-24T12:00:00.000Z");
+        yield* TestClock.setTime(nowMs);
+        const claudeHomePath = yield* makeTempDir("t3code-claude-home-");
+        const codexHomePath = yield* makeTempDir("t3code-codex-home-");
+        const homeDir = yield* makeTempDir("t3code-home-");
+        const workspace = yield* makeTempDir("t3code-workspace-");
+        const conversations = path.join(homeDir, ".gemini", "antigravity-acp", "conversations");
+        yield* fileSystem.makeDirectory(conversations, { recursive: true });
+        const sessionId = "4bf293d3-846c-40d8-a953-7a6fdb1eb299";
+        const startMs = nowMs - 2 * dayMs;
+        yield* writeAntigravityConversation(path.join(conversations, sessionId), workspace, [
+          userStep("Rename the project", startMs),
+          replyStep("Here are three names.", startMs + 5_000),
+        ]);
+        yield* writeAntigravityConversation(
+          path.join(conversations, "empty-session"),
+          workspace,
+          [],
+        );
+        for (const name of [sessionId, "empty-session"]) {
+          const seconds = (nowMs - dayMs) / 1000;
+          yield* fileSystem.utimes(path.join(conversations, `${name}.db`), seconds, seconds);
+        }
+        const withHome = Effect.provideService(HostProcess.HomeDirectory, homeDir);
+
+        // Without an Antigravity instance there is no profile for the thread to continue in.
+        const unconfigured = yield* runScan({ claudeHomePath, codexHomePath }).pipe(withHome);
+        expect(unconfigured.candidates).toEqual([]);
+
+        const providerInstances = {
+          [ProviderInstanceId.make("antigravity")]: {
+            driver: ProviderDriverKind.make("antigravity"),
+            enabled: true,
+          },
+        };
+        const before = (yield* fileSystem.readDirectory(conversations)).toSorted();
+        const threads = yield* runRecentThreads({
+          claudeHomePath,
+          codexHomePath,
+          providerInstances,
+          workspaceRoot: workspace,
+        }).pipe(withHome);
+        // Even a read-only open leaves -wal and -shm files; the other client's folder stays as it was.
+        expect((yield* fileSystem.readDirectory(conversations)).toSorted()).toEqual(before);
+        expect(threads).toEqual([
+          expect.objectContaining({
+            source: "antigravity",
+            providerInstanceId: "antigravity",
+            providerSessionId: sessionId,
+            title: "Rename the project",
+            messages: [
+              {
+                role: "user",
+                text: "Rename the project",
+                createdAt: DateTime.formatIso(DateTime.makeUnsafe(startMs)),
+              },
+              {
+                role: "assistant",
+                text: "Here are three names.",
+                createdAt: DateTime.formatIso(DateTime.makeUnsafe(startMs + 5_000)),
+              },
+            ],
+          }),
         ]);
       }),
     );

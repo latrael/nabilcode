@@ -15,6 +15,7 @@ import {
   ThreadId,
   TurnItemId,
   type AgentSessionImportInput,
+  type AgentSessionImportSource,
   type AgentSessionImportResult,
   type OrchestrationV2AppThread,
   type OrchestrationV2ConversationMessage,
@@ -25,13 +26,17 @@ import {
 import { normalizeProjectPathForComparison } from "@t3tools/shared/path";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
+import * as ServerConfig from "../config.ts";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
@@ -39,8 +44,14 @@ import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
 import * as ThreadCommandExecutor from "../orchestration-v2/ThreadCommandExecutor.ts";
 import * as ProviderSessionRuntime from "../persistence/ProviderSessionRuntime.ts";
+import { resolveAntigravityInstanceDirectories } from "../provider/antigravityAuthSupport.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AgentSessionScanner from "./AgentSessionScanner.ts";
+import {
+  ANTIGRAVITY_CONVERSATION_SUFFIX,
+  ANTIGRAVITY_CONVERSATIONS_PATH,
+  ANTIGRAVITY_META_SUFFIX,
+} from "./AntigravityConversations.ts";
 import * as ProjectService from "./ProjectService.ts";
 
 const isProjectionStoreThreadNotFoundError = Schema.is(
@@ -205,6 +216,35 @@ const make = Effect.gen(function* () {
   const threadCommands = yield* ThreadCommandExecutor.ThreadCommandExecutor;
   const settingsService = yield* ServerSettings.ServerSettingsService;
   const ceiling = settingsService.managedPolicy?.limits?.maxRuntimeMode;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const digest = yield* Digest.Digest;
+  const serverConfig = yield* ServerConfig.ServerConfig;
+  // agy loads a session only from its own profile, so an imported thread continues from a copy
+  // there. The other client's files are never changed, and an existing copy is kept.
+  const adoptAntigravityConversation = Effect.fn(
+    "AgentSessionImporter.adoptAntigravityConversation",
+  )(function* (source: AgentSessionImportSource) {
+    const { profile } = yield* resolveAntigravityInstanceDirectories(
+      serverConfig.stateDir,
+      source.providerInstanceId,
+    ).pipe(Effect.provideService(Digest.Digest, digest), Effect.provideService(Path.Path, path));
+    const directory = path.join(profile, ...ANTIGRAVITY_CONVERSATIONS_PATH);
+    const sourceBase = source.filePath.slice(0, -ANTIGRAVITY_CONVERSATION_SUFFIX.length);
+    const targetBase = path.join(directory, path.basename(sourceBase));
+    if (yield* fileSystem.exists(targetBase + ANTIGRAVITY_CONVERSATION_SUFFIX)) return;
+    yield* fileSystem.makeDirectory(directory, { recursive: true });
+    // The database goes last, so its presence marks a complete copy.
+    for (const suffix of [
+      ANTIGRAVITY_META_SUFFIX,
+      `${ANTIGRAVITY_CONVERSATION_SUFFIX}-wal`,
+      ANTIGRAVITY_CONVERSATION_SUFFIX,
+    ]) {
+      if (yield* fileSystem.exists(sourceBase + suffix)) {
+        yield* fileSystem.copyFile(sourceBase + suffix, targetBase + suffix);
+      }
+    }
+  });
   const importRecentAgentThreads = Effect.fn("importRecentAgentThreadsV2")(function* (
     input: AgentSessionImportInput,
   ) {
@@ -418,6 +458,7 @@ const make = Effect.gen(function* () {
             updatedAt,
           };
 
+          if (thread.source === "antigravity") yield* adoptAntigravityConversation(source);
           const committed = yield* eventSink.write({
             unlessNativeThreadOwned: providerThread,
             events: [

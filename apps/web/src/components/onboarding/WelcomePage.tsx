@@ -29,6 +29,7 @@ import * as Schema from "effect/Schema";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon, TerminalIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 
+import { APP_BASE_NAME } from "../../branding";
 import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
 import { isElectron } from "../../env";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
@@ -247,7 +248,7 @@ export function WelcomePage({
         <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
           <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6 pt-12 pb-8 sm:pt-20">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Welcome to T3 Code
+              Welcome to {APP_BASE_NAME}
             </h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
               Setting up <span className="text-foreground">{label}</span>.
@@ -1684,10 +1685,12 @@ function ImportCandidateRow({
 const IMPORT_SOURCES = [
   "claudeAgent",
   "codex",
+  "antigravity",
 ] as const satisfies ReadonlyArray<AgentSessionSource>;
 const IMPORT_SOURCE_NAMES: Record<(typeof IMPORT_SOURCES)[number], string> = {
   claudeAgent: "Claude Code",
   codex: "Codex",
+  antigravity: "Antigravity",
 };
 const IMPORT_SOURCES_LABEL = new Intl.ListFormat("en", { type: "conjunction" }).format(
   IMPORT_SOURCES.map((source) => IMPORT_SOURCE_NAMES[source]),
@@ -1705,7 +1708,7 @@ function ImportRowMeta({
   const relative = lastActiveAt === null ? null : formatRelativeTime(lastActiveAt);
   const age = relative === null ? "" : relative.suffix === null ? "now" : relative.value;
   return (
-    <span className="ml-auto grid shrink-0 grid-cols-[1rem_1rem_2.5rem_2.25rem] items-center gap-x-1 text-xs text-muted-foreground tabular-nums">
+    <span className="ml-auto grid shrink-0 grid-cols-[1rem_1rem_1rem_2.5rem_2.25rem] items-center gap-x-1 text-xs text-muted-foreground tabular-nums">
       {IMPORT_SOURCES.map((source) => (
         <span key={source} className="flex size-4 items-center justify-center">
           {sources?.includes(source) ? (
