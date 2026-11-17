@@ -4,7 +4,11 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
-import { parseAntigravityMeta, readAntigravityConversation } from "./AntigravityConversations.ts";
+import {
+  antigravityTitleText,
+  parseAntigravityMeta,
+  readAntigravityConversation,
+} from "./AntigravityConversations.ts";
 import {
   proto,
   replyStep,
@@ -39,4 +43,17 @@ describe("readAntigravityConversation", () => {
       expect(parseAntigravityMeta('{"cwd":"  "}')).toBeNull();
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
+
+  it("titles a prompt by what was typed, not by the files Zed inlined into it", () => {
+    const outline = (file: string) =>
+      `Embedded resource (file:///repo/${file}):\n# File outline for /repo/${file}\n def run [L1-9]\n\nShowing symbols 1-1 (total symbols: 1)`;
+    expect(antigravityTitleText(`${outline("SPEC.md")}\n  build this`)).toBe("build this");
+    expect(antigravityTitleText(`look at ${outline("main.py")} please`)).toBe(
+      "look at main.py please",
+    );
+    expect(antigravityTitleText("see Embedded resource (file:///repo/a.md):\n# A\n")).toBe(
+      "see a.md\n# A",
+    );
+    expect(antigravityTitleText(outline("SPEC.md"))).toBe("SPEC.md");
+  });
 });

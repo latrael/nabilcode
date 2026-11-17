@@ -157,6 +157,34 @@ export function readAntigravityConversation(
   }
 }
 
+// Zed sends an attached file as an ACP resource, which agy inlines into the prompt as
+// `Embedded resource (<uri>):\n<contents>`. Large files arrive as a symbol outline with a footer.
+const ZED_FILE_OUTLINE =
+  /Embedded resource \([^)\n]*\):\n# File outline for [^\n]*\n[\s\S]*?\nShowing symbols \d+-\d+ \(total symbols: \d+\)/g;
+const EMBEDDED_RESOURCE_HEADER = /Embedded resource \(([^)\n]*)\):/g;
+
+/** The prompt text to title a thread by, without the files Zed inlined into it. */
+export function antigravityTitleText(prompt: string): string {
+  const fileName = (uri: string) => uri.split("/").at(-1) || uri;
+  // A file mentioned mid-sentence keeps its name there; one attached on its own line drops out.
+  const typed = prompt
+    .replace(ZED_FILE_OUTLINE, (outline: string, offset: number) => {
+      const inline = offset > 0 && prompt[offset - 1] !== "\n";
+      return inline
+        ? outline.replace(/^Embedded resource \(([^)\n]*)\):[\s\S]*/, (_all, uri: string) =>
+            fileName(uri),
+          )
+        : "";
+    })
+    .trim();
+  if (typed.length > 0) {
+    return typed.replace(EMBEDDED_RESOURCE_HEADER, (_header, uri: string) => fileName(uri));
+  }
+  return Array.from(prompt.matchAll(EMBEDDED_RESOURCE_HEADER), ([, uri = ""]) =>
+    fileName(uri),
+  ).join(", ");
+}
+
 const decodeMeta = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ cwd: Schema.String })),
 );
