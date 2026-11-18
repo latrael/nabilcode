@@ -15,6 +15,8 @@ export type FilesystemGetMetadataInput = typeof FilesystemGetMetadataInput.Type;
 
 export const FilesystemEntryMetadata = Schema.Struct({
   kind: Schema.Literals(["file", "directory", "other"]),
+  // Only for ~/ requests: the path with ~ expanded by the server that owns the file.
+  resolvedPath: Schema.optionalKey(TrimmedNonEmptyString),
   byteLength: Schema.optionalKey(NonNegativeInt),
   mimeType: Schema.optionalKey(TrimmedNonEmptyString),
 });
@@ -25,6 +27,33 @@ export const FilesystemGetMetadataResult = Schema.Struct({
   entries: Schema.Array(Schema.NullOr(FilesystemEntryMetadata)),
 });
 export type FilesystemGetMetadataResult = typeof FilesystemGetMetadataResult.Type;
+
+const FILESYSTEM_SEARCH_MARKDOWN_MAX_LIMIT = 100;
+
+export const FilesystemSearchMarkdownInput = Schema.Struct({
+  query: Schema.String.check(Schema.isMaxLength(FILESYSTEM_PATH_MAX_LENGTH)),
+  limit: Schema.Int.check(
+    Schema.isGreaterThanOrEqualTo(1),
+    Schema.isLessThanOrEqualTo(FILESYSTEM_SEARCH_MARKDOWN_MAX_LIMIT),
+  ),
+});
+export type FilesystemSearchMarkdownInput = typeof FilesystemSearchMarkdownInput.Type;
+
+export const FilesystemSearchMarkdownResult = Schema.Struct({
+  homeDirectory: TrimmedNonEmptyString,
+  // Absolute paths under homeDirectory.
+  paths: Schema.Array(TrimmedNonEmptyString),
+  truncated: Schema.Boolean,
+});
+export type FilesystemSearchMarkdownResult = typeof FilesystemSearchMarkdownResult.Type;
+
+export class FilesystemSearchMarkdownError extends Schema.TaggedError<FilesystemSearchMarkdownError>()(
+  "FilesystemSearchMarkdownError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
 
 export const FilesystemBrowseInput = Schema.Struct({
   partialPath: TrimmedNonEmptyString.check(Schema.isMaxLength(FILESYSTEM_PATH_MAX_LENGTH)),

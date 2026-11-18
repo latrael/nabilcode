@@ -182,8 +182,9 @@ export const make = Effect.gen(function* () {
     const stat = yield* fileSystem.stat(expandedPath).pipe(Effect.option);
     // Server state files answer like missing paths, as readFile refuses them.
     if (stat._tag === "None" || (yield* isServerInternalPath(expandedPath))) return null;
-    if (stat.value.type === "Directory") return { kind: "directory" } as const;
-    if (stat.value.type !== "File") return { kind: "other" } as const;
+    const resolved = requestedPath.startsWith("~") ? { resolvedPath: expandedPath } : {};
+    if (stat.value.type === "Directory") return { kind: "directory", ...resolved } as const;
+    if (stat.value.type !== "File") return { kind: "other", ...resolved } as const;
     let mimeType: string | undefined;
     if (path.extname(expandedPath) === "" && stat.value.size > 0) {
       mimeType = yield* Effect.tryPromise({
@@ -206,6 +207,7 @@ export const make = Effect.gen(function* () {
     }
     return {
       kind: "file",
+      ...resolved,
       byteLength: Number(stat.value.size),
       ...(mimeType === undefined ? {} : { mimeType }),
     } satisfies FilesystemEntryMetadata;

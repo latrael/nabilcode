@@ -24,6 +24,7 @@ import {
 import { createEnvironmentRpcQueryAtomFamily } from "./runtime.ts";
 
 const BROWSE_IDLE_TTL_MS = 5_000;
+const MARKDOWN_SEARCH_IDLE_TTL_MS = 5_000;
 
 export function resolveFilesystemReadAccess(input: {
   readonly isCatalogReady: boolean;
@@ -189,6 +190,14 @@ export function createFilesystemEnvironmentAtoms<R, E>(
     getMetadata: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:filesystem:get-metadata",
       tag: WS_METHODS.filesystemGetMetadata,
+    }),
+    // Files change outside the app, and each search walks the host, so a query is never reused
+    // beyond the moment the picker is closing and reopening.
+    searchMarkdown: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:filesystem:search-markdown",
+      tag: WS_METHODS.filesystemSearchMarkdown,
+      idleTtlMs: MARKDOWN_SEARCH_IDLE_TTL_MS,
+      staleTimeMs: 0,
     }),
     browse: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:filesystem:browse",

@@ -140,6 +140,22 @@ it.layer(layerTest, { excludeTestServices: true })("WorkspaceFileSystemLive", (i
         }),
     );
 
+    it.effect("expands a home-relative path with the server's home folder", () =>
+      Effect.gen(function* () {
+        const service = yield* WorkspaceFileSystem.WorkspaceFileSystem;
+        const path = yield* Path.Path;
+        const home = yield* makeTempDir;
+        yield* writeTextFile(home, "notes/plan.md", "# Plan\n");
+        const result = yield* service
+          .getMetadata({ paths: ["~/notes/plan.md", "~/notes"] })
+          .pipe(Effect.provideService(HostProcess.HomeDirectory, home));
+        expect(result.entries).toEqual([
+          { kind: "file", byteLength: 7, resolvedPath: path.join(home, "notes", "plan.md") },
+          { kind: "directory", resolvedPath: path.join(home, "notes") },
+        ]);
+      }),
+    );
+
     it.effect("detects an extensionless script and image without returning their contents", () =>
       Effect.gen(function* () {
         const service = yield* WorkspaceFileSystem.WorkspaceFileSystem;
