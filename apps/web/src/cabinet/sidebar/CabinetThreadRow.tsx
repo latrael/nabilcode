@@ -53,7 +53,7 @@ function AgeLabel(props: { timestamp: string | null }) {
 }
 
 // Mounted only while renaming, so each rename starts uncommitted.
-function RenameInput(props: {
+export function RenameInput(props: {
   initialTitle: string;
   onCommit: (title: string) => void;
   onCancel: () => void;

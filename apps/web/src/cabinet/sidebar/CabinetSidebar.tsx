@@ -10,8 +10,14 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import { AuthOrchestrationOperateScope, type ScopedThreadRef } from "@t3tools/contracts";
-import { useRouter, type AnyRouter } from "@tanstack/react-router";
+import {
+  AuthOrchestrationOperateScope,
+  AuthTerminalOperateScope,
+  type EnvironmentId,
+  type ProjectId,
+  type ScopedThreadRef,
+} from "@t3tools/contracts";
+import { useParams, useRouter, type AnyRouter } from "@tanstack/react-router";
 import { useGT } from "gt-react";
 import { ChevronRightIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent } from "react";
@@ -20,11 +26,17 @@ import { canShareWithGuestAtom } from "~/components/chat/guestShareAvailability"
 import { SidebarChromeFooter, SidebarChromeHeader } from "~/components/sidebar/SidebarChrome";
 import { SidebarFolderDrop } from "~/components/sidebar/SidebarFolderDrop";
 import { useActiveRowReveal, type SidebarRouteReveal } from "~/components/sidebar/routeReveal";
+import {
+  folderTerminalRouteParams,
+  useFolderTerminalActions,
+  type FolderTerminalStatus,
+} from "~/components/terminal/folderTerminals";
 import { SidebarContent, useSidebar } from "~/components/ui/sidebar";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { openCommandPalette } from "~/commandPaletteBus";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { isElectron } from "~/env";
+import { useFolderTerminalStore } from "~/folderTerminalStore";
 import { useHandleNewThread } from "~/hooks/useHandleNewThread";
 import { useProjectPin } from "~/hooks/useProjectGroupUpdate";
 import { useClientSettings } from "~/hooks/useSettings";
@@ -35,12 +47,14 @@ import { shortcutLabelForCommand } from "~/keybindings";
 import { startNewThreadFromContext } from "~/lib/chatThreadActions";
 import { attachSidebarTree } from "~/lib/sidebarTree";
 import { cn } from "~/lib/utils";
+import { readLocalApi } from "~/localApi";
 import { registerSettleAndAdvance } from "~/settleAndAdvance";
 import { getSidebarProjectSettingsKey } from "~/sidebarProjectGrouping";
 import type { SidebarProjectSnapshot } from "~/sidebarProjectGrouping";
 import { useProjects, useQuietThreadShell } from "~/state/entities";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 import { readEnvironmentScope } from "~/state/session";
+import { liveShellEnvironmentIdsAtom } from "~/state/shell";
 import { threadEnvironment } from "~/state/threads";
 import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import {
@@ -53,8 +67,16 @@ import { useBoardStore } from "../board/boardStore";
 import { useActiveProjectRef } from "../board/useActiveProjectRef";
 import { CabinetProjectRow } from "./CabinetProjectRow";
 import { CabinetSidebarHeader } from "./CabinetSidebarHeader";
+import { CabinetTerminalRow } from "./CabinetTerminalRow";
 import { CabinetThreadRow } from "./CabinetThreadRow";
 import { FilesDrawer } from "./FilesDrawer";
+import {
+  folderTerminalKey,
+  folderTerminalMembers,
+  folderTerminalMenu,
+  type FolderTerminalEntry,
+  type FolderTerminalTarget,
+} from "./folderTerminals.logic";
 import { cabinetProviderEntriesAtom } from "./providerEntries";
 import type { RepoTreeTarget } from "./RepoTree";
 import { cabinetThreadKey, useCabinetSidebarModel } from "./useCabinetSidebarModel";
@@ -303,6 +325,103 @@ export default function CabinetSidebar({ routeReveal }: { routeReveal: SidebarRo
     })();
   };
 
+  const folderTerminals = useFolderTerminalStore((store) => store.entries);
+  const liveEnvironmentIds = useAtomValue(liveShellEnvironmentIdsAtom);
+  const pruneFolderTerminals = useFolderTerminalStore((store) => store.prune);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- drops browser-stored entries of projects a live environment deleted
+  useEffect(
+    () => pruneFolderTerminals(liveEnvironmentIds, projects),
+    [liveEnvironmentIds, projects, pruneFolderTerminals],
+  );
+  const routeTerminalKey = useParams({
+    strict: false,
+    select: (params) =>
+      params.environmentId && params.projectId && params.terminalId
+        ? folderTerminalKey({
+            environmentId: params.environmentId as EnvironmentId,
+            projectId: params.projectId as ProjectId,
+            terminalId: params.terminalId,
+          })
+        : null,
+  });
+  const folderTerminalActions = useFolderTerminalActions();
+  const navigateToFolderTerminal = (entry: FolderTerminalEntry) => {
+    if (isMobile) setOpenMobile(false);
+    void router.navigate({
+      to: "/terminal/$environmentId/$projectId/$terminalId",
+      params: folderTerminalRouteParams(entry),
+    });
+  };
+  const createFolderTerminal = (target: FolderTerminalTarget) => {
+    if (!readEnvironmentScope(target.environmentId, AuthTerminalOperateScope)) return;
+    navigateToFolderTerminal(useFolderTerminalStore.getState().create(target));
+  };
+  const openNewTerminalMenu = (
+    group: SidebarProjectSnapshot,
+    position: { x: number; y: number },
+    direct: boolean,
+  ) => {
+    const members = folderTerminalMembers(
+      group.memberProjects.filter((member) =>
+        readEnvironmentScope(member.environmentId, AuthTerminalOperateScope),
+      ),
+      model.threads,
+    );
+    const menu = folderTerminalMenu(members, {
+      newTerminal: gt("New terminal"),
+      inWorktree: gt("New terminal in worktree"),
+      projectRoot: gt("Project root"),
+      onMember: (label) => gt("New terminal on {label}", { label }),
+    });
+    const [onlyTarget] = menu.targets.values();
+    if (direct && menu.targets.size === 1 && onlyTarget) {
+      createFolderTerminal(onlyTarget);
+      return;
+    }
+    void readLocalApi()
+      ?.contextMenu.show(menu.items, position)
+      .then((clicked) => {
+        const target = clicked === null ? undefined : menu.targets.get(clicked);
+        if (target) createFolderTerminal(target);
+      });
+  };
+  const handleTerminalContextMenu = (
+    entry: FolderTerminalEntry,
+    status: FolderTerminalStatus | null,
+    position: { x: number; y: number },
+  ) => {
+    const canOperate = readEnvironmentScope(entry.environmentId, AuthTerminalOperateScope);
+    void readLocalApi()
+      ?.contextMenu.show(
+        [
+          { id: "rename", label: gt("Rename") },
+          ...(status !== null && status !== "running"
+            ? [{ id: "restart", label: gt("Restart"), disabled: !canOperate }]
+            : []),
+          {
+            id: "close",
+            label: gt("Close terminal"),
+            destructive: true,
+            disabled: !canOperate,
+            separatorBefore: true,
+          },
+        ],
+        position,
+      )
+      .then((clicked) => {
+        if (clicked === "rename") setRenamingKey(folderTerminalKey(entry));
+        else if (clicked === "restart") folderTerminalActions.restart(entry);
+        else if (clicked === "close") folderTerminalActions.close(entry);
+      });
+  };
+  const commitTerminalRename = (entry: FolderTerminalEntry, name: string) => {
+    setRenamingKey(null);
+    const trimmed = name.trim();
+    if (trimmed.length > 0 && trimmed !== entry.name) {
+      useFolderTerminalStore.getState().rename(folderTerminalKey(entry), trimmed);
+    }
+  };
+
   const startThreadInProject = (group: SidebarProjectSnapshot) => {
     if (isMobile) setOpenMobile(false);
     void handleNewThread(scopeProjectRef(group.environmentId, group.id));
@@ -400,6 +519,18 @@ export default function CabinetSidebar({ routeReveal }: { routeReveal: SidebarRo
     );
   };
 
+  const normalizedQuery = query.trim().toLowerCase();
+  // A closed folder still shows the open terminal, like the open thread.
+  const sectionTerminals = (group: SidebarProjectSnapshot, expanded: boolean) =>
+    folderTerminals.filter(
+      (entry) =>
+        group.memberProjectRefs.some(
+          (ref) => ref.environmentId === entry.environmentId && ref.projectId === entry.projectId,
+        ) &&
+        (expanded || folderTerminalKey(entry) === routeTerminalKey) &&
+        (normalizedQuery === "" || entry.name.toLowerCase().includes(normalizedQuery)),
+    );
+
   const keybindingLabel =
     shortcutLabelForCommand(keybindings, "chat.new") ??
     shortcutLabelForCommand(keybindings, "chat.newLocal");
@@ -428,30 +559,52 @@ export default function CabinetSidebar({ routeReveal }: { routeReveal: SidebarRo
         }
       >
         <div ref={attachSidebarTree} className="flex flex-col gap-0.5 pb-2" role="presentation">
-          {model.sections.map((section) => (
-            <div key={section.group.projectKey} data-testid="cabinet-project">
-              <CabinetProjectRow
-                group={section.group}
-                expanded={section.expanded}
-                threadCount={section.threadCount}
-                containsActiveThread={section.threads.some(
-                  (thread) => cabinetThreadKey(thread) === routeRowThreadKey,
-                )}
-                canPin={canPinProjectGroup(section.group)}
-                onToggle={model.toggleProject}
-                onNewThread={startThreadInProject}
-                onOpenSettings={openProjectSettings}
-                onTogglePin={toggleProjectGroupPin}
-              />
-              {section.threads.length > 0 ? (
-                <ul className="flex flex-col gap-px">
-                  {section.threads.map((thread) =>
-                    renderThreadRow(thread, section.group.projectKey),
-                  )}
-                </ul>
-              ) : null}
-            </div>
-          ))}
+          {model.sections.map((section) => {
+            const terminals = sectionTerminals(section.group, section.expanded);
+            return (
+              <div key={section.group.projectKey} data-testid="cabinet-project">
+                <CabinetProjectRow
+                  group={section.group}
+                  expanded={section.expanded}
+                  threadCount={section.threadCount}
+                  containsActiveThread={
+                    section.threads.some(
+                      (thread) => cabinetThreadKey(thread) === routeRowThreadKey,
+                    ) || terminals.some((entry) => folderTerminalKey(entry) === routeTerminalKey)
+                  }
+                  canPin={canPinProjectGroup(section.group)}
+                  onToggle={model.toggleProject}
+                  onNewThread={startThreadInProject}
+                  onNewTerminal={openNewTerminalMenu}
+                  onOpenSettings={openProjectSettings}
+                  onTogglePin={toggleProjectGroupPin}
+                />
+                {terminals.length > 0 || section.threads.length > 0 ? (
+                  <ul className="flex flex-col gap-px">
+                    {terminals.map((entry) => {
+                      const terminalKey = folderTerminalKey(entry);
+                      return (
+                        <CabinetTerminalRow
+                          key={terminalKey}
+                          entry={entry}
+                          selected={routeTerminalKey === terminalKey}
+                          parentKey={section.group.projectKey}
+                          renaming={renamingKey === terminalKey}
+                          onNavigate={navigateToFolderTerminal}
+                          onContextMenu={handleTerminalContextMenu}
+                          onCommitRename={commitTerminalRename}
+                          onCancelRename={() => setRenamingKey(null)}
+                        />
+                      );
+                    })}
+                    {section.threads.map((thread) =>
+                      renderThreadRow(thread, section.group.projectKey),
+                    )}
+                  </ul>
+                ) : null}
+              </div>
+            );
+          })}
           {model.sections.length === 0 ? (
             <p className="px-4 py-3 text-xs text-sidebar-muted-foreground">
               {query.trim() ? gt("No matching threads.") : gt("No projects yet.")}

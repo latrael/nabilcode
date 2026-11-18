@@ -1,4 +1,25 @@
-# Terminal history
+# Terminals
+
+## Folder terminals
+
+A project folder in the sidebar can hold terminals of its own, next to its
+threads, without starting a conversation. Hover the folder and choose New
+terminal, or right-click the folder. The shell starts in the project root. To
+start in a thread's worktree instead, right-click the folder and choose New
+terminal in worktree. When a folder groups the same project on several
+machines, the menu asks which machine to use.
+
+Click a terminal in the sidebar to open it in the main area, and click a thread
+to go back to chatting. Leaving a terminal, or collapsing its folder, keeps the
+shell running. Right-click a terminal to rename it, restart it after its shell
+exits, or close it. Closing ends the shell and removes the entry. Removing the
+project closes its folder terminals too.
+
+The list of folder terminals is kept in this browser or desktop app, so another
+device shows its own list. A shell does not survive its environment server
+restarting; opening the terminal again starts a new shell in the same folder.
+
+## History
 
 Each terminal keeps up to 5,000 lines and 8 MiB of scrollback on its environment
 server. T3 Code removes the oldest output when either limit is reached. A long
