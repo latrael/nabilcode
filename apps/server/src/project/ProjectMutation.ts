@@ -1,6 +1,7 @@
-import { type ProjectMutation } from "@t3tools/contracts";
+import { type ProjectMutation, projectTerminalOwnerId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
+import { type TerminalManager } from "../terminal/Manager.ts";
 import { type ProjectCloneTracker } from "./ProjectCloneTracker.ts";
 import { type ProjectService } from "./ProjectService.ts";
 
@@ -55,16 +56,30 @@ export const projectMutationOperation = Effect.fn("projectMutationOperation")(fu
   }
 });
 
-// A disconnect after deletion commits must not leave the in-memory clone record behind.
+// A disconnect after deletion commits must not leave the clone record or folder terminals behind.
 export const mutateProjectWithClone = Effect.fn("mutateProjectWithClone")(function* (
   projects: ProjectMutations,
   clones: Pick<ProjectCloneTracker["Service"], "discard">,
+  terminals: Pick<TerminalManager["Service"], "close">,
   mutation: ProjectMutation,
 ) {
   if (mutation.type !== "project.delete")
     return yield* projectMutationOperation(projects, mutation);
+  const { projectId } = mutation;
   return yield* projectMutationOperation(projects, mutation).pipe(
-    Effect.tap(() => clones.discard(mutation.projectId)),
+    Effect.tap(() => clones.discard(projectId)),
+    Effect.tap(() =>
+      terminals
+        .close({ threadId: projectTerminalOwnerId(projectId), deleteHistory: true })
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning(
+              `Failed to close folder terminals of deleted project ${projectId}.`,
+              cause,
+            ),
+          ),
+        ),
+    ),
     Effect.uninterruptible,
   );
 });

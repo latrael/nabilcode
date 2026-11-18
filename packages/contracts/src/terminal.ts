@@ -5,6 +5,11 @@ import { ProviderInstanceId } from "./providerInstance.ts";
 export const DEFAULT_TERMINAL_ID = "term-1";
 export const DEFAULT_MAX_TERMINAL_BUFFER_BYTES = 512 * 1024;
 
+/** The `threadId` of terminals a sidebar folder owns, so they need no thread. */
+export function projectTerminalOwnerId(projectId: string): string {
+  return `project:${projectId}`;
+}
+
 const historyEncoder = new TextEncoder();
 // A BOM at a retained chunk boundary is terminal data, not an encoding marker.
 const historyDecoder = new TextDecoder("utf-8", { ignoreBOM: true });

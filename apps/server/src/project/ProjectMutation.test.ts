@@ -1,5 +1,11 @@
 import { describe, expect, it } from "@effect/vitest";
-import { CommandId, type Project, ProjectId } from "@t3tools/contracts";
+import {
+  CommandId,
+  type Project,
+  ProjectId,
+  projectTerminalOwnerId,
+  type TerminalCloseInput,
+} from "@t3tools/contracts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -35,6 +41,7 @@ describe("mutateProjectWithClone", () => {
           delete: () => Effect.fail(rejected),
         },
         { discard: () => Effect.die("must not discard a project that still exists") },
+        { close: () => Effect.die("must not close terminals of a project that still exists") },
         { type: "project.delete", commandId: CommandId.make("rejected-delete"), projectId },
       ).pipe(Effect.flip);
 
@@ -42,37 +49,46 @@ describe("mutateProjectWithClone", () => {
     }),
   );
 
-  it.effect("discards the clone record even when the caller disconnects mid-delete", () =>
-    Effect.gen(function* () {
-      const committed = yield* Deferred.make<void>();
-      const finishDelete = yield* Deferred.make<void>();
-      const discarded: Array<ProjectId> = [];
-      const projects = {
-        create: () => Effect.die("unused"),
-        update: () => Effect.die("unused"),
-        // The delete event is already durable while its post-commit cleanup runs.
-        delete: () =>
-          Deferred.succeed(committed, undefined).pipe(
-            Effect.andThen(Deferred.await(finishDelete)),
-            Effect.as(deletedProject),
-          ),
-      };
-      const clones = {
-        discard: (id: ProjectId) => Effect.sync(() => void discarded.push(id)),
-      };
+  it.effect(
+    "discards the clone and folder terminals even when the caller disconnects mid-delete",
+    () =>
+      Effect.gen(function* () {
+        const committed = yield* Deferred.make<void>();
+        const finishDelete = yield* Deferred.make<void>();
+        const discarded: Array<ProjectId> = [];
+        const projects = {
+          create: () => Effect.die("unused"),
+          update: () => Effect.die("unused"),
+          // The delete event is already durable while its post-commit cleanup runs.
+          delete: () =>
+            Deferred.succeed(committed, undefined).pipe(
+              Effect.andThen(Deferred.await(finishDelete)),
+              Effect.as(deletedProject),
+            ),
+        };
+        const clones = {
+          discard: (id: ProjectId) => Effect.sync(() => void discarded.push(id)),
+        };
+        const closed: Array<TerminalCloseInput> = [];
+        const terminals = {
+          close: (input: TerminalCloseInput) => Effect.sync(() => void closed.push(input)),
+        };
 
-      const request = yield* mutateProjectWithClone(projects, clones, {
-        type: "project.delete",
-        commandId: CommandId.make("command-1"),
-        projectId,
-      }).pipe(Effect.forkChild);
-      yield* Deferred.await(committed);
-      // Delivered synchronously so it lands before the delete can finish.
-      request.interruptUnsafe();
-      yield* Deferred.succeed(finishDelete, undefined);
-      yield* Fiber.await(request);
+        const request = yield* mutateProjectWithClone(projects, clones, terminals, {
+          type: "project.delete",
+          commandId: CommandId.make("command-1"),
+          projectId,
+        }).pipe(Effect.forkChild);
+        yield* Deferred.await(committed);
+        // Delivered synchronously so it lands before the delete can finish.
+        request.interruptUnsafe();
+        yield* Deferred.succeed(finishDelete, undefined);
+        yield* Fiber.await(request);
 
-      expect(discarded).toEqual([projectId]);
-    }),
+        expect(discarded).toEqual([projectId]);
+        expect(closed).toEqual([
+          { threadId: projectTerminalOwnerId(projectId), deleteHistory: true },
+        ]);
+      }),
   );
 });

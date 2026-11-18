@@ -33,6 +33,7 @@ import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/ai";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as ProjectCloneTracker from "../../../project/ProjectCloneTracker.ts";
+import * as TerminalManager from "../../../terminal/Manager.ts";
 import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as SourceControlRepositoryService from "../../../sourceControl/SourceControlRepositoryService.ts";
@@ -108,6 +109,7 @@ const ProjectDeleteTool = Tool.make("t3_project_delete", {
     ...shared.dependencies,
     ProjectCloneTracker.ProjectCloneTracker,
     ManagedProjectFolders.ManagedProjectFolders,
+    TerminalManager.TerminalManager,
   ],
 }).annotate(Tool.Destructive, true);
 const ProjectCloneTool = Tool.make("t3_project_clone", {

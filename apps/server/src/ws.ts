@@ -1946,7 +1946,12 @@ export const layerWsRpc = (
       );
 
       const mutateProject = Effect.fn("ws.projects.mutate")(function* (mutation: ProjectMutation) {
-        return yield* mutateProjectWithClone(projectService, projectCloneTracker, mutation);
+        return yield* mutateProjectWithClone(
+          projectService,
+          projectCloneTracker,
+          terminalManager,
+          mutation,
+        );
       });
 
       const handlers = ServerWsRpcGroup.of({

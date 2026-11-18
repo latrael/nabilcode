@@ -18,6 +18,7 @@ import * as Claims from "../../../orchestration-v2/AttachmentClaims.ts";
 import * as Project from "../../../project/ProjectService.ts";
 import * as ProjectCloneTracker from "../../../project/ProjectCloneTracker.ts";
 import { mutateProjectWithClone } from "../../../project/ProjectMutation.ts";
+import * as TerminalManager from "../../../terminal/Manager.ts";
 import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.ts";
 import * as Repositories from "../../../sourceControl/SourceControlRepositoryService.ts";
 import * as GitVcsDriver from "../../../vcs/GitVcsDriver.ts";
@@ -415,7 +416,8 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
         });
       const projects = yield* Project.ProjectService;
       const clones = yield* ProjectCloneTracker.ProjectCloneTracker;
-      return yield* mutateProjectWithClone(projects, clones, {
+      const terminals = yield* TerminalManager.TerminalManager;
+      return yield* mutateProjectWithClone(projects, clones, terminals, {
         ...input,
         type: "project.delete",
         commandId: yield* newCommandId(),

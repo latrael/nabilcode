@@ -36,6 +36,7 @@ import * as ServerConfig from "../../../config.ts";
 import * as ServerSettings from "../../../serverSettings.ts";
 import * as Project from "../../../project/ProjectService.ts";
 import * as ProjectCloneTracker from "../../../project/ProjectCloneTracker.ts";
+import * as TerminalManager from "../../../terminal/Manager.ts";
 import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.ts";
 import * as PeerForwarding from "../../../peer/PeerForwarding.ts";
 import * as SourceControlProviderRegistry from "../../../sourceControl/SourceControlProviderRegistry.ts";
@@ -918,6 +919,7 @@ it.effect("deleting a project through MCP also discards its clone record", () =>
         Layer.mock(ProjectCloneTracker.ProjectCloneTracker)({
           discard: (projectId) => Effect.sync(() => void discarded.push(projectId)),
         }),
+        Layer.mock(TerminalManager.TerminalManager)({ close: () => Effect.void }),
       ),
     );
     const toolkit = yield* ProjectToolkit.pipe(
@@ -953,6 +955,7 @@ it.effect("an agent cannot delete the built-in scratch project, even with force"
             }),
         }),
         Layer.mock(ProjectCloneTracker.ProjectCloneTracker)({ discard: () => Effect.void }),
+        Layer.mock(TerminalManager.TerminalManager)({}),
       ),
     );
     const toolkit = yield* ProjectToolkit.pipe(
