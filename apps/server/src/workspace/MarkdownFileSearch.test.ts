@@ -169,6 +169,8 @@ describe("MarkdownFileSearch", () => {
               stdout: [
                 "/Users/me/Documents/notes/design.md",
                 "/Users/me/Library/Caches/design.md",
+                "/Users/me/Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault/design.md",
+                "/Users/me/Library/Mobile Documents/com~apple~CloudDocs/node_modules/design.md",
                 "/Users/me/node_modules/x/design.md",
                 "/Users/me/.config/design.md",
                 "/Users/me/Documents/design.txt",
@@ -199,6 +201,7 @@ describe("MarkdownFileSearch", () => {
         expect(result.paths).toEqual([
           "/Users/me/Documents/notes/design.md",
           "/Users/me/Documents/b/Design Review.md",
+          "/Users/me/Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault/design.md",
         ]);
       }).pipe(Effect.provide(NodeServices.layer)),
     );

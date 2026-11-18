@@ -99,7 +99,9 @@ function parseMdfindOutput(
     if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
       continue;
     }
-    const folders = toSlashes(relativePath).split("/").slice(0, -1);
+    let folders = toSlashes(relativePath).split("/").slice(0, -1);
+    // iCloud Drive (and Obsidian iCloud vaults) live under Library, which is otherwise excluded.
+    if (folders[0] === "Library" && folders[1] === "Mobile Documents") folders = folders.slice(2);
     if (folders.some(isExcludedFolderName) || !matchesQuery(relativePath, loweredQuery)) continue;
     paths.push(line);
   }
