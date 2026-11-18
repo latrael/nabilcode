@@ -938,6 +938,22 @@ describe("returning from file and content search", () => {
     },
   );
 
+  it("a file picker opened for the whole computer keeps that scope only until it closes", () => {
+    const child = reduceCommandPaletteUiState(root, {
+      _tag: "OpenChildSearch",
+      mode: "files",
+      context,
+      filesScope: "computer",
+    });
+    expect(child.filesScope).toBe("computer");
+    expect(
+      reduceCommandPaletteUiState(child, { _tag: "BackToCommand" }).filesScope,
+    ).toBeUndefined();
+    expect(
+      reduceCommandPaletteUiState(child, { _tag: "ToggleMode", mode: "content" }).filesScope,
+    ).toBeUndefined();
+  });
+
   it("closing a child search discards its return context before reopening", () => {
     const child: CommandPaletteUiState = { ...root, mode: "files", parentSearch: context };
     const closed = reduceCommandPaletteUiState(child, { _tag: "SetOpen", open: false });

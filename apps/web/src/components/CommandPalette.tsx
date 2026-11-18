@@ -63,6 +63,7 @@ import {
   ChevronRightIcon,
   CornerLeftUpIcon,
   FileSearchIcon,
+  FileTextIcon,
   FolderGit2Icon,
   FolderIcon,
   FolderPlusIcon,
@@ -316,8 +317,17 @@ export function CommandPalette({ children }: { children: ReactNode }) {
   useCommandPaletteMount();
   const state = useCommandPaletteStore();
   const setOpen = (open: boolean) => dispatchCommandPalette({ _tag: "SetOpen", open });
-  const openChildSearch = (mode: "files" | "content", context: CommandPaletteReturnContext) =>
-    dispatchCommandPalette({ _tag: "OpenChildSearch", mode, context });
+  const openChildSearch = (
+    mode: "files" | "content",
+    context: CommandPaletteReturnContext,
+    filesScope?: "computer",
+  ) =>
+    dispatchCommandPalette({
+      _tag: "OpenChildSearch",
+      mode,
+      context,
+      ...(filesScope ? { filesScope } : {}),
+    });
   const composerHandleRef = useRef<ChatComposerHandle | null>(null);
 
   return (
@@ -344,6 +354,7 @@ export function CommandPalette({ children }: { children: ReactNode }) {
           setOpen={setOpen}
           openChildSearch={openChildSearch}
           initialContext={state.restoredSearch}
+          filesScope={state.filesScope}
         />
       </CommandDialog>
     </ComposerHandleContext>
@@ -358,8 +369,10 @@ function CommandPaletteDialog(props: {
   readonly openChildSearch: (
     mode: "files" | "content",
     context: CommandPaletteReturnContext,
+    filesScope?: "computer",
   ) => void;
   readonly initialContext: CommandPaletteReturnContext | undefined;
+  readonly filesScope: "computer" | undefined;
 }) {
   const composerHandleRef = useComposerHandleContext();
 
@@ -391,7 +404,7 @@ function CommandPaletteDialog(props: {
       }}
     >
       {props.mode === "files" ? (
-        <ProjectFilePicker setOpen={props.setOpen} />
+        <ProjectFilePicker initialScope={props.filesScope} setOpen={props.setOpen} />
       ) : props.mode === "content" ? (
         <ProjectContentSearchDialog onOpenChange={props.setOpen} />
       ) : (
@@ -413,6 +426,7 @@ function OpenCommandPaletteDialog(props: {
   readonly openChildSearch: (
     mode: "files" | "content",
     context: CommandPaletteReturnContext,
+    filesScope?: "computer",
   ) => void;
   readonly initialContext: CommandPaletteReturnContext | undefined;
 }) {
@@ -1551,6 +1565,18 @@ function OpenCommandPaletteDialog(props: {
     shortcutCommand: "filePicker.toggle",
     run: async () => {
       openChildSearch("files", { query, linkedThreadSearch });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:open-markdown-file",
+    searchTerms: ["markdown", "md", "open markdown", "notes", "document", "docs", "readme"],
+    title: "Open Markdown file…",
+    icon: <FileTextIcon className={ITEM_ICON_CLASS} />,
+    keepOpen: true,
+    run: async () => {
+      openChildSearch("files", { query, linkedThreadSearch }, "computer");
     },
   });
 

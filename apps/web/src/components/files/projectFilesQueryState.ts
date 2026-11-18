@@ -209,11 +209,14 @@ export function useProjectEntriesQuery(
   };
 }
 
-/** Empty queries return frecency-ranked files without transferring the full workspace listing. */
+/**
+ * Empty queries return frecency-ranked files without transferring the full workspace listing.
+ * A null query searches nothing.
+ */
 export function useProjectFilePickerQuery(
   environmentId: EnvironmentId,
   cwd: string,
-  query: string,
+  query: string | null,
   limit: number,
   options?: { readonly imageOnly?: boolean },
 ) {

@@ -91,6 +91,8 @@ export interface CommandPaletteUiState {
   readonly session: number;
   readonly parentSearch?: CommandPaletteReturnContext;
   readonly restoredSearch?: CommandPaletteReturnContext;
+  /** Set when the file picker opens already searching the whole computer. */
+  readonly filesScope?: "computer";
 }
 
 export type CommandPaletteUiAction =
@@ -108,6 +110,7 @@ export type CommandPaletteUiAction =
       readonly _tag: "OpenChildSearch";
       readonly mode: "files" | "content";
       readonly context: CommandPaletteReturnContext;
+      readonly filesScope?: "computer";
     }
   | { readonly _tag: "BackToCommand" };
 
@@ -138,6 +141,7 @@ export function reduceCommandPaletteUiState(
         openIntent: null,
         session,
         parentSearch: action.context,
+        ...(action.filesScope ? { filesScope: action.filesScope } : {}),
       };
     case "BackToCommand":
       return state.open && state.mode !== "command"
