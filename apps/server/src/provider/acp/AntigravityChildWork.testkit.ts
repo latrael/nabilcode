@@ -25,7 +25,7 @@ const field = (number: number, value: string | Uint8Array) => {
   return [...varint(number * 8 + 2), ...varint(bytes.length), ...bytes];
 };
 const proto = (...parts: number[][]) => Uint8Array.from(parts.flat());
-const toolCall = (id: string) => proto(field(1, id), field(2, "invoke_subagent"));
+const toolCall = (id: string, name = "invoke_subagent") => proto(field(1, id), field(2, name));
 
 export const invokeStep = (input: {
   readonly callId: string;
@@ -47,6 +47,33 @@ export const invokeStep = (input: {
       ),
     ),
   );
+export const invokeStep155 = (
+  logUri: string,
+  childId = CHILD,
+  callId = "call-155",
+  toolName = "invoke_subagent",
+) =>
+  proto(
+    field(5, proto(field(4, toolCall(callId, toolName)))),
+    field(
+      140,
+      proto(
+        ...Object.entries({ TypeName: "teamwork", Role: LAUNCH.role, Prompt: LAUNCH.prompt }).map(
+          ([key, value]) => field(1, proto(field(1, key), field(2, value))),
+        ),
+        field(
+          2,
+          proto(
+            field(
+              1,
+              `Created the following subagent:\n${JSON.stringify({ conversationId: childId, logAbsoluteUri: logUri, workspaceUris: [] })}\nThe subagent will send you a message.`,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
 export const plannerStep = (callIds: ReadonlyArray<string>) =>
   proto(field(20, proto(...callIds.map((id) => field(7, toolCall(id))))));
 

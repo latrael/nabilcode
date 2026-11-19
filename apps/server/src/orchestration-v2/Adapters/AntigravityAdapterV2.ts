@@ -30,8 +30,10 @@ import {
 import {
   ANTIGRAVITY_SUBAGENT_BATCH_TITLE,
   antigravitySubagentLaunches,
+  antigravitySubagentResults,
   describeAntigravitySubagentLaunches,
 } from "../../provider/acp/AntigravityChildWork.ts";
+import { watchAntigravitySubagents } from "../../provider/acp/AntigravitySubagentMonitor.ts";
 import { readAntigravityClientTextFile } from "../../provider/acp/AntigravityClientFiles.ts";
 import { watchAntigravityPromptOutcome } from "../../provider/acp/AntigravityTurnOutcome.ts";
 import {
@@ -94,21 +96,34 @@ export interface AntigravityAdapterV2Options {
   readonly profileDirectory?: string;
 }
 
-/**
- * Native subagent tools report no child session ids, so children stay read-only.
- * Only permission prompts carry the launch; NativeChildWorkQuery matches their ids by this text.
- */
+/** Legacy batches lack child IDs; current invocations carry asynchronous single-child launches. */
 const extractAntigravitySubagentUpdate: NonNullable<AcpAdapterV2Flavor["extractSubagentUpdate"]> = (
   toolCall,
 ) => {
   if (classifyAntigravitySubagentToolCall(toolCall) !== "subagent") {
     return undefined;
   }
+  const args = toolCall.data.rawInput;
+  if (
+    /swarm\??$/.test(toolCall.title ?? "") &&
+    (typeof args !== "object" ||
+      args === null ||
+      !("action" in args ? args.action === "add" : "Action" in args && args.Action === "add"))
+  )
+    return undefined;
   const status =
     toolCall.status === "failed" ? "failed" : toolCall.status === "pending" ? "pending" : "running";
   const launches = antigravitySubagentLaunches(toolCall.data.rawInput);
   const launch = launches === undefined ? undefined : describeAntigravitySubagentLaunches(launches);
+  const children = antigravitySubagentResults(toolCall.data.rawOutput);
+  const asynchronous =
+    children.length === 1 ||
+    (typeof args === "object" &&
+      args !== null &&
+      !("Subagents" in args) &&
+      (launches !== undefined || /swarm\??$/.test(toolCall.title ?? "")));
   return {
+    ...(asynchronous ? { continuesAfterParentTurn: true as const } : {}),
     nativeTaskId: toolCall.toolCallId,
     prompt:
       launch?.prompt ??
@@ -117,9 +132,9 @@ const extractAntigravitySubagentUpdate: NonNullable<AcpAdapterV2Flavor["extractS
       toolCall.title ??
       ANTIGRAVITY_SUBAGENT_BATCH_TITLE,
     title: launch?.title ?? ANTIGRAVITY_SUBAGENT_BATCH_TITLE,
-    model: null,
+    model: launches?.length === 1 ? (launches[0]?.model ?? null) : null,
     status,
-    childSessionId: null,
+    childSessionId: children.length === 1 ? children[0]!.conversationId : null,
     result: status === "failed" ? (antigravitySubagentOutput(toolCall) ?? null) : null,
   };
 };
@@ -234,7 +249,7 @@ export function makeAntigravityAcpAdapterFlavor(
         Effect.provideService(FileSystem.FileSystem, options.fileSystem),
         Effect.provideService(Path.Path, options.path),
       ),
-    // Loading history replays tool calls; resume avoids replay.
+    // Legacy batches lack live child identities; known asynchronous children settle themselves.
     subagentsIdleOnTurnCompletion: true,
     ...(options.onSessionEvent === undefined ? {} : { onSessionEvent: options.onSessionEvent }),
     applyModelSelection: Effect.fn("AntigravityAdapterV2.applyModelSelection")(function* ({
@@ -284,6 +299,8 @@ export function makeAntigravityAcpAdapterFlavor(
     ...(profileDirectory === undefined
       ? {}
       : {
+          watchNativeSubagents: ({ sessionId, publish }) =>
+            watchAntigravitySubagents({ profileDirectory, sessionId, publish }),
           watchPromptOutcome: (sessionId: string) =>
             watchAntigravityPromptOutcome(profileDirectory, sessionId),
         }),

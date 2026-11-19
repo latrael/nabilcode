@@ -18,6 +18,7 @@ import {
   autoApproved,
   CHILD,
   invokeStep,
+  invokeStep155,
   LAUNCH,
   makeProfile,
   plannerStep,
@@ -65,6 +66,24 @@ it.layer(NodeServices.layer)("readAntigravityChildWork", (it) => {
         "marker 4242 found",
       ]);
       expect(child?.steps?.[0]?.toolCalls[0]?.input).toBe('{"AbsolutePath":"/project/README.md"}');
+    }),
+  );
+
+  it.effect("reads a 1.5.5 generic invocation by its native call id", () =>
+    Effect.gen(function* () {
+      const { profile } = yield* makeProfile({
+        steps: (uri) => [
+          [1, 15, plannerStep(["call-155"])],
+          [2, 132, invokeStep155(uri)],
+        ],
+      });
+      const [child] = yield* read(
+        profile,
+        "call-155",
+        describeAntigravitySubagentLaunches([LAUNCH]),
+      );
+      expect(child?.conversationId).toBe(CHILD);
+      expect(child?.steps?.at(-1)?.text).toBe("marker 4242 found");
     }),
   );
 

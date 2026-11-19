@@ -67,7 +67,7 @@ function permissionRequest(
 }
 
 describe("AntigravityAdapterV2 flavor", () => {
-  it("keeps a successful subagent launch running until the parent turn becomes idle", () => {
+  it("keeps asynchronous children running and retains legacy batch settlement", () => {
     const batch = flavor.extractSubagentUpdate?.({
       toolCallId: "trajectory:4",
       title: "Running start_subagent",
@@ -94,6 +94,46 @@ describe("AntigravityAdapterV2 flavor", () => {
     });
     assert.equal(launch?.title, "Readme Reader");
     assert.equal(launch?.prompt, "Read README.md");
+    const single = flavor.extractSubagentUpdate?.({
+      toolCallId: "call-155",
+      title: "Run invoke_subagent",
+      kind: "other",
+      status: "completed",
+      data: {
+        rawInput: {
+          TypeName: "teamwork",
+          Role: "Coordinator",
+          Prompt: "Review the project",
+          Model: "gemini-test",
+        },
+        rawOutput:
+          'Created the following subagent:\n{"conversationId":"child-155","logAbsoluteUri":"file:///profile/child-155/transcript.jsonl","workspaceUris":[]}',
+      },
+    });
+    assert.equal(single?.title, "Coordinator");
+    assert.equal(single?.prompt, "Review the project");
+    assert.equal(single?.model, "gemini-test");
+    assert.equal(single?.childSessionId, "child-155");
+    assert.equal(single?.status, "running");
+    assert.isTrue(single?.continuesAfterParentTurn);
+    const swarm = flavor.extractSubagentUpdate?.({
+      toolCallId: "swarm-add",
+      title: "Run swarm",
+      kind: "other",
+      status: "completed",
+      data: { rawInput: { action: "add", role: "Verifier", prompt: "Check the changes" } },
+    });
+    assert.equal(swarm?.title, "Verifier");
+    assert.isTrue(swarm?.continuesAfterParentTurn);
+    assert.isUndefined(
+      flavor.extractSubagentUpdate?.({
+        toolCallId: "swarm-status",
+        title: "Run swarm",
+        kind: "other",
+        status: "completed",
+        data: { rawInput: { action: "status" }, rawOutput: "No workers" },
+      }),
+    );
   });
 
   it("routes interaction_* permission requests to the question card", () => {

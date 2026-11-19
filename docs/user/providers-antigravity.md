@@ -115,13 +115,13 @@ saved file path for the agent to inspect with its tools.
 
 ### Subagents
 
-Antigravity groups subagent activity into batches. Open a batch and select
-**Subagent work** (**Work** on mobile) to read each child's role, prompt, and recent steps. This view
-is read only: you cannot message or control individual subagents, and an idle
-batch does not confirm that every child succeeded. If Antigravity did not record
-which children a batch started, the view says so. See
-[agent work](./thread-sidebar.md#inspect-agent-work) for where to inspect
-activity.
+Antigravity subagents appear as read-only child threads with live activity, including nested
+`/teamwork` runs and swarm workers. A child can keep working after its parent's turn ends.
+An idle child is waiting for more work; it does not by itself confirm that every task succeeded.
+
+For older batch-style history, open the batch and select **Subagent work** to read the children's
+roles, prompts, and recent steps. You cannot message or control individual native children from
+these views. See [agent work](./thread-sidebar.md#inspect-agent-work) for where to inspect activity.
 
 ## Accounts and removal
 

@@ -91,6 +91,7 @@ import {
   type AcpAdapterV2Flavor,
   type AcpAdapterV2RuntimeInput,
   type AcpAdapterV2SubagentUpdate,
+  type AcpNativeSubagentEvent,
 } from "@t3tools/provider-acp/server/adapter";
 
 import { appendUserInputAttachmentPaths } from "../../provider/userInputAttachments.ts";
@@ -1109,6 +1110,181 @@ const optionValues = (question: OrchestrationV2UserInputQuestion | undefined) =>
 
 describe("AcpAdapterV2", () => {
   beforeAll(() => bundleAgents);
+
+  it.live("projects native-file subagents and their nested work after the parent turn ends", () =>
+    Effect.gen(function* () {
+      const instanceId = ProviderInstanceId.make("native-file-children");
+      const threadId = ThreadId.make("native-file-parent");
+      const ready = yield* Deferred.make<{
+        readonly sessionId: string;
+        readonly publish: (event: AcpNativeSubagentEvent) => Effect.Effect<void>;
+      }>();
+      const rootTask = {
+        nativeTaskId: "call-parent",
+        childSessionId: null,
+        prompt: "Coordinate the work",
+        title: "Coordinator",
+        status: "running",
+        model: null,
+        result: null,
+      } as const;
+      let launched = false;
+      const adapter = yield* makeAcpAdapterV2({
+        instanceId,
+        selfInvocation: yield* resolveSelfInvocation(),
+        flavor: {
+          driver: ACP_TEST_DRIVER,
+          capabilities: AcpProviderCapabilitiesV2,
+          subagentsIdleOnTurnCompletion: true,
+          watchNativeSubagents: (watch) => Deferred.succeed(ready, watch).pipe(Effect.asVoid),
+          makeRuntime: makeMockRuntime({
+            childProcessSpawner: yield* ChildProcessSpawner.ChildProcessSpawner,
+            mockAgentPath: yield* bundledMockAgentPath,
+            wrapRuntime: (runtime) => ({
+              ...runtime,
+              prompt: () =>
+                Effect.gen(function* () {
+                  const { sessionId, publish } = yield* Deferred.await(ready);
+                  if (!launched) {
+                    launched = true;
+                    yield* publish({
+                      type: "subagent",
+                      parentSessionId: sessionId,
+                      update: rootTask,
+                    });
+                  }
+                  return { stopReason: "end_turn" as const };
+                }),
+            }),
+          }),
+        },
+      });
+      const runtimePolicy = ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        cwd: process.cwd(),
+      });
+      const modelSelection = { instanceId, model: "default" } as const;
+      const runtime = yield* adapter.openSession({
+        threadId,
+        providerSessionId: ProviderSessionId.make("native-file-session"),
+        modelSelection,
+        runtimePolicy,
+      });
+      const providerThread = yield* runtime.ensureThread({
+        threadId,
+        modelSelection,
+        runtimePolicy,
+      });
+      yield* runtime.startTurn(
+        makeTurnInput({
+          threadId,
+          providerThread,
+          instanceId,
+          runtimePolicy,
+          now: yield* DateTime.now,
+        }),
+      );
+      const rootEvents = yield* runtime.events.pipe(
+        Stream.takeUntil((event) => event.type === "turn.terminal"),
+        Stream.runCollect,
+      );
+      const coordinator = rootEvents.find((event) => event.type === "app_thread.created");
+      assert.equal(coordinator?.type, "app_thread.created");
+      if (coordinator?.type !== "app_thread.created")
+        return assert.fail("missing coordinator thread");
+      assert.isFalse(
+        rootEvents.some(
+          (event) => event.type === "subagent.updated" && event.subagent.status === "idle",
+        ),
+      );
+      const { sessionId, publish } = yield* Deferred.await(ready);
+      yield* publish({
+        type: "subagent",
+        parentSessionId: sessionId,
+        update: { ...rootTask, childSessionId: "native-coordinator" },
+      });
+      const nested = {
+        ...rootTask,
+        nativeTaskId: "call-worker",
+        childSessionId: "native-worker",
+        title: "Worker",
+        prompt: "Run the tests",
+      };
+      yield* publish({ type: "subagent", parentSessionId: "native-coordinator", update: nested });
+      const nestedEvents = yield* runtime.events.pipe(
+        Stream.takeUntil(
+          (event) =>
+            event.type === "turn_item.updated" &&
+            event.turnItem.type === "subagent" &&
+            event.turnItem.nativeItemRef?.nativeId === "call-worker",
+        ),
+        Stream.runCollect,
+      );
+      const worker = nestedEvents.find((event) => event.type === "app_thread.created");
+      assert.equal(worker?.type, "app_thread.created");
+      if (worker?.type !== "app_thread.created") return assert.fail("missing worker thread");
+      assert.equal(worker.appThread.lineage.parentThreadId, coordinator.appThread.id);
+      const task = nestedEvents.find(
+        (event) =>
+          event.type === "subagent.updated" &&
+          event.subagent.nativeTaskRef?.nativeId === "call-worker",
+      );
+      assert.equal(
+        task?.type === "subagent.updated" ? task.subagent.threadId : null,
+        coordinator.appThread.id,
+      );
+      assert.isNull(task?.type === "subagent.updated" ? task.subagent.runId : undefined);
+
+      yield* runtime.startTurn(
+        makeTurnInput({
+          threadId,
+          providerThread,
+          instanceId,
+          runtimePolicy,
+          now: yield* DateTime.now,
+          ordinal: 2,
+        }),
+      );
+      const secondTurn = yield* runtime.events.pipe(
+        Stream.takeUntil((event) => event.type === "turn.terminal"),
+        Stream.runCollect,
+      );
+      assert.isFalse(secondTurn.some((event) => event.type === "subagent.updated"));
+      yield* publish({
+        type: "session",
+        notification: {
+          sessionId: "native-worker",
+          update: {
+            sessionUpdate: "agent_message",
+            messageId: "worker-final",
+            content: [{ type: "text", text: "All tests passed" }],
+          },
+        },
+      });
+      const message = yield* runtime.events.pipe(
+        Stream.filter((event) => event.type === "message.updated"),
+        Stream.runHead,
+      );
+      assert.isTrue(Option.isSome(message));
+      if (Option.isNone(message) || message.value.type !== "message.updated")
+        return assert.fail("missing worker output");
+      assert.equal(message.value.message.threadId, worker.appThread.id);
+      assert.equal(message.value.message.text, "All tests passed");
+      yield* publish({
+        type: "subagent",
+        parentSessionId: "native-coordinator",
+        update: { ...nested, status: "cancelled" },
+      });
+      const killed = yield* runtime.events.pipe(
+        Stream.filter(
+          (event) => event.type === "subagent.updated" && event.subagent.status === "cancelled",
+        ),
+        Stream.runHead,
+      );
+      assert.isTrue(Option.isSome(killed));
+    }).pipe(Effect.provide(layerTest)),
+  );
 
   it.live("keeps a completed tool's status when its linked ACP terminal streams output", () =>
     Effect.gen(function* () {

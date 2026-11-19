@@ -31,6 +31,9 @@ describe("native Antigravity subagent tools", () => {
       "Run start_subagent?",
       "Running invoke_subagent",
       "Run invoke_subagent?",
+      "Run invoke_subagent",
+      "Run start_subagent",
+      "Run swarm",
     ]) {
       expect(classifyAntigravitySubagentToolCall({ ...toolCall, title }, {})).toBe("subagent");
       expect(

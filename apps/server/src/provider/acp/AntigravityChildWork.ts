@@ -42,7 +42,15 @@ export const ANTIGRAVITY_SUBAGENT_BATCH_TITLE = "Antigravity subagent batch";
 interface AntigravityChildLaunch {
   readonly role: string;
   readonly prompt: string;
+  readonly model?: string;
 }
+
+const SingleLaunch = Schema.Struct({
+  Role: Schema.String,
+  Prompt: Schema.String,
+  Model: Schema.optionalKey(Schema.String),
+});
+const decodeSingleLaunch = Schema.decodeUnknownOption(SingleLaunch);
 
 const decodeLaunchInput = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -54,6 +62,25 @@ const decodeLaunchInput = Schema.decodeUnknownOption(
 export function antigravitySubagentLaunches(
   input: unknown,
 ): ReadonlyArray<AntigravityChildLaunch> | undefined {
+  const single = decodeSingleLaunch(
+    Predicate.isObject(input)
+      ? {
+          Role: input.Role ?? input.role,
+          Prompt: input.Prompt ?? input.prompt,
+          ...(input.Model === undefined && input.model === undefined
+            ? {}
+            : { Model: input.Model ?? input.model }),
+        }
+      : input,
+  );
+  if (Option.isSome(single))
+    return [
+      {
+        role: single.value.Role,
+        prompt: single.value.Prompt,
+        ...(single.value.Model === undefined ? {} : { model: single.value.Model }),
+      },
+    ];
   return Option.getOrUndefined(
     Option.map(decodeLaunchInput(input), (decoded) =>
       decoded.Subagents.map((entry) => ({ role: entry.Role, prompt: entry.Prompt })),
@@ -136,9 +163,75 @@ const safely =
     }
   };
 
+const CreatedChild = Schema.Struct({
+  conversationId: Schema.String,
+  logAbsoluteUri: Schema.String,
+});
+const decodeCreatedChild = Schema.decodeUnknownOption(CreatedChild);
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
+
+export function antigravitySubagentResults(output: unknown): InvokeRecord["children"] {
+  const values: unknown[] = [];
+  if (typeof output !== "string") values.push(...(Array.isArray(output) ? output : [output]));
+  else {
+    let start = -1;
+    let depth = 0;
+    let quoted = false;
+    let escaped = false;
+    for (let index = 0; index < output.length; index += 1) {
+      const char = output[index];
+      if (depth === 0) {
+        if (char === "{") {
+          start = index;
+          depth = 1;
+        }
+        continue;
+      }
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') quoted = false;
+      } else if (char === '"') quoted = true;
+      else if (char === "{") depth += 1;
+      else if (char === "}" && --depth === 0) {
+        const value = decodeJson(output.slice(start, index + 1));
+        if (Option.isSome(value)) values.push(value.value);
+      }
+    }
+  }
+  return values.flatMap((value) => {
+    const decoded = decodeCreatedChild(value);
+    return Option.isSome(decoded) && NATIVE_ID.test(decoded.value.conversationId)
+      ? [{ conversationId: decoded.value.conversationId, logUri: decoded.value.logAbsoluteUri }]
+      : [];
+  });
+}
+
 const decodeInvokeRecord = safely((payload): InvokeRecord | undefined => {
   const invoke = message(payload, STEP_INVOKE_SUBAGENT);
-  if (invoke === undefined) return undefined;
+  if (invoke === undefined) {
+    const generic = message(payload, 140);
+    const call = message(message(payload, STEP_METADATA), METADATA_TOOL_CALL);
+    if (
+      generic === undefined ||
+      !["invoke_subagent", "start_subagent", "swarm"].includes(text(call, 2) ?? "")
+    )
+      return undefined;
+    const args = Object.fromEntries(
+      messages(generic, 1).flatMap((entry) => {
+        const key = text(entry, 1);
+        return key === undefined ? [] : [[key, text(entry, 2) ?? ""]];
+      }),
+    );
+    const launches = antigravitySubagentLaunches(args);
+    const children = antigravitySubagentResults(text(message(generic, 2), 1));
+    if (children.length === 0) return undefined;
+    return {
+      toolCallId: text(call, 1),
+      launches: launches ?? children.map(() => ({ role: "", prompt: "" })),
+      children,
+    };
+  }
   const children = messages(invoke, INVOKE_RESULTS).map((result) => ({
     conversationId: text(result, 1) ?? "",
     logUri: text(result, 2) ?? "",
@@ -201,6 +294,19 @@ function findInvokeRecord(
     readonly siblings: ReadonlyArray<BatchLaunch & { readonly nativeTaskId: string }>;
   },
 ): InvokeRecord | undefined {
+  let scannedBytes = 0;
+  for (const row of database
+    .prepare(
+      "SELECT length(step_payload) AS size, CASE WHEN length(step_payload) <= ? THEN step_payload END AS step_payload FROM steps WHERE step_type = 132 AND step_format = 0 ORDER BY idx DESC LIMIT ?",
+    )
+    .iterate(MAX_STEP_BYTES, MAX_INVOKE_ROWS)) {
+    const size = row !== null && typeof row === "object" && "size" in row ? Number(row.size) : 0;
+    scannedBytes += size;
+    if (size > MAX_STEP_BYTES || scannedBytes > MAX_SCAN_BYTES) return undefined;
+    const payload = payloadOf(row);
+    const record = payload === undefined ? undefined : decodeInvokeRecord(payload);
+    if (record?.toolCallId === input.nativeTaskId) return complete(record);
+  }
   const plannerIdxOf = (nativeTaskId: string) => {
     const stepId = /^(.+):(\d+)$/.exec(nativeTaskId);
     return stepId === null ? undefined : stepId[1] === input.rootSessionId ? Number(stepId[2]) : -1;
@@ -416,6 +522,49 @@ class AntigravityChildWorkReadError extends Schema.TaggedError<AntigravityChildW
     return "Could not read Antigravity subagent records.";
   }
 }
+
+export const readAntigravitySubagentRecord = Effect.fn("AntigravityChildWork.readRecord")(
+  function* (input: {
+    readonly profileDirectory: string;
+    readonly sessionId: string;
+    readonly stepIndex: number;
+  }) {
+    if (
+      !NATIVE_ID.test(input.sessionId) ||
+      !Number.isSafeInteger(input.stepIndex) ||
+      input.stepIndex < 0
+    )
+      return undefined;
+    return yield* Effect.tryPromise({
+      try: async () => {
+        const root = await antigravityProfileRoot(input.profileDirectory);
+        const file =
+          root === undefined
+            ? undefined
+            : await antigravityManagedPath(
+                root,
+                ["antigravity-acp", "conversations", `${input.sessionId}.db`],
+                "file",
+              );
+        if (file === undefined) return undefined;
+        const db = new NodeSqlite.DatabaseSync(file.path, { readOnly: true });
+        try {
+          const payload = payloadOf(
+            db
+              .prepare(
+                "SELECT step_payload FROM steps WHERE idx = ? AND step_type IN (127,132) AND step_format = 0 AND length(step_payload) <= ?",
+              )
+              .get(input.stepIndex, MAX_STEP_BYTES),
+          );
+          return payload === undefined ? undefined : decodeInvokeRecord(payload);
+        } finally {
+          db.close();
+        }
+      },
+      catch: (cause) => new AntigravityChildWorkReadError({ cause }),
+    }).pipe(Effect.orElseSucceed(() => undefined));
+  },
+);
 
 /** Children a subagent tool call launched, proven by the parent's own session record. */
 export const readAntigravityChildWork = Effect.fn("readAntigravityChildWork")(function* (input: {

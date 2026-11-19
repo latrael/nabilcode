@@ -485,6 +485,11 @@ const ANTIGRAVITY_SUBAGENT_TITLES = new Set([
   "Run start_subagent?",
   "Running invoke_subagent",
   "Run invoke_subagent?",
+  "Run invoke_subagent",
+  "Run start_subagent",
+  "Running swarm",
+  "Run swarm?",
+  "Run swarm",
 ]);
 
 /** The ACP agent reports subagent calls as ordinary tools without child IDs or models. */
