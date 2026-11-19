@@ -51,9 +51,15 @@ export function workspaceAssetResource(input: {
   readonly draft: boolean;
   readonly workspaceRoot: string;
   readonly absolutePath: string;
+  readonly htmlPreview?: boolean;
 }): AssetResource {
   if (input.draft) {
-    return { _tag: "draft-workspace-file", cwd: input.workspaceRoot, path: input.absolutePath };
+    return {
+      _tag: "draft-workspace-file",
+      cwd: input.workspaceRoot,
+      path: input.absolutePath,
+      ...(input.htmlPreview ? { htmlPreview: true } : {}),
+    };
   }
   const insideWorkspace =
     mediaFileReference(input.absolutePath, input.workspaceRoot).relativePath !== undefined;
@@ -61,5 +67,6 @@ export function workspaceAssetResource(input: {
     _tag: insideWorkspace ? input.kind : "media-file",
     threadId: input.threadRef.threadId,
     path: input.absolutePath,
+    ...(!insideWorkspace && input.htmlPreview ? { htmlPreview: true as const } : {}),
   };
 }

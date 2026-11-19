@@ -31,6 +31,13 @@ export type FilesystemGetMetadataResult = typeof FilesystemGetMetadataResult.Typ
 const FILESYSTEM_SEARCH_MARKDOWN_MAX_LIMIT = 100;
 
 export const FilesystemSearchMarkdownInput = Schema.Struct({
+  // Omitted by older clients, which search only Markdown.
+  extensions: Schema.optionalKey(
+    Schema.Array(Schema.Literals([".md", ".markdown", ".pdf", ".html", ".htm"])).check(
+      Schema.isMinLength(1),
+      Schema.isMaxLength(5),
+    ),
+  ),
   query: Schema.String.check(Schema.isMaxLength(FILESYSTEM_PATH_MAX_LENGTH)),
   limit: Schema.Int.check(
     Schema.isGreaterThanOrEqualTo(1),

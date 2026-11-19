@@ -24,14 +24,14 @@ export class MarkdownFileSearchReadHomeError extends Schema.TaggedError<Markdown
   },
 ) {
   override get message(): string {
-    return `Failed to read the home folder '${this.homeDirectory}' while searching for Markdown files.`;
+    return `Failed to read the home folder '${this.homeDirectory}' while searching for documents.`;
   }
 }
 
 export class MarkdownFileSearch extends Context.Service<
   MarkdownFileSearch,
   {
-    /** Filename and path search for Markdown files under the home folder. */
+    /** Filename and path search under the home folder; defaults to Markdown for older clients. */
     readonly search: (
       input: FilesystemSearchMarkdownInput,
     ) => Effect.Effect<FilesystemSearchMarkdownResult, MarkdownFileSearchReadHomeError>;
@@ -59,9 +59,9 @@ const MDFIND_MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 
 const WALK_BOUNDS = { maxDepth: 8, maxEntries: 100_000, maxMillis: 4_000 };
 
-const isMarkdownFileName = (name: string) => {
+const matchesExtension = (name: string, extensions: ReadonlyArray<string>) => {
   const lower = name.toLowerCase();
-  return MARKDOWN_EXTENSIONS.some((extension) => lower.endsWith(extension));
+  return extensions.some((extension) => lower.endsWith(extension));
 };
 
 const isExcludedFolderName = (name: string) =>
@@ -70,12 +70,16 @@ const isExcludedFolderName = (name: string) =>
 const toSlashes = (value: string) => value.replaceAll("\\", "/");
 
 /** Spotlight's query language: quote the name fragment and drop wildcards. */
-export function buildMdfindArgs(homeDirectory: string, query: string): ReadonlyArray<string> {
+export function buildMdfindArgs(
+  homeDirectory: string,
+  query: string,
+  fileExtensions: ReadonlyArray<string> = MARKDOWN_EXTENSIONS,
+): ReadonlyArray<string> {
   const nameFragment = toSlashes(query.trim()).split("/").at(-1) ?? "";
   const escaped = nameFragment.replaceAll("*", "").replaceAll("\\", "\\\\").replaceAll('"', '\\"');
-  const extensions = MARKDOWN_EXTENSIONS.map(
-    (extension) => `kMDItemFSName == "*${extension}"c`,
-  ).join(" || ");
+  const extensions = fileExtensions
+    .map((extension) => `kMDItemFSName == "*${extension}"c`)
+    .join(" || ");
   const predicate =
     escaped === "" ? `(${extensions})` : `kMDItemFSName == "*${escaped}*"c && (${extensions})`;
   return ["-onlyin", homeDirectory, predicate];
@@ -90,11 +94,12 @@ function parseMdfindOutput(
   homeDirectory: string,
   query: string,
   path: Path.Path,
+  extensions: ReadonlyArray<string>,
 ): ReadonlyArray<string> {
   const loweredQuery = toSlashes(query.trim()).toLowerCase();
   const paths: Array<string> = [];
   for (const line of stdout.split("\n")) {
-    if (line === "" || !path.isAbsolute(line) || !isMarkdownFileName(line)) continue;
+    if (line === "" || !path.isAbsolute(line) || !matchesExtension(line, extensions)) continue;
     const relativePath = path.relative(homeDirectory, line);
     if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
       continue;
@@ -135,6 +140,7 @@ export const walkForMarkdownFiles = Effect.fn("MarkdownFileSearch.walk")(functio
   readonly query: string;
   readonly stopAfter: number;
   readonly bounds: WalkBounds;
+  readonly extensions?: ReadonlyArray<string>;
 }): Effect.fn.Return<ReadonlyArray<string>, MarkdownFileSearchReadHomeError, Path.Path> {
   const path = yield* Path.Path;
   const loweredQuery = toSlashes(input.query.trim()).toLowerCase();
@@ -161,7 +167,10 @@ export const walkForMarkdownFiles = Effect.fn("MarkdownFileSearch.walk")(functio
         const fullPath = path.join(folder, dirent.name);
         if (dirent.isDirectory()) {
           if (!isExcludedFolderName(dirent.name)) nextLevel.push(fullPath);
-        } else if (dirent.isFile() && isMarkdownFileName(dirent.name)) {
+        } else if (
+          dirent.isFile() &&
+          matchesExtension(dirent.name, input.extensions ?? MARKDOWN_EXTENSIONS)
+        ) {
           if (matchesQuery(path.relative(input.homeDirectory, fullPath), loweredQuery)) {
             found.push(fullPath);
           }
@@ -187,15 +196,20 @@ export const make = Effect.gen(function* () {
   const platform = yield* HostProcess.Platform;
   const homeDirectory = yield* HostProcess.HomeDirectory;
 
-  const searchWithSpotlight = Effect.fn("MarkdownFileSearch.spotlight")(function* (query: string) {
+  const searchWithSpotlight = Effect.fn("MarkdownFileSearch.spotlight")(function* (
+    query: string,
+    extensions: ReadonlyArray<string>,
+  ) {
     const output = yield* processRunner.run({
       command: "mdfind",
-      args: buildMdfindArgs(homeDirectory, query),
+      args: buildMdfindArgs(homeDirectory, query, extensions),
       timeout: MDFIND_TIMEOUT,
       outputMode: "truncate",
       maxOutputBytes: MDFIND_MAX_OUTPUT_BYTES,
     });
-    return output.code === 0 ? parseMdfindOutput(output.stdout, homeDirectory, query, path) : null;
+    return output.code === 0
+      ? parseMdfindOutput(output.stdout, homeDirectory, query, path, extensions)
+      : null;
   });
 
   const search: MarkdownFileSearch["Service"]["search"] = Effect.fn("MarkdownFileSearch.search")(
@@ -205,13 +219,16 @@ export const make = Effect.gen(function* () {
       }
       const spotlightPaths =
         platform === "darwin"
-          ? yield* searchWithSpotlight(input.query).pipe(Effect.orElseSucceed(() => null))
+          ? yield* searchWithSpotlight(input.query, input.extensions ?? MARKDOWN_EXTENSIONS).pipe(
+              Effect.orElseSucceed(() => null),
+            )
           : null;
       const candidates =
         spotlightPaths ??
         (yield* walkForMarkdownFiles({
           homeDirectory,
           query: input.query,
+          extensions: input.extensions ?? MARKDOWN_EXTENSIONS,
           stopAfter: input.limit + 1,
           bounds: WALK_BOUNDS,
         }).pipe(Effect.provideService(Path.Path, path)));

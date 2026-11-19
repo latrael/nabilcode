@@ -1,7 +1,7 @@
 export type BoardPresetId = "focus" | "split" | "bento" | "grid";
 /** `custom` is a hand-resized layout: it carries its own `slots` instead of a preset's. */
 export type BoardLayoutPreset = BoardPresetId | "custom";
-export type BoardCardKind = "thread" | "markdown" | "pdf" | "diff";
+export type BoardCardKind = "thread" | "markdown" | "pdf" | "html" | "diff";
 
 /** 1-based grid placement on the 12-column by 2-row board. */
 export interface BoardSlot {
@@ -11,7 +11,7 @@ export interface BoardSlot {
   h: number;
 }
 
-/** Where a markdown/pdf card's content lives: the project's repo, or the Cabinet library. */
+/** Where a document card's content lives: the project's repo, or the Cabinet library. */
 export type BoardCardSource = "repo" | "cabinet";
 
 export interface BoardCard {

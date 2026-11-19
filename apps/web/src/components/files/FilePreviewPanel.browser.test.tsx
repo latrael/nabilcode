@@ -114,10 +114,11 @@ import FilePreviewPanel from "./FilePreviewPanel";
 const environmentId = EnvironmentId.make("markdown-preview-test");
 const threadRef = { environmentId, threadId: ThreadId.make("thread") };
 function setup() {
-  const keys = ["t3code.fileExplorerOpen", "t3code.renderMarkdown"];
+  const keys = ["t3code.fileExplorerOpen", "t3code.renderMarkdown", "t3code.renderBrowserFile"];
   const previous = keys.map((key) => localStorage.getItem(key));
   localStorage.setItem(keys[0]!, "false");
   localStorage.setItem(keys[1]!, "true");
+  localStorage.setItem(keys[2]!, "true");
   state.file = null;
   state.optimistic = null;
   state.assetUrl = { _tag: "Loading" };
@@ -340,6 +341,31 @@ describe("rendered Markdown task saves", () => {
 });
 
 describe("workspace document previews", () => {
+  it("renders HTML and keeps its source read-only even with write permission", async () => {
+    using _settings = setup();
+    state.file = {
+      relativePath: "report.html",
+      contents: "<!doctype html><h1>Report</h1>",
+      byteLength: 36,
+      truncated: false,
+    };
+    state.assetUrl = { _tag: "Success", url: "about:blank", expiresAt: Number.MAX_SAFE_INTEGER };
+    await using screen = await render(filePreview("report.html"));
+    const frame = () => screen.container.querySelector('iframe[title="report.html"]');
+    expect(frame()).not.toBeNull();
+    expect(frame()?.getAttribute("sandbox")).toContain("allow-scripts");
+    expect(frame()?.getAttribute("sandbox")).not.toContain("allow-same-origin");
+
+    await screen.getByRole("button", { name: "Show HTML source" }).click();
+    await expect.element(screen.getByRole("button", { name: "Show rendered page" })).toBeVisible();
+    expect(frame()).toBeNull();
+    expect(screen.container.querySelector("[data-file-content-focus]")).toBeNull();
+    expect(state.writeFile).not.toHaveBeenCalled();
+
+    await screen.getByRole("button", { name: "Show rendered page" }).click();
+    await vi.waitFor(() => expect(frame()).not.toBeNull());
+  });
+
   it("keeps an unchanged document loaded when another workspace change lands", async () => {
     using _settings = setup();
     await using screen = await render(documentPreview("mutation-1", "revision-1"));

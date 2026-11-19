@@ -14,7 +14,7 @@ It is a hard fork of [T3 Code](https://github.com/pingdotgg/t3code), reduced to 
 
 - **A bento board per project.** Pick Focus, Split, Bento (8+4), or 2×2. Drag cards between slots and drag an edge to resize; widths snap to a 12-column grid. Each project keeps its own layout.
 - **Thread cards.** The live chat is the main card. Open other threads beside it, then click **Focus** to swap one into the main card.
-- **Notes, PDFs, and diffs as cards.** In the Files drawer, click a `.md` or `.pdf` from the repo or from Cabinet. Diff cards show a thread's full diff.
+- **Notes, documents, and diffs as cards.** In the Files drawer, open Markdown, PDFs, and HTML pages from the repo, or notes and PDFs from Cabinet. PDF and HTML previews are read-only. HTML pages can load relative assets in their folder and subfolders. Use **Open document…** in the command palette to search your home folder or paste a Markdown, PDF, or HTML path into the side viewer. Diff cards show a thread's full diff.
 - **Cabinet notes that stay in sync.** `[[wikilinks]]` open the linked note. Ticking a checklist box saves it to Cabinet. Edits made in Cabinet appear in the open card.
 - **Edit Markdown in place.** Click **Edit** on a note card and write in its formatting (**Rich**) or as raw Markdown (**Text**). Press ⌘S to save back to Cabinet or the repo. If the note changed in Cabinet while you were editing, you choose whether to reload or overwrite.
 - **Quote from PDFs.** Select text and choose **Cite to thread** to attach it to your next message, or **Save quote to Cabinet** to keep it.

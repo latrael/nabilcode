@@ -245,6 +245,7 @@ export function WorkspaceBrowserPreview(props: {
   const pdf = isPdfPreviewFile(props.absolutePath);
   const resource = workspaceAssetResource({
     kind: pdf ? "media-file" : "workspace-file",
+    htmlPreview: !pdf,
     threadRef: props.threadRef,
     draft: props.draft,
     workspaceRoot: props.workspaceRoot,
@@ -1308,6 +1309,7 @@ export default function FilePreviewPanel({
     !file.data?.truncated &&
     !isMedia &&
     !isDocument &&
+    !isHtml &&
     !renderBrowserFile &&
     !renderMermaid &&
     !(isMarkdown && renderMarkdown) &&
@@ -1730,7 +1732,7 @@ export default function FilePreviewPanel({
                 text={file.data.contents}
                 delimiter={tableDelimiter}
               />
-            ) : file.data.truncated || isHostFile || !canWriteFiles ? (
+            ) : file.data.truncated || isHostFile || isHtml || !canWriteFiles ? (
               <SourceFilePreview
                 name={relativePath}
                 text={file.data.contents}

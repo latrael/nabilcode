@@ -54,6 +54,7 @@ import { useActiveProjectRef } from "./useActiveProjectRef";
 // Lazy so pdf.js and the Markdown renderer stay out of the main chunk until a card opens.
 const MarkdownCard = lazy(() => import("./cards/MarkdownCard"));
 const PdfCard = lazy(() => import("./cards/PdfCard"));
+const HtmlCard = lazy(() => import("./cards/HtmlCard"));
 const CabinetMarkdownCard = lazy(() => import("./cards/CabinetMarkdownCard"));
 const CabinetPdfCard = lazy(() => import("./cards/CabinetPdfCard"));
 
@@ -317,6 +318,12 @@ function FileCardBody(props: {
     <Suspense fallback={<FileSurfaceLoading />}>
       {props.kind === "pdf" ? (
         <PdfCard environmentId={props.environmentId} cwd={props.cwd} relativePath={props.itemRef} />
+      ) : props.kind === "html" ? (
+        <HtmlCard
+          environmentId={props.environmentId}
+          cwd={props.cwd}
+          relativePath={props.itemRef}
+        />
       ) : (
         <MarkdownCard
           environmentId={props.environmentId}

@@ -2,13 +2,13 @@ import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  classifyMarkdownPickerInput,
-  markdownPathProblem,
-  resolveMarkdownOpenPath,
+  classifyDocumentPickerInput,
+  documentPathProblem,
+  resolveDocumentOpenPath,
   toHomeRelativeDisplay,
-} from "./MarkdownFilePicker.logic";
+} from "./documentFilePicker.logic";
 
-describe("classifyMarkdownPickerInput", () => {
+describe("classifyDocumentPickerInput", () => {
   it.each([
     ["", { kind: "empty" }],
     ["   ", { kind: "empty" }],
@@ -21,32 +21,35 @@ describe("classifyMarkdownPickerInput", () => {
     ["'/Users/me/My Notes/a.md'", { kind: "path", path: "/Users/me/My Notes/a.md" }],
     [String.raw`C:\Users\me\a.md`, { kind: "path", path: String.raw`C:\Users\me\a.md` }],
   ])("classifies %j", (input, expected) => {
-    expect(classifyMarkdownPickerInput(input)).toEqual(expected);
+    expect(classifyDocumentPickerInput(input)).toEqual(expected);
   });
 });
 
-describe("markdownPathProblem", () => {
+describe("documentPathProblem", () => {
   const file = { kind: "file", byteLength: 10 } as const;
 
-  it("accepts a Markdown file", () => {
-    expect(markdownPathProblem("/a/b.md", file)).toBeNull();
-    expect(markdownPathProblem("/a/B.MARKDOWN", file)).toBeNull();
+  it("accepts Markdown, PDF, and HTML documents", () => {
+    expect(documentPathProblem("/a/b.md", file)).toBeNull();
+    expect(documentPathProblem("/a/B.MARKDOWN", file)).toBeNull();
+    for (const name of ["report.pdf", "PAGE.HTML", "page.htm"]) {
+      expect(documentPathProblem(`/a/${name}`, file)).toBeNull();
+    }
   });
 
   it.each([
-    ["/a/notes.txt", file, "Only Markdown files"],
+    ["/a/notes.txt", file, "Only Markdown, PDF, and HTML files"],
     ["/a/b.md", null, "does not exist or cannot be read"],
     ["/a/folder.md", { kind: "directory" } as const, "is a folder"],
     ["/a/pipe.md", { kind: "other" } as const, "is not a regular file"],
   ])("explains %s", (path, metadata, message) => {
-    expect(markdownPathProblem(path, metadata)).toContain(message);
+    expect(documentPathProblem(path, metadata)).toContain(message);
   });
 });
 
-describe("resolveMarkdownOpenPath", () => {
+describe("resolveDocumentOpenPath", () => {
   it("opens the server's expansion of a home-relative path", () => {
     expect(
-      resolveMarkdownOpenPath("~/notes/a.md", {
+      resolveDocumentOpenPath("~/notes/a.md", {
         kind: "file",
         resolvedPath: "/Volumes/data/me/notes/a.md",
       }),
@@ -54,14 +57,14 @@ describe("resolveMarkdownOpenPath", () => {
   });
 
   it("keeps an absolute path as typed", () => {
-    expect(resolveMarkdownOpenPath("/Users/me/a.md", { kind: "file" })).toBe("/Users/me/a.md");
+    expect(resolveDocumentOpenPath("/Users/me/a.md", { kind: "file" })).toBe("/Users/me/a.md");
   });
 
   // The preview anchors relative images on the opened file's folder. A `~/` path is anchored
   // on a home guessed from the project, which is wrong for a project outside the home folder.
   it("gives the preview a folder that does not depend on the project", () => {
     const projectOutsideHome = "/Volumes/work/project";
-    const opened = resolveMarkdownOpenPath("~/notes/a.md", {
+    const opened = resolveDocumentOpenPath("~/notes/a.md", {
       kind: "file",
       resolvedPath: "/Volumes/data/me/notes/a.md",
     });

@@ -445,6 +445,26 @@ const finalizeAbsoluteMediaFileAsset = Effect.fn("AssetAccess.finalizeAbsoluteMe
         checkedPath: input.requestedPath,
       });
     }
+    // HTML needs a directory-scoped grant for relative styles, scripts, and images.
+    if (
+      !download &&
+      "htmlPreview" in input.resource &&
+      input.resource.htmlPreview &&
+      /\.html?$/i.test(canonicalFile)
+    ) {
+      return {
+        claims: {
+          version: 1 as const,
+          kind: "workspace-file" as const,
+          workspaceRoot: path.dirname(canonicalFile),
+          baseRelativePath: ".",
+          expiresAt: input.expiresAt,
+        },
+        fileName: path.basename(canonicalFile),
+        fileRevision: opened.fileRevision,
+        imageDimensions: null,
+      };
+    }
     return {
       claims: {
         version: 1 as const,

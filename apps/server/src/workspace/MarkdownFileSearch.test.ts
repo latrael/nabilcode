@@ -59,6 +59,9 @@ describe("MarkdownFileSearch", () => {
             "Documents/README.markdown",
             "Documents/readme.txt",
             "work/design.md",
+            "work/design.PDF",
+            "work/design.html",
+            "work/design.htm",
             "node_modules/pkg/design.md",
             "Library/Caches/design.md",
             ".hidden/design.md",
@@ -72,6 +75,16 @@ describe("MarkdownFileSearch", () => {
             path.join(home, "Documents", "notes", "design.md"),
             path.join(home, "work", "design.md"),
           ]);
+
+          const documents = yield* service.search({
+            query: "design",
+            limit: 10,
+            extensions: [".md", ".markdown", ".pdf", ".html", ".htm"],
+          });
+          expect(documents.paths).toHaveLength(5);
+          expect(documents.paths).toContain(path.join(home, "work/design.PDF"));
+          expect(documents.paths).toContain(path.join(home, "work/design.html"));
+          expect(documents.paths).toContain(path.join(home, "work/design.htm"));
 
           const byPath = yield* service.search({ query: "notes/DESIGN", limit: 10 });
           expect(byPath.paths).toEqual([path.join(home, "Documents", "notes", "design.md")]);
@@ -174,6 +187,9 @@ describe("MarkdownFileSearch", () => {
                 "/Users/me/node_modules/x/design.md",
                 "/Users/me/.config/design.md",
                 "/Users/me/Documents/design.txt",
+                "/Users/me/Documents/design.PDF",
+                "/Users/me/Documents/design.html",
+                "/Users/me/Documents/design.htm",
                 "/Users/other/design.md",
                 "/Users/me/Documents/b/Design Review.md",
                 "/Users/me/Documents/unrelated.md",
@@ -203,6 +219,17 @@ describe("MarkdownFileSearch", () => {
           "/Users/me/Documents/b/Design Review.md",
           "/Users/me/Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault/design.md",
         ]);
+        const documents = yield* service.search({
+          query: "design",
+          limit: 10,
+          extensions: [".pdf", ".html", ".htm"],
+        });
+        expect(documents.paths.toSorted()).toEqual([
+          "/Users/me/Documents/design.PDF",
+          "/Users/me/Documents/design.htm",
+          "/Users/me/Documents/design.html",
+        ]);
+        expect(calls[1]?.args[2]).toContain('kMDItemFSName == "*.pdf"c');
       }).pipe(Effect.provide(NodeServices.layer)),
     );
   });

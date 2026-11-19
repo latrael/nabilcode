@@ -1570,9 +1570,20 @@ function OpenCommandPaletteDialog(props: {
 
   actionItems.push({
     kind: "action",
-    value: "action:open-markdown-file",
-    searchTerms: ["markdown", "md", "open markdown", "notes", "document", "docs", "readme"],
-    title: "Open Markdown file…",
+    value: "action:open-document",
+    searchTerms: [
+      "markdown",
+      "md",
+      "open markdown",
+      "notes",
+      "document",
+      "docs",
+      "readme",
+      "pdf",
+      "html",
+      "open document",
+    ],
+    title: "Open document…",
     icon: <FileTextIcon className={ITEM_ICON_CLASS} />,
     keepOpen: true,
     run: async () => {

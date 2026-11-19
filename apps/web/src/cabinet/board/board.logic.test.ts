@@ -244,6 +244,8 @@ describe("cardKindForPath", () => {
     ["notes/README.md", "markdown"],
     ["Doc.MARKDOWN", "markdown"],
     ["a/b.PDF", "pdf"],
+    ["reports/page.html", "html"],
+    ["PAGE.HTM", "html"],
     ["src/index.ts", null],
     ["md", null],
     ["file.md.bak", null],

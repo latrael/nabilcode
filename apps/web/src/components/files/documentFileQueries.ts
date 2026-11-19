@@ -5,23 +5,27 @@ import { useEnvironmentQuery } from "~/state/query";
 import { useDebouncedValue } from "~/state/queries";
 
 // Each search walks the host, so wait out typing instead of asking per keystroke.
-const MARKDOWN_SEARCH_DEBOUNCE_MS = 250;
-const MARKDOWN_SEARCH_QUERY_MAX_LENGTH = 256;
+const DOCUMENT_SEARCH_DEBOUNCE_MS = 250;
+const DOCUMENT_SEARCH_QUERY_MAX_LENGTH = 256;
 const EMPTY_PATHS: ReadonlyArray<string> = [];
 
-export function useMarkdownFileSearch(
+export function useDocumentFileSearch(
   environmentId: EnvironmentId,
   query: string | null,
   limit: number,
 ) {
-  const debouncedQuery = useDebouncedValue(query, MARKDOWN_SEARCH_DEBOUNCE_MS);
+  const debouncedQuery = useDebouncedValue(query, DOCUMENT_SEARCH_DEBOUNCE_MS);
   const fileAccess = useFilesystemReadAccess(environmentId);
-  const searchQuery = debouncedQuery?.slice(0, MARKDOWN_SEARCH_QUERY_MAX_LENGTH);
+  const searchQuery = debouncedQuery?.slice(0, DOCUMENT_SEARCH_QUERY_MAX_LENGTH);
   const result = useEnvironmentQuery(
     fileAccess.canReadFiles && searchQuery
       ? filesystemEnvironment.searchMarkdown({
           environmentId,
-          input: { query: searchQuery, limit },
+          input: {
+            query: searchQuery,
+            limit,
+            extensions: [".md", ".markdown", ".pdf", ".html", ".htm"],
+          },
         })
       : null,
   );
@@ -39,8 +43,8 @@ export function useMarkdownFileSearch(
   };
 }
 
-export function useMarkdownPathMetadata(environmentId: EnvironmentId, path: string | null) {
-  const debouncedPath = useDebouncedValue(path, MARKDOWN_SEARCH_DEBOUNCE_MS / 2);
+export function useDocumentPathMetadata(environmentId: EnvironmentId, path: string | null) {
+  const debouncedPath = useDebouncedValue(path, DOCUMENT_SEARCH_DEBOUNCE_MS / 2);
   const fileAccess = useFilesystemReadAccess(environmentId);
   const result = useEnvironmentQuery(
     fileAccess.canReadFiles && debouncedPath

@@ -267,6 +267,51 @@ describe("AssetAccess", () => {
     }).pipe(Effect.provide(layerTest)),
   );
 
+  it.effect(
+    "renders host HTML with nearby assets while keeping its grant inside the document folder",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-html-host-" });
+        const folder = path.join(root, "report");
+        yield* fs.makeDirectory(path.join(folder, "assets"), { recursive: true });
+        const html = '<link rel="stylesheet" href="assets/style.css"><img src="assets/logo.svg">';
+        yield* fs.writeFileString(path.join(folder, "index.html"), html);
+        yield* fs.writeFileString(path.join(folder, "assets/style.css"), "body { color: red; }");
+        yield* fs.writeFileString(path.join(folder, "assets/logo.svg"), "<svg></svg>");
+        yield* fs.writeFileString(path.join(folder, ".env"), "secret");
+        yield* fs.writeFileString(path.join(root, "outside.css"), "private");
+        for (const resource of [
+          {
+            _tag: "media-file" as const,
+            threadId: ThreadId.make("thread-1"),
+            path: path.join(folder, "index.html"),
+            htmlPreview: true as const,
+          },
+          {
+            _tag: "draft-workspace-file" as const,
+            cwd: root,
+            path: path.join(folder, "index.html"),
+            htmlPreview: true as const,
+          },
+        ]) {
+          const result = yield* issueAssetUrl({ resource, workspaceRoot: root });
+          const suffix = result.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length);
+          const token = suffix.slice(0, suffix.indexOf("/"));
+          for (const name of ["index.html", "assets/style.css", "assets/logo.svg"]) {
+            expect(yield* resolveAsset(token, name)).toMatchObject({
+              kind: "file",
+              path: yield* fs.realPath(path.join(folder, name)),
+            });
+          }
+          expect(yield* resolveAsset(token, ".env")).toBeNull();
+          expect(yield* resolveAsset(token, "../outside.css")).toBeNull();
+          expect(yield* fs.readFileString(path.join(folder, "index.html"))).toBe(html);
+        }
+      }).pipe(Effect.provide(layerTest)),
+  );
+
   it.effect("downloads any linked file with the same exact-file identity checks as media", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

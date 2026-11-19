@@ -15,14 +15,14 @@ import { CommandPaletteResults } from "../CommandPaletteResults";
 import { Kbd } from "../ui/kbd";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import {
-  classifyMarkdownPickerInput,
-  isMarkdownFilePath,
-  MARKDOWN_FILE_PICKER_RESULT_LIMIT,
-  markdownPathProblem,
-  resolveMarkdownOpenPath,
+  classifyDocumentPickerInput,
+  isDocumentFilePath,
+  DOCUMENT_FILE_PICKER_RESULT_LIMIT,
+  documentPathProblem,
+  resolveDocumentOpenPath,
   toHomeRelativeDisplay,
-} from "./MarkdownFilePicker.logic";
-import { useMarkdownFileSearch, useMarkdownPathMetadata } from "./markdownFileQueries";
+} from "./documentFilePicker.logic";
+import { useDocumentFileSearch, useDocumentPathMetadata } from "./documentFileQueries";
 import {
   getProjectFilePickerMatches,
   PROJECT_FILE_PICKER_RESULT_LIMIT,
@@ -67,7 +67,7 @@ function getEmptyStateMessage(query: string, error: string | null, isPending: bo
 }
 
 function getComputerEmptyStateMessage(input: {
-  readonly kind: ReturnType<typeof classifyMarkdownPickerInput>["kind"];
+  readonly kind: ReturnType<typeof classifyDocumentPickerInput>["kind"];
   readonly pathProblem: string | null;
   readonly error: string | null;
   readonly isPending: boolean;
@@ -79,7 +79,7 @@ function getComputerEmptyStateMessage(input: {
   }
   if (input.isPending) return input.kind === "path" ? "Checking file…" : "Searching…";
   if (input.pathProblem) return input.pathProblem;
-  return `No Markdown files match in your home folder.`;
+  return `No documents match in your home folder.`;
 }
 
 function EmptyProjectFilePicker() {
@@ -94,7 +94,7 @@ function EmptyProjectFilePicker() {
       value=""
     >
       <div className="py-10 text-center text-sm text-muted-foreground">
-        Open a project thread to search its files or open Markdown files.
+        Open a project thread to search its files or open documents.
       </div>
     </CommandPaletteContent>
   );
@@ -108,7 +108,7 @@ function OpenProjectFilePicker(props: ProjectFilePickerProps & { target: ActiveP
   const canReadHost = useFilesystemReadAccess(target.environmentId).canReadFiles;
   const isComputerScope = scope === "computer" && canReadHost;
   const machineLabel = useEnvironment(target.environmentId)?.label ?? "this computer";
-  const scopeLabel = `Markdown files in your home folder on ${machineLabel}`;
+  const scopeLabel = `Markdown, PDF, and HTML files in your home folder on ${machineLabel}`;
 
   const result = useProjectFilePickerQuery(
     target.environmentId,
@@ -116,14 +116,14 @@ function OpenProjectFilePicker(props: ProjectFilePickerProps & { target: ActiveP
     isComputerScope ? null : query,
     PROJECT_FILE_PICKER_RESULT_LIMIT,
   );
-  const input = classifyMarkdownPickerInput(isComputerScope ? query : "");
-  const markdownSearch = useMarkdownFileSearch(
+  const input = classifyDocumentPickerInput(isComputerScope ? query : "");
+  const documentSearch = useDocumentFileSearch(
     target.environmentId,
     input.kind === "search" ? input.query : null,
-    MARKDOWN_FILE_PICKER_RESULT_LIMIT,
+    DOCUMENT_FILE_PICKER_RESULT_LIMIT,
   );
-  const typedPath = input.kind === "path" && isMarkdownFilePath(input.path) ? input.path : null;
-  const pathMetadata = useMarkdownPathMetadata(target.environmentId, typedPath);
+  const typedPath = input.kind === "path" && isDocumentFilePath(input.path) ? input.path : null;
+  const pathMetadata = useDocumentPathMetadata(target.environmentId, typedPath);
   const { resolvedTheme } = useTheme();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const matches = getProjectFilePickerMatches(result.entries, result.matchedQuery);
@@ -153,17 +153,17 @@ function OpenProjectFilePicker(props: ProjectFilePickerProps & { target: ActiveP
     },
   }));
 
-  const openMarkdown = (path: string) => async () => {
+  const openDocument = (path: string) => async () => {
     useRightPanelStore.getState().openFile(target.threadRef, path);
   };
-  const markdownItem = (path: string, display: string | null): CommandPaletteActionItem => ({
+  const documentItem = (path: string, display: string | null): CommandPaletteActionItem => ({
     kind: "action",
-    value: `markdown:${path}`,
+    value: `document:${path}`,
     searchTerms: [path],
     title: path.split(/[\\/]/).at(-1) ?? path,
     description: display ?? path,
     icon: <PierreEntryIcon pathValue={path} kind="file" theme={resolvedTheme} />,
-    run: openMarkdown(path),
+    run: openDocument(path),
   });
   const typedPathReady =
     typedPath !== null &&
@@ -172,17 +172,17 @@ function OpenProjectFilePicker(props: ProjectFilePickerProps & { target: ActiveP
     pathMetadata.isResolved;
   const pathProblem =
     input.kind === "path" && (typedPath === null || typedPathReady)
-      ? markdownPathProblem(input.path, pathMetadata.metadata)
+      ? documentPathProblem(input.path, pathMetadata.metadata)
       : null;
   const computerItems: CommandPaletteActionItem[] =
     typedPath !== null && typedPathReady && pathMetadata.metadata && pathProblem === null
-      ? [markdownItem(resolveMarkdownOpenPath(typedPath, pathMetadata.metadata), null)]
-      : input.kind === "search" && markdownSearch.searchedQuery === input.query
-        ? markdownSearch.paths.map((path) =>
-            markdownItem(
+      ? [documentItem(resolveDocumentOpenPath(typedPath, pathMetadata.metadata), null)]
+      : input.kind === "search" && documentSearch.searchedQuery === input.query
+        ? documentSearch.paths.map((path) =>
+            documentItem(
               path,
-              markdownSearch.homeDirectory
-                ? toHomeRelativeDisplay(path, markdownSearch.homeDirectory)
+              documentSearch.homeDirectory
+                ? toHomeRelativeDisplay(path, documentSearch.homeDirectory)
                 : path,
             ),
           )
@@ -193,8 +193,8 @@ function OpenProjectFilePicker(props: ProjectFilePickerProps & { target: ActiveP
     ? getComputerEmptyStateMessage({
         kind: input.kind,
         pathProblem,
-        error: input.kind === "path" ? pathMetadata.error : markdownSearch.error,
-        isPending: input.kind === "path" ? pathMetadata.isPending : markdownSearch.isPending,
+        error: input.kind === "path" ? pathMetadata.error : documentSearch.error,
+        isPending: input.kind === "path" ? pathMetadata.isPending : documentSearch.isPending,
         scopeLabel,
       })
     : getEmptyStateMessage(query, result.error, result.isPending);
@@ -236,7 +236,7 @@ function OpenProjectFilePicker(props: ProjectFilePickerProps & { target: ActiveP
       }
       inputProps={{
         className: "pe-48",
-        placeholder: isComputerScope ? "Search or paste a Markdown path…" : "Search files…",
+        placeholder: isComputerScope ? "Search or paste a document path…" : "Search files…",
         onKeyDown: (event) => {
           if (event.key !== "Tab" || event.nativeEvent.isComposing) return;
           event.preventDefault();
@@ -260,7 +260,7 @@ function OpenProjectFilePicker(props: ProjectFilePickerProps & { target: ActiveP
           items.length > 0
             ? [
                 isComputerScope
-                  ? { value: "markdown-files", label: scopeLabel, items }
+                  ? { value: "documents", label: scopeLabel, items }
                   : { value: "project-files", label: target.projectName, items },
               ]
             : []

@@ -26,9 +26,10 @@ describe("boardStore", () => {
 
     expect(openFile(KEY, "notes/Plan.MD")).toBe(true);
     expect(openFile(KEY, "docs/spec.pdf")).toBe(true);
+    expect(openFile(KEY, "reports/page.html")).toBe(true);
     const layout = selectBoardLayout(KEY)(useBoardStore.getState());
     expect(layout.preset).toBe("bento");
-    expect(layout.cards.map((card) => card.kind)).toEqual(["thread", "markdown", "pdf"]);
+    expect(layout.cards.map((card) => card.kind)).toEqual(["thread", "pdf", "html", "markdown"]);
   });
 
   it("opens cabinet items by kind and focuses an already open one", () => {
@@ -52,11 +53,21 @@ describe("boardStore", () => {
 
     await storage!.setItem(name!, {
       version: 1,
-      state: { layouts: { [KEY]: { preset: "grid", cards: [] }, bad: 12 } },
+      state: {
+        layouts: {
+          [KEY]: {
+            preset: "grid",
+            cards: [
+              { id: "html:page.html", kind: "html", ref: "page.html", source: "repo", slot: null },
+            ],
+          },
+          bad: 12,
+        },
+      },
     });
     await useBoardStore.persist.rehydrate();
     const layouts = useBoardStore.getState().layouts;
-    expect(layouts[KEY]?.cards.map((card) => card.id)).toEqual(["primary"]);
+    expect(layouts[KEY]?.cards.map((card) => card.id)).toEqual(["primary", "html:page.html"]);
     expect(layouts.bad).toEqual(DEFAULT_LAYOUT);
   });
 

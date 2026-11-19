@@ -12,7 +12,7 @@ export interface RepoTreeTarget {
 }
 
 /**
- * The project's file tree. Markdown and PDF files open as cards on that project's board;
+ * The project's file tree. Markdown, PDF, and HTML files open as cards on that project's board;
  * other files do nothing here, since the board has no viewer for them.
  */
 export function RepoTree({ target }: { target: RepoTreeTarget }) {

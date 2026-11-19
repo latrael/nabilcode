@@ -11,7 +11,7 @@ import {
 } from "./board.types";
 import { BOARD_PRESET_IDS, BOARD_PRESET_PLACEMENTS } from "./presets";
 
-const CARD_KINDS: readonly BoardCardKind[] = ["thread", "markdown", "pdf", "diff"];
+const CARD_KINDS: readonly BoardCardKind[] = ["thread", "markdown", "pdf", "html", "diff"];
 
 /** Each one is a live embedded thread view, so the board holds a few at most. */
 export const MAX_SECONDARY_THREAD_CARDS = 3;
@@ -233,10 +233,11 @@ export const cabinetCardKind = (item: CabinetCardItem): "markdown" | "pdf" =>
     ? "pdf"
     : "markdown";
 
-export const cardKindForPath = (relativePath: string): "markdown" | "pdf" | null => {
+export const cardKindForPath = (relativePath: string): "markdown" | "pdf" | "html" | null => {
   const lower = relativePath.toLowerCase();
   if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
   if (lower.endsWith(".pdf")) return "pdf";
+  if (/\.html?$/.test(lower)) return "html";
   return null;
 };
 

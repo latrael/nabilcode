@@ -1,5 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { FileDiffIcon, MessageSquareIcon, XIcon } from "lucide-react";
+import { Code2Icon, FileDiffIcon, MessageSquareIcon, XIcon } from "lucide-react";
 import { useGT } from "gt-react";
 import { createContext, use, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -23,6 +23,8 @@ const fileName = (path: string) =>
 
 export function BoardCardKindIcon(props: { readonly card: BoardCardModel }) {
   switch (props.card.kind) {
+    case "html":
+      return <Code2Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />;
     case "pdf":
       return <span aria-hidden className="size-2 shrink-0 rounded-xs bg-destructive/80" />;
     case "thread":
