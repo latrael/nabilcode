@@ -28,3 +28,42 @@ export function acpExternalMcpServers(
       : [{ name: server.name, command: server.command, args: [...server.args], env: [] }];
   });
 }
+
+export function selectAcpSessionMcpServers(input: {
+  readonly mcpCapabilities:
+    | NonNullable<EffectAcpSchema.InitializeResponse["agentCapabilities"]>["mcpCapabilities"]
+    | undefined;
+  readonly acpServers: ReadonlyArray<EffectAcpSchema.McpServer>;
+  readonly httpServers: ReadonlyArray<EffectAcpSchema.McpServer>;
+  readonly fallbackServers: ReadonlyArray<EffectAcpSchema.McpServer>;
+  readonly assumeHttpWhenCapabilitiesOmitted?: boolean;
+}): {
+  readonly servers: ReadonlyArray<EffectAcpSchema.McpServer>;
+  readonly droppedExternalNames: ReadonlyArray<string>;
+} {
+  if (input.mcpCapabilities?.acp === true && input.acpServers.length > 0) {
+    return { servers: input.acpServers, droppedExternalNames: [] };
+  }
+  const httpSupported =
+    input.mcpCapabilities?.http === true ||
+    (input.assumeHttpWhenCapabilitiesOmitted === true && input.mcpCapabilities?.http === undefined);
+  if (httpSupported && input.httpServers.length > 0) {
+    return { servers: input.httpServers, droppedExternalNames: [] };
+  }
+  const delivered = new Set(
+    input.fallbackServers
+      .map((server) => server.name)
+      .filter((name): name is string => typeof name === "string"),
+  );
+  const droppedExternalNames = [
+    ...new Set(
+      input.httpServers
+        .map((server) => server.name)
+        .filter(
+          (name): name is string =>
+            typeof name === "string" && name !== "t3-code" && !delivered.has(name),
+        ),
+    ),
+  ];
+  return { servers: input.fallbackServers, droppedExternalNames };
+}

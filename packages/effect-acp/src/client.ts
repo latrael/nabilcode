@@ -603,11 +603,15 @@ function normalizeInitializeResponse(
         audio: prompt?.audio != null,
         embeddedContext: prompt?.embeddedContext != null,
       },
-      mcpCapabilities: {
-        stdio: mcp?.stdio != null,
-        http: mcp?.http != null,
-        acp: mcp?.acp != null,
-      },
+      ...(mcp == null
+        ? {}
+        : {
+            mcpCapabilities: {
+              stdio: mcp.stdio != null,
+              http: mcp.http != null,
+              acp: mcp.acp != null,
+            },
+          }),
       ...(session == null
         ? {}
         : {

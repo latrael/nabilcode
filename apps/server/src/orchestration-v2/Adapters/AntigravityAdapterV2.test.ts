@@ -3,9 +3,11 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import {
   ChatFileAttachment,
+  EnvironmentId,
   MessageId,
   NodeId,
   ProjectId,
+  ProviderDriverKind,
   ProviderInstanceId,
   ProviderSessionId,
   RunAttemptId,
@@ -1271,6 +1273,158 @@ describe("AntigravityAdapterV2 session system prompt", () => {
           assert.notInclude(append, "systemPrompt");
           assert.include(sent, "<pull_request_linking>");
         }
+      }).pipe(Effect.provide(layerSession)),
+  );
+});
+
+describe("AntigravityAdapterV2 MCP transport", () => {
+  it.live(
+    "delivers HTTP external MCP servers alongside t3-code when initialize omits mcpCapabilities and picks them up on reactivation",
+    () =>
+      Effect.gen(function* () {
+        const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const path = yield* Path.Path;
+        const crypto = yield* SecureRandom.SecureRandom;
+        const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+        const mockAgentPath = yield* path.fromFileUrl(
+          new URL("../../../scripts/acp-mock-agent.ts", import.meta.url),
+        );
+        const instanceId = ProviderInstanceId.make("antigravity-mcp-test");
+        const threadId = ThreadId.make("thread-antigravity-mcp");
+        const endpoint = "http://127.0.0.1:43124/mcp";
+        const cabinetServer = {
+          transport: "http" as const,
+          name: "cabinet",
+          url: "http://127.0.0.1:4749/mcp",
+          headers: {
+            Authorization: "Bearer cab_agent",
+            "X-Cabinet-Thread": threadId,
+          },
+        };
+        const requests: Array<AcpSessionRuntime.AcpSessionRequestLogEvent> = [];
+        const baseMcpSession = {
+          environmentId: EnvironmentId.make("environment-antigravity-mcp"),
+          threadId,
+          providerSessionId: "mcp-session-antigravity",
+          providerInstanceId: instanceId,
+          endpoint,
+          authorizationHeader: "Bearer t3-token",
+          browserToolsAvailable: false,
+        };
+        yield* mcpSessions.set({
+          ...baseMcpSession,
+          externalMcpServers: () => Effect.succeed([cabinetServer]),
+        });
+        const adapter = yield* makeAntigravityAdapterV2({
+          instanceId,
+          selfInvocation: yield* resolveSelfInvocation(),
+          makeRuntime: (input) =>
+            makeAntigravityAcpRuntime({
+              ...input,
+              childProcessSpawner,
+              spawn: {
+                command: process.execPath,
+                args: [mockAgentPath],
+                cwd: input.cwd,
+                env: {
+                  T3_ACP_ANTIGRAVITY: "1",
+                  T3_ACP_AGENT_VERSION: "1.5.5",
+                  T3_ACP_SESSION_LIFECYCLE: "1",
+                },
+              },
+            }).pipe(Effect.provideService(SecureRandom.SecureRandom, crypto)),
+          withProcess: (_stop, task) => task,
+          defaultModel: Effect.undefined,
+          nativeLogging: () => ({
+            requestLogger: (event) =>
+              Effect.sync(() => {
+                if (event.status === "started") requests.push(event);
+              }),
+          }),
+        });
+        const modelSelection = { instanceId, model: "gemini-test-low" } as const;
+        const runtimePolicy = ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          cwd: process.cwd(),
+        });
+        const session = yield* adapter.openSession({
+          threadId,
+          providerSessionId: ProviderSessionId.make("provider-session-antigravity-mcp"),
+          modelSelection,
+          runtimePolicy,
+        });
+        const providerThread = yield* session.ensureThread({
+          threadId,
+          modelSelection,
+          runtimePolicy,
+        });
+        const sentMcpServers = (method: string) => {
+          const payload = requests.findLast((event) => event.method === method)?.payload;
+          return typeof payload === "object" && payload !== null
+            ? Reflect.get(payload, "mcpServers")
+            : undefined;
+        };
+        assert.deepEqual(sentMcpServers("session/new"), [
+          {
+            type: "http",
+            name: "cabinet",
+            url: cabinetServer.url,
+            headers: [
+              { name: "Authorization", value: "Bearer cab_agent" },
+              { name: "X-Cabinet-Thread", value: threadId },
+            ],
+          },
+          {
+            type: "http",
+            name: "t3-code",
+            url: endpoint,
+            headers: [{ name: "Authorization", value: "Bearer t3-token" }],
+          },
+        ]);
+
+        // Enabling or rotating Cabinet is picked up on the next session reactivation.
+        yield* mcpSessions.set({
+          ...baseMcpSession,
+          authorizationHeader: "Bearer t3-token-2",
+          externalMcpServers: () =>
+            Effect.succeed([
+              {
+                ...cabinetServer,
+                headers: {
+                  Authorization: "Bearer cab_agent_2",
+                  "X-Cabinet-Thread": threadId,
+                },
+              },
+            ]),
+        });
+        yield* session.resumeThread({
+          providerThread: {
+            ...providerThread,
+            nativeThreadRef: {
+              driver: ProviderDriverKind.make("antigravity"),
+              nativeId: "mock-session-2",
+              strength: "strong",
+            },
+          },
+        });
+        assert.deepEqual(sentMcpServers("session/load") ?? sentMcpServers("session/resume"), [
+          {
+            type: "http",
+            name: "cabinet",
+            url: cabinetServer.url,
+            headers: [
+              { name: "Authorization", value: "Bearer cab_agent_2" },
+              { name: "X-Cabinet-Thread", value: threadId },
+            ],
+          },
+          {
+            type: "http",
+            name: "t3-code",
+            url: endpoint,
+            headers: [{ name: "Authorization", value: "Bearer t3-token-2" }],
+          },
+        ]);
       }).pipe(Effect.provide(layerSession)),
   );
 });

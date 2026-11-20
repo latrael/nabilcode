@@ -208,6 +208,7 @@ export interface AcpAdapterV2RuntimeInput {
   readonly mcpServers: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly acpMcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly httpMcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
+  readonly assumeHttpMcpWhenCapabilitiesOmitted?: boolean;
   readonly processEnvironment?: NodeJS.ProcessEnv;
   readonly resumeSessionId?: string;
   readonly interruptPromptOnCancel?: boolean;
@@ -379,6 +380,8 @@ export interface AcpAdapterV2Flavor {
     EffectAcpSchema.InitializeRequest["clientCapabilities"]
   >["_meta"];
   readonly mcpOverHttp?: boolean;
+  /** Opt-in for agents that accept HTTP MCP servers while omitting mcpCapabilities. */
+  readonly assumeHttpMcpWhenCapabilitiesOmitted?: boolean;
   /** The agent has no tool search of its own, so T3 lists optional tools on demand. */
   readonly deferMcpTools?: boolean;
   readonly normalizeSessionUpdate?: (
@@ -1835,7 +1838,23 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
     session: McpProviderSession.McpProviderSessionConfig | undefined,
   ) =>
     McpProviderSession.readExternalMcpServers(session, flavor.driver).pipe(
-      Effect.map((servers) => acpExternalMcpServers(servers, flavor.mcpOverHttp)),
+      Effect.flatMap((servers) => {
+        const supported = acpExternalMcpServers(servers, flavor.mcpOverHttp);
+        const supportedNames = new Set(supported.map((server) => server.name));
+        const unsupported = servers.filter((server) => !supportedNames.has(server.name));
+        if (unsupported.length === 0) return Effect.succeed(supported);
+        return Effect.logWarning(
+          "External MCP server skipped because its transport is unsupported by this ACP flavor",
+          {
+            driver: flavor.driver,
+            flavorMcpOverHttp: flavor.mcpOverHttp === true,
+            skippedServers: unsupported.map((server) => ({
+              name: server.name,
+              transport: server.transport,
+            })),
+          },
+        ).pipe(Effect.as(supported));
+      }),
     );
   const readMcpContext = (threadId: ThreadId | null) =>
     threadId === null
@@ -2590,6 +2609,9 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
             mcpServers: mcpContext.servers,
             acpMcpServers: mcpContext.acpServers,
             httpMcpServers: mcpContext.httpServers,
+            ...(flavor.assumeHttpMcpWhenCapabilitiesOmitted === true
+              ? { assumeHttpMcpWhenCapabilitiesOmitted: true }
+              : {}),
             ...(mcpContext.processEnvironment === undefined
               ? {}
               : { processEnvironment: mcpContext.processEnvironment }),
