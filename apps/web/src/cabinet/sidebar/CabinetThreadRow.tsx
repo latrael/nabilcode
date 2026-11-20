@@ -117,6 +117,8 @@ export const CabinetThreadRow = memo(function CabinetThreadRow(props: {
   const proposalCount = useThreadProposalCount(thread.environmentId, thread.id);
   const currentInstanceId = resolveThreadProviderStack(thread).at(-1) ?? thread.providerInstanceId;
   const provider = providerEntry?.instanceId === currentInstanceId ? providerEntry : null;
+  const displayTitle = thread.title.replace(/^#+\s*/, "") || thread.title;
+  const showChannelPrefix = !displayTitle.startsWith("#");
   const rowClass = cn(
     "mx-1.5 flex w-[calc(100%-0.75rem)] min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70",
     selected ? "bg-sidebar-row-selected" : "hover:bg-sidebar-row-hover",
@@ -159,7 +161,12 @@ export const CabinetThreadRow = memo(function CabinetThreadRow(props: {
                   : "text-sidebar-muted-foreground",
               )}
             >
-              {thread.title}
+              {showChannelPrefix ? (
+                <span aria-hidden className="mr-0.5 text-sidebar-muted-foreground/75">
+                  #
+                </span>
+              ) : null}
+              {displayTitle}
             </span>
           )}
         </span>

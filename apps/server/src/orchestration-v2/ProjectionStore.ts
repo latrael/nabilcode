@@ -950,6 +950,29 @@ export function applyToProjection(
         ...base,
         thread: event.payload,
       };
+    case "thread.cleaned-out": {
+      const released = new Set(event.payload.releasedProviderSessionIds);
+      return {
+        ...base,
+        thread: event.payload.thread,
+        runs: [],
+        attempts: [],
+        nodes: [],
+        subagents: [],
+        providerSessions: base.providerSessions.filter((session) => !released.has(session.id)),
+        providerThreads: [],
+        providerTurns: [],
+        runtimeRequests: [],
+        messages: [],
+        plans: [],
+        turnItems: [],
+        checkpointScopes: [],
+        checkpoints: [],
+        contextHandoffs: [],
+        contextTransfers: [],
+        visibleTurnItems: [],
+      };
+    }
     // Reordering and PR refreshes preserve the orchestrator's activity timestamp.
     case "thread.active-reordered":
     case "thread.tags-updated":
@@ -2402,6 +2425,91 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             `;
               break;
             }
+            case "thread.cleaned-out": {
+              const payloadJson = yield* encodeThreadPayload(event.payload.thread);
+              const payload = parseEncodedPayload(payloadJson);
+              yield* sql`
+              INSERT INTO orchestration_v2_projection_threads (
+                thread_id,
+                project_id,
+                title,
+                default_provider,
+                provider_instance_id,
+                runtime_mode,
+                interaction_mode,
+                active_provider_thread_id,
+                created_at,
+                updated_at,
+                archived_at,
+                deleted_at,
+                payload_json
+              )
+              VALUES (
+                ${event.payload.thread.id},
+                ${event.payload.thread.projectId},
+                ${event.payload.thread.title},
+                ${event.payload.thread.providerInstanceId},
+                ${event.payload.thread.providerInstanceId},
+                ${event.payload.thread.runtimeMode},
+                ${event.payload.thread.interactionMode},
+                ${event.payload.thread.activeProviderThreadId},
+                ${stringField(payload, "createdAt")},
+                ${stringField(payload, "updatedAt")},
+                ${nullableStringField(payload, "archivedAt")},
+                ${nullableStringField(payload, "deletedAt")},
+                ${payloadJson}
+              )
+              ON CONFLICT(thread_id)
+              DO UPDATE SET
+                project_id = excluded.project_id,
+                title = excluded.title,
+                default_provider = excluded.default_provider,
+                provider_instance_id = excluded.provider_instance_id,
+                runtime_mode = excluded.runtime_mode,
+                interaction_mode = excluded.interaction_mode,
+                active_provider_thread_id = excluded.active_provider_thread_id,
+                created_at = excluded.created_at,
+                updated_at = excluded.updated_at,
+                archived_at = excluded.archived_at,
+                deleted_at = excluded.deleted_at,
+                payload_json = excluded.payload_json
+            `;
+              yield* sql`DELETE FROM orchestration_v2_projection_messages WHERE thread_id = ${event.threadId}`;
+              yield* sql`DELETE FROM orchestration_v2_projection_runs WHERE thread_id = ${event.threadId}`;
+              yield* sql`DELETE FROM orchestration_v2_projection_run_attempts WHERE thread_id = ${event.threadId}`;
+              yield* sql`DELETE FROM orchestration_v2_projection_nodes WHERE thread_id = ${event.threadId}`;
+              yield* sql`DELETE FROM orchestration_v2_projection_subagents WHERE thread_id = ${event.threadId}`;
+              yield* sql`DELETE FROM orchestration_v2_projection_turn_items WHERE thread_id = ${event.threadId}`;
+              yield* sql`DELETE FROM orchestration_v2_projection_provider_threads WHERE thread_id = ${event.threadId}`;
+              yield* sql`DELETE FROM orchestration_v2_projection_provider_turns WHERE thread_id = ${event.threadId}`;
+              if (event.payload.releasedProviderSessionIds.length > 0) {
+                yield* sql`
+                DELETE FROM orchestration_v2_projection_provider_session_bindings
+                WHERE thread_id = ${event.threadId}
+                  AND provider_session_id IN ${sql.in(event.payload.releasedProviderSessionIds)}
+              `;
+                yield* sql`
+                DELETE FROM orchestration_v2_projection_provider_sessions
+                WHERE thread_id = ${event.threadId}
+                  AND provider_session_id IN ${sql.in(event.payload.releasedProviderSessionIds)}
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM orchestration_v2_projection_provider_session_bindings AS b
+                    WHERE b.provider_session_id = orchestration_v2_projection_provider_sessions.provider_session_id
+                  )
+              `;
+              }
+              yield* sql`DELETE FROM orchestration_v2_projection_runtime_requests WHERE thread_id = ${event.threadId}`;
+              yield* sql`DELETE FROM orchestration_v2_projection_plans WHERE thread_id = ${event.threadId}`;
+              yield* sql`DELETE FROM orchestration_v2_projection_checkpoint_scopes WHERE thread_id = ${event.threadId}`;
+              yield* sql`DELETE FROM orchestration_v2_projection_checkpoints WHERE thread_id = ${event.threadId}`;
+              yield* sql`DELETE FROM orchestration_v2_projection_context_handoffs WHERE thread_id = ${event.threadId}`;
+              yield* sql`
+              DELETE FROM orchestration_v2_projection_context_transfers
+              WHERE source_thread_id = ${event.threadId} OR target_thread_id = ${event.threadId}
+            `;
+              break;
+            }
             case "run.created":
             case "run.updated": {
               const payloadJson = yield* encodeRunPayload(event.payload);
@@ -3153,6 +3261,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             event.type !== "thread.archived" &&
             event.type !== "thread.unarchived" &&
             event.type !== "thread.deleted" &&
+            event.type !== "thread.cleaned-out" &&
             event.type !== "thread.settled" &&
             event.type !== "thread.unsettled" &&
             event.type !== "thread.snoozed" &&

@@ -252,6 +252,7 @@ import { Button } from "../ui/button";
 import { useManagedPolicy } from "../../state/managedPolicy";
 import { hasProviderSetup } from "./ProviderStatusBanner";
 import { type AppModelOption, getAppModelOptionsForInstance } from "../../modelSelection";
+import type { ProviderInstanceEntry } from "../../providerInstances";
 import type { UnifiedSettings } from "@t3tools/contracts/settings";
 import { isVideoAttachment, type SessionPhase, type Thread } from "../../types";
 import { type ComposerPromptHistoryPosition } from "./composerPromptHistory";
@@ -289,6 +290,9 @@ import { ComposerControlsBar } from "./ComposerControlsBar";
 import { composerCommandKeyHandler } from "./composerCommandKey";
 import { usePromptSuggestion } from "./usePromptSuggestion";
 import { useFreshSessionArmed } from "./freshSessionArms";
+import { resolvePromptProviderRouting } from "./composerModelMentions";
+import { threadEnvironment } from "../../state/threads";
+import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 
 function consumePasteAsTextShortcut(deadline: { current: number }): boolean {
   const armed = Date.now() <= deadline.current;
@@ -350,6 +354,9 @@ export interface ChatComposerHandle {
     selectedProvider: ProviderDriverKind;
     selectedModel: string;
     selectedProviderModels: ReadonlyArray<ServerProvider["models"][number]>;
+    routableProviderInstanceEntries: ReadonlyArray<ProviderInstanceEntry>;
+    modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<AppModelOption>>;
+    lastUsedModelByInstance: ReadonlyMap<ProviderInstanceId, string>;
     shownPendingApprovalIds: ReadonlyArray<RuntimeRequestId>;
   };
   validateProviderInput: (providerInput: string) => boolean;
@@ -618,6 +625,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const isLiteralPendingAnswer = activePendingProgress?.activeQuestion?.initialAnswer !== undefined;
   const isEditingQueuedMessage = editingQueuedAttachments !== null;
   const applyThreadModelPick = useApplyThreadModelPick();
+  const cleanOutThread = useOrchestrationCommand(threadEnvironment.cleanOut, {
+    label: "clean out channel",
+  });
   const composerDraft = useComposerThreadDraft(composerDraftTarget);
   const composerDraftTargetKeyRef = useRef("");
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- publishes the committed draft target key to a ref read by async handlers
@@ -981,6 +991,24 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       ),
     );
   }
+  const lastUsedModelByInstance = new Map<ProviderInstanceId, string>();
+  for (const run of activeThreadRuns) {
+    lastUsedModelByInstance.set(run.providerInstanceId, run.modelSelection.model);
+  }
+  const routableProviderInstanceEntries =
+    lockedProvider === null
+      ? providerInstanceEntries
+      : providerInstanceEntries.filter((entry) => entry.driverKind === lockedProvider);
+  const promptProviderRouting =
+    multipleModelSelections === null && !activePendingProgress && prompt.trim().length > 0
+      ? resolvePromptProviderRouting({
+          prompt,
+          instanceEntries: routableProviderInstanceEntries,
+          modelOptionsByInstance,
+          currentChannelModelSelection: selectedModelSelection,
+          lastUsedModelByInstance,
+        })
+      : null;
 
   const selectedModelForPickerWithCustomFallback = (() => {
     const currentOptions = modelOptionsByInstance.get(selectedInstanceId) ?? [];
@@ -1129,6 +1157,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     composerPreviewAnnotations.length === 0 &&
     composerReviewComments.length === 0;
   const linkedEnvironments = useLinkedEnvironments(environmentId);
+  const cleanOutAvailable =
+    routeKind === "server" &&
+    activeThreadId !== null &&
+    canOperateThread &&
+    environmentUnavailable === null &&
+    phase !== "running" &&
+    phase !== "connecting";
   const {
     items: composerMenuItems,
     isLoading: isComposerMenuLoading,
@@ -1145,6 +1180,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     sideChatAvailable: props.sideChatAvailable === true,
     sideChatDisabledReason: props.sideChatDisabledReason ?? null,
     freshSessionAvailable: props.onFreshSession !== undefined,
+    cleanOutAvailable,
     compactSlashCommandAvailable,
     selectedProvider,
     selectedProviderSkills,
@@ -1152,7 +1188,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     showSkillsInSlashMenu: settings.showSkillsInSlashMenu,
     workspaceSkillsScanning,
     questionAttachmentTarget,
-    modelMentions: { instanceEntries: providerInstanceEntries, modelOptionsByInstance },
+    modelMentions: {
+      instanceEntries: providerInstanceEntries,
+      modelOptionsByInstance,
+      lastUsedModelByInstance,
+    },
   });
 
   const composerMenuOpen = Boolean(composerTrigger);
@@ -1983,6 +2023,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         }
         return;
       }
+      if (item.command === "clean") {
+        if (!cleanOutAvailable || activeThreadId === null) return;
+        const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
+          expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+        });
+        if (applied) {
+          setComposerHighlightedItemId(null);
+          void cleanOutThread({
+            environmentId,
+            input: { threadId: activeThreadId },
+          });
+        }
+        return;
+      }
       if (item.command === "side" || item.command === "btw") {
         if (props.sideChatDisabledReason) return;
         const applied = applyPromptReplacement(
@@ -2553,6 +2607,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       onModelPickerOpenChange={setIsComposerModelPickerOpen}
       modelPickerIconClassName={composerProviderState.modelPickerIconClassName}
       getModelDisabledReason={getModelDisabledReason}
+      routingTarget={
+        promptProviderRouting?.switchedByMention
+          ? {
+              instanceId: promptProviderRouting.modelSelection.instanceId,
+              model: promptProviderRouting.modelSelection.model,
+              matchedHandle: promptProviderRouting.matchedHandle,
+              matchedTargetLabel: promptProviderRouting.matchedTargetLabel,
+            }
+          : null
+      }
     />
   );
   // An open question owns the space above the composer. Only a machine problem,
@@ -3282,6 +3346,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         selectedProvider,
         selectedModel,
         selectedProviderModels,
+        routableProviderInstanceEntries,
+        modelOptionsByInstance,
+        lastUsedModelByInstance,
       }),
       setMultipleModelSelections,
       validateProviderInput: (providerInput: string) => {
@@ -3346,6 +3413,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       selectedPromptEffort,
       selectedProvider,
       selectedProviderModels,
+      routableProviderInstanceEntries,
+      modelOptionsByInstance,
+      lastUsedModelByInstance,
       compactThreadContextStable,
     ],
   );

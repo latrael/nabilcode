@@ -8,6 +8,8 @@ import { page, userEvent } from "vite-plus/test/browser";
 import { AppRoot } from "~/AppRoot";
 // The thread route loads ChatView lazily; its first transform would eat the test's timeout.
 import "~/components/ChatView";
+import { useComposerDraftStore } from "~/composerDraftStore";
+import { useFolderTerminalStore } from "~/folderTerminalStore";
 import { __setClientSettingsForTests } from "~/hooks/useSettings";
 import { getRouter } from "~/router";
 import {
@@ -63,6 +65,24 @@ it("lists threads under their project, navigates on click, jumps by shortcut and
       truncated: false,
     }),
   );
+  let ensureScratchCalls = 0;
+  using _ensureScratch = answerRpc("projects.ensureScratch", () => {
+    ensureScratchCalls += 1;
+    return Effect.succeed({ projectId: PROJECT_ID });
+  });
+  using _readFile = answerRpc("projects.readFile", () =>
+    Effect.succeed({ relativePath: "t3.json", exists: false }),
+  );
+  useFolderTerminalStore.getState().create({
+    environmentId: ENVIRONMENT_ID,
+    projectId: PROJECT_ID,
+    cwd: "/workspace/render",
+    worktreePath: null,
+    label: "render",
+  });
+  using _terminals = {
+    [Symbol.dispose]: () => useFolderTerminalStore.setState({ entries: [] }),
+  };
   using _platform = vi.spyOn(navigator, "platform", "get").mockReturnValue("Linux x86_64");
   const openFile = vi.fn(() => true);
   const originalOpenFile = useBoardStore.getState().openFile;
@@ -85,9 +105,16 @@ it("lists threads under their project, navigates on click, jumps by shortcut and
 
   const rows = page.getByTestId("cabinet-thread-row");
   await expect.element(rows.filter({ hasText: busy.title })).toBeVisible();
+  await expect.element(page.getByTestId("cabinet-general-section")).toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: "GENERAL", exact: true }))
+    .toHaveAttribute("aria-expanded", "true");
   await expect
     .element(page.getByRole("button", { name: /^render/ }))
     .toHaveAttribute("aria-expanded", "true");
+  await expect.element(page.getByTestId("cabinet-terminal-row")).toBeVisible();
+  expect(rows.filter({ hasText: busy.title }).element().textContent).toContain(`#${busy.title}`);
+  expect(rows.filter({ hasText: idle.title }).element().textContent).toContain(`#${idle.title}`);
   const dotOf = (title: string) =>
     rows
       .filter({ hasText: title })
@@ -119,6 +146,25 @@ it("lists threads under their project, navigates on click, jumps by shortcut and
   await vi.waitFor(() =>
     expect(openFile).toHaveBeenCalledWith(`${ENVIRONMENT_ID}:${PROJECT_ID}`, "NOTES.md"),
   );
+
+  await userEvent.click(page.getByRole("button", { name: "New channel", exact: true }));
+  await vi.waitFor(() => expect(router.history.location.pathname).toMatch(/^\/draft\//));
+  const projectDraftPath = router.history.location.pathname;
+  useComposerDraftStore
+    .getState()
+    .setPrompt(
+      projectDraftPath.replace("/draft/", "") as Parameters<
+        ReturnType<typeof useComposerDraftStore.getState>["setPrompt"]
+      >[0],
+      "draft in project",
+    );
+
+  await userEvent.click(page.getByRole("button", { name: "New general channel", exact: true }));
+  await vi.waitFor(() => expect(ensureScratchCalls).toBe(1));
+  await vi.waitFor(() => {
+    expect(router.history.location.pathname).toMatch(/^\/draft\//);
+    expect(router.history.location.pathname).not.toBe(projectDraftPath);
+  });
 });
 
 function findTreeRow(path: string): HTMLElement | null {

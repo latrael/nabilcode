@@ -55,6 +55,7 @@ import {
 import {
   type ComposerSubmissionIntent,
   collapseExpandedComposerCursor,
+  isCleanOutComposerCommand,
 } from "../../composer-logic";
 import { type ChatMessage, DEFAULT_INTERACTION_MODE } from "../../types";
 import { recordPromptSent } from "../GitHubStarPrompt";
@@ -104,6 +105,7 @@ import {
   multipleModelSendBlock,
   referencedThreadContexts,
 } from "./composerSend.logic";
+import { resolvePromptProviderRouting } from "./composerModelMentions";
 import { useMultipleModelSend } from "./useMultipleModelSend";
 import { type ComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
 import {
@@ -347,6 +349,9 @@ export function useComposerSend(input: ComposerSendInput) {
   const clientSettingsHydrated = useClientSettingsHydrated();
   const startThreadTurn = useOrchestrationCommand(threadEnvironment.startTurn, {
     reportFailure: false,
+  });
+  const cleanOutThread = useOrchestrationCommand(threadEnvironment.cleanOut, {
+    label: "clean out channel",
   });
   const uploadThreadFeedback = useOrchestrationCommand(threadEnvironment.uploadFeedback, {
     reportFailure: false,
@@ -763,6 +768,38 @@ export function useComposerSend(input: ComposerSendInput) {
       composerRef.current?.resetCursorState();
       return;
     }
+    if (composerHoldsOnlyText && isCleanOutComposerCommand(trimmed)) {
+      if (!isServerThread) {
+        promptRef.current = "";
+        clearComposerDraftContent(composerDraftTarget);
+        composerRef.current?.resetCursorState();
+        return;
+      }
+      if (phase === "running" || phase === "connecting") {
+        toastManager.add(
+          stackedThreadToast({
+            type: "warning",
+            title: "Cannot clean out channel while a turn is running",
+            description: "Wait for the current turn to finish or stop it first.",
+          }),
+        );
+        return;
+      }
+      const cleanResult = await cleanOutThread({
+        environmentId: activeThread.environmentId,
+        input: { threadId: activeThread.id },
+      });
+      if (
+        cleanResult._tag === "Success" &&
+        currentRouteThreadKeyRef.current === routeThreadKey &&
+        promptRef.current === promptAtSend
+      ) {
+        promptRef.current = "";
+        clearComposerDraftContent(composerDraftTarget);
+        composerRef.current?.resetCursorState();
+      }
+      return;
+    }
     // Read once: an arm made while this send is in flight belongs to the next message.
     const freshArm = freshSessionAvailable ? readFreshSessionArm(routeThreadKey) : undefined;
     if (!hasSendableContent) {
@@ -864,13 +901,57 @@ export function useComposerSend(input: ComposerSendInput) {
     const outgoingMessageContext = buildOutgoingMessageContext(
       composerAttachmentsSnapshot.map((attachment) => attachment.id),
     );
+    const promptProviderRouting =
+      multipleModelSelections === null && sendCtx.modelOptionsByInstance
+        ? resolvePromptProviderRouting({
+            prompt: messageTextForSend,
+            instanceEntries: sendCtx.routableProviderInstanceEntries ?? providerInstanceEntries,
+            modelOptionsByInstance: sendCtx.modelOptionsByInstance,
+            currentChannelModelSelection: ctxSelectedModelSelection,
+            ...(sendCtx.lastUsedModelByInstance
+              ? { lastUsedModelByInstance: sendCtx.lastUsedModelByInstance }
+              : {}),
+          })
+        : null;
+    const switchedByMention = promptProviderRouting?.switchedByMention === true;
+    const effectiveModelSelection: ModelSelection = (() => {
+      if (!switchedByMention) return ctxSelectedModelSelection;
+      const routed = promptProviderRouting.modelSelection;
+      if (routed.options !== undefined) return routed;
+      if (
+        routed.instanceId === ctxSelectedModelSelection.instanceId &&
+        routed.model === ctxSelectedModelSelection.model &&
+        ctxSelectedModelSelection.options !== undefined
+      ) {
+        return ctxSelectedModelSelection;
+      }
+      const rememberedOptions =
+        useComposerDraftStore.getState().stickyOptionsByModelByProvider[routed.instanceId]?.[
+          routed.model
+        ];
+      return rememberedOptions !== undefined && rememberedOptions.length > 0
+        ? createModelSelection(routed.instanceId, routed.model, [...rememberedOptions])
+        : routed;
+    })();
+    const routedProviderEntry = switchedByMention
+      ? providerInstanceEntries.find(
+          (entry) => entry.instanceId === effectiveModelSelection.instanceId,
+        )
+      : undefined;
+    const effectiveProvider = routedProviderEntry?.driverKind ?? ctxSelectedProvider;
+    const effectiveModel = switchedByMention ? effectiveModelSelection.model : ctxSelectedModel;
+    const effectiveProviderModels = routedProviderEntry?.models ?? ctxSelectedProviderModels;
+    const effectivePromptEffort =
+      effectiveModelSelection.instanceId === ctxSelectedModelSelection.instanceId
+        ? ctxSelectedPromptEffort
+        : null;
     const messageIdForSend = newMessageId();
     const messageCreatedAt = new Date().toISOString();
     const outgoingMessageText = formatOutgoingPrompt({
-      provider: ctxSelectedProvider,
-      model: ctxSelectedModel,
-      models: ctxSelectedProviderModels,
-      effort: ctxSelectedPromptEffort,
+      provider: effectiveProvider,
+      model: effectiveModel,
+      models: effectiveProviderModels,
+      effort: effectivePromptEffort,
       text: messageTextForSend || ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
     });
     if (composerRef.current?.validateProviderInput(outgoingMessageText) === false) {
@@ -1242,6 +1323,14 @@ export function useComposerSend(input: ComposerSendInput) {
     // Keep new-thread flows from reusing this draft while attachments and worktree setup settle.
     if (sentDraftThreadRef) markPromotedDraftThreadByRef(sentDraftThreadRef);
     clearComposerDraftContent(composerDraftTarget);
+    if (switchedByMention) {
+      const draftStore = useComposerDraftStore.getState();
+      draftStore.setModelSelection(composerDraftTarget, effectiveModelSelection, {
+        explicit: true,
+        replaceOptions: true,
+      });
+      draftStore.setStickyModelSelection(effectiveModelSelection);
+    }
     // The prompt ref and cursor belong to the thread on screen, which may no longer be this one.
     if (currentRouteThreadKeyRef.current === routeThreadKey) {
       promptRef.current = "";
@@ -1254,9 +1343,9 @@ export function useComposerSend(input: ComposerSendInput) {
       fallbackLabels: sendTitleFallbackLabels(sendSnapshot),
     });
     const threadCreateModelSelection = createModelSelection(
-      ctxSelectedModelSelection.instanceId,
-      ctxSelectedModel || activeProjectDefaultModelSelection?.model || DEFAULT_MODEL,
-      ctxSelectedModelSelection.options,
+      effectiveModelSelection.instanceId,
+      effectiveModel || activeProjectDefaultModelSelection?.model || DEFAULT_MODEL,
+      effectiveModelSelection.options,
     );
 
     let failure: AtomCommandResult<unknown, unknown> | null = null;
@@ -1300,7 +1389,7 @@ export function useComposerSend(input: ComposerSendInput) {
             attachments: [],
             idleCompaction: "onReturn",
           },
-          modelSelection: ctxSelectedModelSelection,
+          modelSelection: effectiveModelSelection,
           runtimeMode,
           interactionMode: DEFAULT_INTERACTION_MODE,
         },
@@ -1369,7 +1458,7 @@ export function useComposerSend(input: ComposerSendInput) {
               ),
             }),
           },
-          modelSelection: ctxSelectedModelSelection,
+          modelSelection: effectiveModelSelection,
           titleSeed: title,
           runtimeMode,
           interactionMode: DEFAULT_INTERACTION_MODE,

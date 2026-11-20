@@ -313,6 +313,41 @@ function openIntentView(intent: CommandPaletteOpenIntent | null): CommandPalette
 
 const NEW_THREAD_NO_PROJECT_VALUE = "new-thread-in:no-project";
 
+function decorateChannelPaletteItem(
+  item: CommandPaletteActionItem,
+  isScratchThread: (threadRef: NonNullable<CommandPaletteActionItem["threadRef"]>) => boolean,
+): CommandPaletteActionItem {
+  const rawTitle =
+    item.searchTitle ?? (typeof item.title === "string" ? item.title : "Untitled thread");
+  const cleanTitle = rawTitle.replace(/^#+\s*/, "").trim() || "untitled";
+  const inScratchSection = item.threadRef ? isScratchThread(item.threadRef) : false;
+  const threadSearch =
+    inScratchSection && item.threadSearch
+      ? {
+          ...item.threadSearch,
+          projectTitle: item.threadSearch.projectTitle
+            ? `${item.threadSearch.projectTitle} GENERAL`
+            : "GENERAL",
+        }
+      : item.threadSearch;
+  return {
+    ...item,
+    title: (
+      <>
+        <span className="text-muted-foreground/80">#</span>
+        {cleanTitle}
+      </>
+    ),
+    searchTitle: rawTitle,
+    searchTerms: [
+      ...item.searchTerms,
+      `#${cleanTitle}`,
+      ...(inScratchSection ? ["GENERAL", "general"] : []),
+    ],
+    ...(threadSearch ? { threadSearch } : {}),
+  };
+}
+
 export function CommandPalette({ children }: { children: ReactNode }) {
   useCommandPaletteMount();
   const state = useCommandPaletteStore();
@@ -546,7 +581,12 @@ function OpenCommandPaletteDialog(props: {
   const providersByEnvironment = useEnvironmentProviders();
   const { changeThemeItem, changeAppearanceItem, themeEditorItem } = useCommandPaletteThemeItems();
   const currentView = viewStack.at(-1)?.view ?? null;
-  const threadSearchQuery = currentView === null && !isActionsOnly ? deferredQuery : "";
+  const isChannelsOnly =
+    currentView === null && !isActionsOnly && deferredQuery.trimStart().startsWith("#");
+  const channelSearchQuery = isChannelsOnly
+    ? deferredQuery.trimStart().replace(/^#+\s*/, "")
+    : deferredQuery;
+  const threadSearchQuery = currentView === null && !isActionsOnly ? channelSearchQuery : "";
   const [browseGeneration, setBrowseGeneration] = useState(0);
   const [browseNavigation] = useState(createBrowseNavigationCoordinator);
   const [addProjectEnvironmentId, setAddProjectEnvironmentId] = useState<EnvironmentId | null>(
@@ -946,12 +986,30 @@ function OpenCommandPaletteDialog(props: {
     (item) => projectJumpItems.get(item.value) ?? item,
   );
 
+  const threadProjectByKey = new Map(
+    threads.map((thread) => [
+      `${thread.environmentId}:${thread.id}`,
+      projectByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? null,
+    ]),
+  );
+  const isScratchChannel = (threadRef: NonNullable<CommandPaletteActionItem["threadRef"]>) => {
+    const project = threadProjectByKey.get(`${threadRef.environmentId}:${threadRef.threadId}`);
+    if (!project) return false;
+    return isScratchProject(project, scratchWorkspaceRootFor?.(project.environmentId));
+  };
+
   const {
-    threadItems: allThreadItems,
-    threadMessageItems,
+    threadItems: rawThreadItems,
+    threadMessageItems: rawThreadMessageItems,
     now: searchNow,
     isSearchPending: isThreadSearchPending,
   } = useCommandPaletteThreadItems({ activeThread: activeThread ?? null, threadSearchQuery });
+  const allThreadItems = rawThreadItems.map((item) =>
+    decorateChannelPaletteItem(item, isScratchChannel),
+  );
+  const threadMessageItems = rawThreadMessageItems.map((item) =>
+    decorateChannelPaletteItem(item, isScratchChannel),
+  );
   // Recent means used recently: written in or opened, whichever is later. The
   // open thread would always lead that list, so it is left out.
   const activeThreadValue = activeThread
@@ -1869,44 +1927,72 @@ function OpenCommandPaletteDialog(props: {
 
   const isLinkedThreadSearch =
     linkedThreadSearch?.linkedThreads !== undefined && deferredQuery === linkedThreadSearch.query;
-  const filteredGroups = filterCommandPaletteGroups({
-    activeGroups,
-    query: deferredQuery,
-    isInSubmenu: currentView !== null,
-    ...(deferredQuery.trim().length > 0
-      ? {
-          allOptions: {
-            rootGroups,
-            nestedItems: buildNestedSearchItems(actionItems, deferredQuery),
+  const resolvedThreadSearchItems =
+    isLinkedThreadSearch && linkedThreadSearch?.linkedThreads
+      ? buildLinkedThreadActionItems({
+          ...linkedThreadSearch.linkedThreads,
+          threads: visibleLinkedThreads(
+            linkedThreadSearch.linkedThreads.threads,
+            linkedThreadSearch.linkedThreads.environmentId,
+            linkedThreadRefs,
+            hiddenKeys,
+            hidingAnywhere,
+          ),
+          query: linkedThreadSearch.query,
+          icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
+          runThread: async (thread) => {
+            await navigate({
+              to: "/$environmentId/$threadId",
+              params: buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id)),
+            });
           },
-        }
-      : {}),
-    projectSearchItems: projectSearchItems,
-    settingsSearchItems,
-    threadSearchItems:
-      isLinkedThreadSearch && linkedThreadSearch?.linkedThreads
-        ? buildLinkedThreadActionItems({
-            ...linkedThreadSearch.linkedThreads,
-            threads: visibleLinkedThreads(
-              linkedThreadSearch.linkedThreads.threads,
-              linkedThreadSearch.linkedThreads.environmentId,
-              linkedThreadRefs,
-              hiddenKeys,
-              hidingAnywhere,
-            ),
-            query: linkedThreadSearch.query,
-            icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
-            runThread: async (thread) => {
-              await navigate({
-                to: "/$environmentId/$threadId",
-                params: buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id)),
-              });
+        }).map((item) => decorateChannelPaletteItem(item, isScratchChannel))
+      : allThreadItems;
+  const filteredGroups = (() => {
+    if (isChannelsOnly) {
+      if (channelSearchQuery.trim().length === 0) {
+        const sortedChannels = resolvedThreadSearchItems.toSorted(
+          (left, right) =>
+            Number(left.secondary ?? false) - Number(right.secondary ?? false) ||
+            (right.threadSearch ? threadRecentUse(right.threadSearch) : 0) -
+              (left.threadSearch ? threadRecentUse(left.threadSearch) : 0),
+        );
+        return sortedChannels.length > 0
+          ? [{ value: "threads-search", label: "Channels", items: sortedChannels }]
+          : [];
+      }
+      return filterCommandPaletteGroups({
+        activeGroups: [],
+        query: channelSearchQuery,
+        isInSubmenu: false,
+        projectSearchItems: [],
+        settingsSearchItems: [],
+        threadSearchItems: resolvedThreadSearchItems,
+        threadMessageItems: isLinkedThreadSearch ? [] : threadMessageItems,
+        now: searchNow,
+      }).map((group) =>
+        group.value === "threads-search" ? { ...group, label: "Channels" } : group,
+      );
+    }
+    return filterCommandPaletteGroups({
+      activeGroups,
+      query: deferredQuery,
+      isInSubmenu: currentView !== null,
+      ...(deferredQuery.trim().length > 0
+        ? {
+            allOptions: {
+              rootGroups,
+              nestedItems: buildNestedSearchItems(actionItems, deferredQuery),
             },
-          })
-        : allThreadItems,
-    threadMessageItems: isLinkedThreadSearch ? [] : threadMessageItems,
-    now: searchNow,
-  });
+          }
+        : {}),
+      projectSearchItems: projectSearchItems,
+      settingsSearchItems,
+      threadSearchItems: resolvedThreadSearchItems,
+      threadMessageItems: isLinkedThreadSearch ? [] : threadMessageItems,
+      now: searchNow,
+    });
+  })();
 
   const handleAddProjectForEnvironment = async (input: {
     readonly environmentId: EnvironmentId;

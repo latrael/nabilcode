@@ -4,8 +4,12 @@ import * as Schema from "effect/Schema";
 
 import { NodeId, RunAttemptId, TrimmedNonEmptyString } from "./index.ts";
 import {
+  isKnownOrchestrationV2EventType,
   latestProviderTurnForAttempt,
   OrchestrationV2CheckpointFileSummary,
+  OrchestrationV2Command,
+  OrchestrationV2DomainEvent,
+  OrchestrationV2DomainEventJson,
   OrchestrationV2ProviderCapabilities,
   OrchestrationV2ProviderThread,
   OrchestrationV2ProviderThreadJson,
@@ -34,6 +38,17 @@ const encodeOrchestrationV2ProviderThreadJson = Schema.encodeSync(
 const decodeOrchestrationV2ProviderThread = Schema.decodeUnknownSync(OrchestrationV2ProviderThread);
 const decodeOrchestrationV2ProviderCapabilities = Schema.decodeUnknownSync(
   OrchestrationV2ProviderCapabilities,
+);
+const commandWireCodec = Schema.toCodecJson(OrchestrationV2Command);
+const decodeOrchestrationV2CommandWire = Schema.decodeSync(commandWireCodec);
+const encodeOrchestrationV2CommandWire = Schema.encodeSync(commandWireCodec);
+const domainEventWireCodec = Schema.toCodecJson(OrchestrationV2DomainEvent);
+const decodeOrchestrationV2DomainEventWire = Schema.decodeSync(domainEventWireCodec);
+const encodeOrchestrationV2DomainEventWire = Schema.encodeSync(domainEventWireCodec);
+const decodeOrchestrationV2DomainEventJson = Schema.decodeSync(OrchestrationV2DomainEventJson);
+const encodeOrchestrationV2DomainEventJson = Schema.encodeSync(OrchestrationV2DomainEventJson);
+const decodeOrchestrationV2ThreadStreamItemWire = Schema.decodeUnknownSync(
+  Schema.toCodecJson(OrchestrationV2RpcSchemas.subscribeThread.output),
 );
 
 describe("orchestration V2 contracts", () => {
@@ -648,5 +663,87 @@ describe("latestProviderTurnForAttempt", () => {
     ];
     expect(latestProviderTurnForAttempt(turns, RunAttemptId.make("goal-attempt"))?.id).toBe("last");
     expect(latestProviderTurnForAttempt(turns, null)).toBeUndefined();
+  });
+});
+
+describe("thread.clean-out contracts", () => {
+  it("round-trips thread.clean-out command and thread.cleaned-out domain event", () => {
+    const wireCommand = {
+      type: "thread.clean-out" as const,
+      commandId: "cmd-clean-out-1",
+      threadId: "thread-1",
+    };
+    const decodedCommand = decodeOrchestrationV2CommandWire(wireCommand);
+    expect(decodedCommand).toEqual(wireCommand);
+    expect(encodeOrchestrationV2CommandWire(decodedCommand)).toEqual(wireCommand);
+
+    expect(isKnownOrchestrationV2EventType("thread.cleaned-out")).toBe(true);
+
+    const wireEvent = {
+      id: "event-clean-out-1",
+      type: "thread.cleaned-out" as const,
+      threadId: "thread-1",
+      occurredAt: DateTime.formatIso(now),
+      payload: {
+        thread: {
+          createdBy: "user" as const,
+          creationSource: "web" as const,
+          id: "thread-1",
+          projectId: "project-1",
+          title: "general",
+          providerInstanceId: "codex",
+          modelSelection: { instanceId: "codex", model: "gpt-5.4" },
+          runtimeMode: "full-access" as const,
+          interactionMode: "default" as const,
+          branch: null,
+          worktreePath: null,
+          activeProviderThreadId: null,
+          lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: "thread-1" },
+          forkedFrom: null,
+          createdAt: DateTime.formatIso(now),
+          updatedAt: DateTime.formatIso(now),
+          archivedAt: null,
+          deletedAt: null,
+        },
+        releasedProviderSessionIds: ["provider-session-1", "provider-session-2"],
+      },
+    };
+
+    const decodedWireEvent = decodeOrchestrationV2DomainEventWire(wireEvent);
+    expect(decodedWireEvent.type).toBe("thread.cleaned-out");
+    if (decodedWireEvent.type !== "thread.cleaned-out") {
+      throw new Error("expected thread.cleaned-out");
+    }
+    expect(decodedWireEvent.payload.thread.id).toBe("thread-1");
+    expect(decodedWireEvent.payload.thread.activeProviderThreadId).toBeNull();
+    expect(decodedWireEvent.payload.releasedProviderSessionIds).toEqual([
+      "provider-session-1",
+      "provider-session-2",
+    ]);
+
+    const reencodedWireEvent = encodeOrchestrationV2DomainEventWire(decodedWireEvent);
+    expect(decodeOrchestrationV2DomainEventWire(reencodedWireEvent)).toEqual(decodedWireEvent);
+
+    const decodedStoredEvent = decodeOrchestrationV2DomainEventJson(wireEvent);
+    expect(decodedStoredEvent).toEqual(decodedWireEvent);
+    const encodedStoredEvent = encodeOrchestrationV2DomainEventJson(decodedStoredEvent);
+    expect(decodeOrchestrationV2DomainEventJson(encodedStoredEvent)).toEqual(decodedStoredEvent);
+
+    const streamItem = decodeOrchestrationV2ThreadStreamItemWire({
+      kind: "event",
+      sequence: 7,
+      event: wireEvent,
+    });
+    expect(streamItem).toMatchObject({
+      kind: "event",
+      sequence: 7,
+      event: {
+        type: "thread.cleaned-out",
+        payload: {
+          thread: { id: "thread-1" },
+          releasedProviderSessionIds: ["provider-session-1", "provider-session-2"],
+        },
+      },
+    });
   });
 });

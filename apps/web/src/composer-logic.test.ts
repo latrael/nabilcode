@@ -22,6 +22,7 @@ import {
   expandCollapsedComposerCursor,
   extendReplacementRangeForTrailingSpace,
   formatAssistantCitationForComposer,
+  isCleanOutComposerCommand,
   isPathSuggestionCurrent,
   replaceTextRange,
 } from "./composer-logic";
@@ -595,7 +596,7 @@ describe("extendReplacementRangeForTrailingSpace", () => {
 
 describe("side chat slash commands", () => {
   it("are not offered after the start of a message", () => {
-    const items = (["side", "btw", "clear", "model"] as const).map((command) => ({
+    const items = (["side", "btw", "clear", "clean", "model"] as const).map((command) => ({
       id: `slash:${command}`,
       type: "slash-command" as const,
       command,
@@ -605,5 +606,21 @@ describe("side chat slash commands", () => {
     expect(slashCommandItemsForPromptPosition(items, false).map((item) => item.id)).toEqual([
       "slash:model",
     ]);
+    expect(slashCommandItemsForPromptPosition(items, true).map((item) => item.id)).toEqual([
+      "slash:side",
+      "slash:btw",
+      "slash:clear",
+      "slash:clean",
+      "slash:model",
+    ]);
+  });
+});
+
+describe("isCleanOutComposerCommand", () => {
+  it("matches standalone /clean with optional whitespace and case-insensitivity", () => {
+    expect(isCleanOutComposerCommand("/clean")).toBe(true);
+    expect(isCleanOutComposerCommand("  /CLEAN  ")).toBe(true);
+    expect(isCleanOutComposerCommand("/clean now")).toBe(false);
+    expect(isCleanOutComposerCommand("please /clean")).toBe(false);
   });
 });

@@ -19,7 +19,7 @@ import {
 } from "@t3tools/contracts";
 import { useParams, useRouter, type AnyRouter } from "@tanstack/react-router";
 import { useGT } from "gt-react";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronRightIcon, PlusIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent } from "react";
 
 import { canShareWithGuestAtom } from "~/components/chat/guestShareAvailability";
@@ -31,14 +31,17 @@ import {
   useFolderTerminalActions,
   type FolderTerminalStatus,
 } from "~/components/terminal/folderTerminals";
+import { Button } from "~/components/ui/button";
 import { SidebarContent, useSidebar } from "~/components/ui/sidebar";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { openCommandPalette } from "~/commandPaletteBus";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { isElectron } from "~/env";
 import { useFolderTerminalStore } from "~/folderTerminalStore";
 import { useHandleNewThread } from "~/hooks/useHandleNewThread";
 import { useProjectPin } from "~/hooks/useProjectGroupUpdate";
+import { useScratchProject } from "~/hooks/useScratchProject";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useShownThreadRouteTarget } from "~/hooks/useShownThreadRouteTarget";
 import { useThreadActionMenu } from "~/hooks/useThreadActionMenu";
@@ -52,6 +55,7 @@ import { registerSettleAndAdvance } from "~/settleAndAdvance";
 import { getSidebarProjectSettingsKey } from "~/sidebarProjectGrouping";
 import type { SidebarProjectSnapshot } from "~/sidebarProjectGrouping";
 import { useProjects, useQuietThreadShell } from "~/state/entities";
+import { usePrimaryEnvironmentId } from "~/state/environments";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 import { readEnvironmentScope } from "~/state/session";
 import { liveShellEnvironmentIdsAtom } from "~/state/shell";
@@ -146,6 +150,72 @@ function ThreadMenuLauncher(props: {
   return null;
 }
 
+function GeneralSectionHeader(props: {
+  rowKey: string;
+  expanded: boolean;
+  threadCount: number;
+  containsActiveThread: boolean;
+  newChannelDisabled: boolean;
+  label: string;
+  newChannelLabel: string;
+  onToggle: () => void;
+  onNewChannel: () => void;
+}) {
+  return (
+    <div className="group/general mx-1.5 flex h-7 items-center rounded-md hover:bg-sidebar-row-hover">
+      <button
+        type="button"
+        data-sidebar-row={props.rowKey}
+        aria-expanded={props.expanded}
+        className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-md pl-2 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70"
+        onClick={props.onToggle}
+      >
+        <ChevronRightIcon
+          aria-hidden
+          className={cn(
+            "size-3 shrink-0 text-sidebar-muted-foreground transition-transform motion-reduce:transition-none",
+            props.expanded && "rotate-90",
+          )}
+        />
+        <span
+          className={cn(
+            "min-w-0 truncate text-10_5 font-bold tracking-label uppercase",
+            props.containsActiveThread
+              ? "text-sidebar-foreground"
+              : "text-sidebar-muted-foreground",
+          )}
+        >
+          {props.label}
+        </span>
+      </button>
+      <div className="flex shrink-0 items-center gap-1 pr-1.5">
+        {props.threadCount > 0 ? (
+          <span className="min-w-4 text-right text-2xs tabular-nums text-sidebar-muted-foreground">
+            {props.threadCount}
+          </span>
+        ) : null}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost-muted"
+                aria-label={props.newChannelLabel}
+                disabled={props.newChannelDisabled}
+                onClick={props.onNewChannel}
+              />
+            }
+          >
+            <PlusIcon />
+          </TooltipTrigger>
+          <TooltipPopup>{props.newChannelLabel}</TooltipPopup>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
 function ParkedGroupHeader(props: {
   expanded: boolean;
   count: number;
@@ -186,6 +256,8 @@ export default function CabinetSidebar({ routeReveal }: { routeReveal: SidebarRo
     reportFailure: false,
   });
   const { canPinProjectGroup, toggleProjectGroupPin } = useProjectPin();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const { scratchEnvironmentId, startScratchThread } = useScratchProject();
   const newThreadContext = useHandleNewThread();
   const { handleNewThread } = newThreadContext;
 
@@ -237,9 +309,10 @@ export default function CabinetSidebar({ routeReveal }: { routeReveal: SidebarRo
     navigateToThread,
   });
 
-  const projectThreadKeys = model.sections.flatMap((section) =>
-    section.threads.map(cabinetThreadKey),
-  );
+  const projectThreadKeys = [
+    ...model.generalSection.threads.map(cabinetThreadKey),
+    ...model.sections.flatMap((section) => section.threads.map(cabinetThreadKey)),
+  ];
   const settleAndAdvanceThread = (threadRef: ScopedThreadRef) => {
     void (async () => {
       const threadKey = scopedThreadKey(threadRef);
@@ -426,6 +499,23 @@ export default function CabinetSidebar({ routeReveal }: { routeReveal: SidebarRo
     if (isMobile) setOpenMobile(false);
     void handleNewThread(scopeProjectRef(group.environmentId, group.id));
   };
+  const generalTargetEnvironmentId =
+    scratchEnvironmentId(primaryEnvironmentId) ??
+    primaryEnvironmentId ??
+    liveEnvironmentIds.values().next().value ??
+    null;
+  const startGeneralChannel = () => {
+    if (isMobile) setOpenMobile(false);
+    if (model.generalSection.group) {
+      void handleNewThread(
+        scopeProjectRef(model.generalSection.group.environmentId, model.generalSection.group.id),
+      );
+      return;
+    }
+    if (generalTargetEnvironmentId !== null) {
+      void startScratchThread(generalTargetEnvironmentId);
+    }
+  };
   const openProjectSettings = (group: SidebarProjectSnapshot) => {
     if (isMobile) setOpenMobile(false);
     void router.navigate({
@@ -559,6 +649,32 @@ export default function CabinetSidebar({ routeReveal }: { routeReveal: SidebarRo
         }
       >
         <div ref={attachSidebarTree} className="flex flex-col gap-0.5 pb-2" role="presentation">
+          {normalizedQuery === "" || model.generalSection.threads.length > 0 ? (
+            <div data-testid="cabinet-general-section" className="pb-1">
+              <GeneralSectionHeader
+                rowKey={model.generalSection.key}
+                expanded={model.generalSection.expanded}
+                threadCount={model.generalSection.threadCount}
+                containsActiveThread={model.generalSection.threads.some(
+                  (thread) => cabinetThreadKey(thread) === routeRowThreadKey,
+                )}
+                newChannelDisabled={
+                  model.generalSection.group === null && generalTargetEnvironmentId === null
+                }
+                label={gt("GENERAL")}
+                newChannelLabel={gt("New general channel")}
+                onToggle={model.toggleGeneral}
+                onNewChannel={startGeneralChannel}
+              />
+              {model.generalSection.threads.length > 0 ? (
+                <ul className="flex flex-col gap-px">
+                  {model.generalSection.threads.map((thread) =>
+                    renderThreadRow(thread, model.generalSection.key),
+                  )}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
           {model.sections.map((section) => {
             const terminals = sectionTerminals(section.group, section.expanded);
             return (
@@ -581,6 +697,9 @@ export default function CabinetSidebar({ routeReveal }: { routeReveal: SidebarRo
                 />
                 {terminals.length > 0 || section.threads.length > 0 ? (
                   <ul className="flex flex-col gap-px">
+                    {section.threads.map((thread) =>
+                      renderThreadRow(thread, section.group.projectKey),
+                    )}
                     {terminals.map((entry) => {
                       const terminalKey = folderTerminalKey(entry);
                       return (
@@ -597,15 +716,13 @@ export default function CabinetSidebar({ routeReveal }: { routeReveal: SidebarRo
                         />
                       );
                     })}
-                    {section.threads.map((thread) =>
-                      renderThreadRow(thread, section.group.projectKey),
-                    )}
                   </ul>
                 ) : null}
               </div>
             );
           })}
-          {model.sections.length === 0 ? (
+          {model.sections.length === 0 &&
+          (normalizedQuery === "" || model.generalSection.threads.length === 0) ? (
             <p className="px-4 py-3 text-xs text-sidebar-muted-foreground">
               {query.trim() ? gt("No matching threads.") : gt("No projects yet.")}
             </p>

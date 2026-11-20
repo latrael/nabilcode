@@ -103,7 +103,7 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
         />
         <span
           className={cn(
-            "min-w-0 truncate text-13 font-semibold",
+            "min-w-0 truncate text-10_5 font-bold tracking-label uppercase",
             props.containsActiveThread
               ? "text-sidebar-foreground"
               : "text-sidebar-muted-foreground",
@@ -136,9 +136,6 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
             REVEAL_CLASS,
           )}
         >
-          <RowAction label={gt("New thread")} onClick={() => props.onNewThread(group)}>
-            <PlusIcon />
-          </RowAction>
           {canOpenTerminal ? (
             <RowAction
               label={gt("New terminal")}
@@ -150,6 +147,9 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
               <TerminalIcon />
             </RowAction>
           ) : null}
+          <RowAction label={gt("New channel")} onClick={() => props.onNewThread(group)}>
+            <PlusIcon />
+          </RowAction>
           {props.canPin && !group.pinned ? (
             <RowAction label={gt("Pin project")} onClick={() => props.onTogglePin(group)}>
               <PinIcon />

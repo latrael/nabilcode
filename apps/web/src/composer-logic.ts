@@ -22,8 +22,12 @@ import {
 } from "./keybindings";
 
 export type ComposerTriggerKind = "path" | "pull-request" | "slash-command" | "skill";
-export type ComposerSlashCommand = "model" | "side" | "btw" | "clear";
+export type ComposerSlashCommand = "model" | "side" | "btw" | "clear" | "clean";
 export type ComposerSubmissionIntent = "foreground" | "background" | "alternate";
+
+export function isCleanOutComposerCommand(text: string): boolean {
+  return /^\/clean\s*$/i.test(text.trim());
+}
 
 export interface ComposerTrigger {
   kind: ComposerTriggerKind;

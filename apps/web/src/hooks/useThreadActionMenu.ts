@@ -10,6 +10,7 @@ import {
 import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import {
   AuthOrchestrationOperateScope,
+  type ContextMenuItem,
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -48,6 +49,8 @@ import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { canTurnThreadIntoProject, useThreadActions } from "./useThreadActions";
+
+type ThreadActionMenuItemId = ThreadActionMenuId | "clean-out";
 
 function failureToast(title: string, error: unknown) {
   toastManager.add(
@@ -93,6 +96,9 @@ export function useThreadActionMenu(input: {
   const regenerateThreadTitle = useOrchestrationCommand(threadEnvironment.regenerateTitle, {
     reportFailure: false,
   });
+  const cleanOutThread = useOrchestrationCommand(threadEnvironment.cleanOut, {
+    reportFailure: false,
+  });
   const handleNewThread = useNewThreadHandler();
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
@@ -129,8 +135,13 @@ export function useThreadActionMenu(input: {
       };
       const isRegeneratingTitle = thread.titleRegeneration != null;
       const snoozePresets = resolveSnoozePresets(now, timestampFormat, threadRef.environmentId);
-      const items = buildThreadActionMenuItems({
-        canOperate: readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope),
+      const canOperate = readEnvironmentScope(
+        threadRef.environmentId,
+        AuthOrchestrationOperateScope,
+      );
+      const isRunning = !threadRuntimeCanArchive(thread.runtime);
+      const baseItems = buildThreadActionMenuItems({
+        canOperate,
         canFind: onFind !== undefined,
         canOpenInCard: onOpenInCard !== undefined,
         branch: thread.branch ?? null,
@@ -141,17 +152,35 @@ export function useThreadActionMenu(input: {
         isSnoozed: supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() }),
         canSnoozeNow: canSnooze(thread, { now: now.toISOString() }),
         isRegeneratingTitle,
-        isRunning: !threadRuntimeCanArchive(thread.runtime),
+        isRunning,
         supports,
         snoozePresets,
         canShareWithGuest,
         canTurnIntoProject: canTurnThreadIntoProject(threadRef),
       });
+      const cleanOutItem: ContextMenuItem<ThreadActionMenuItemId> = {
+        id: "clean-out",
+        label: "Clean out channel",
+        icon: "refresh-cw",
+        disabled: !canOperate || isRunning,
+        separatorBefore: true,
+      };
+      const archiveIndex = baseItems.findIndex((item) => item.id === "archive");
+      const items: ReadonlyArray<ContextMenuItem<ThreadActionMenuItemId>> =
+        archiveIndex === -1
+          ? [...baseItems, cleanOutItem]
+          : [
+              ...baseItems.slice(0, archiveIndex),
+              cleanOutItem,
+              ...baseItems
+                .slice(archiveIndex)
+                .map((item, idx) => (idx === 0 ? { ...item, separatorBefore: false } : item)),
+            ];
       const clicked = await settlePromise(() => api.contextMenu.show(items, position));
       if (clicked._tag === "Failure" || clicked.value === null) return;
-      const action: ThreadActionMenuId = clicked.value;
+      const action: ThreadActionMenuItemId = clicked.value;
       if (
-        threadActionRequiresOperate(action) &&
+        (action === "clean-out" || threadActionRequiresOperate(action)) &&
         !readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope)
       ) {
         failureToast(
@@ -305,6 +334,22 @@ export function useThreadActionMenu(input: {
         case "copy-thread-id":
           copyThreadIdToClipboard(thread.id, { threadId: thread.id });
           return;
+        case "clean-out": {
+          if (!threadRuntimeCanArchive(thread.runtime)) {
+            failureToast(
+              "Cannot clean out channel",
+              new Error("Stop the active run before cleaning out this channel."),
+            );
+            return;
+          }
+          await reportFailure("Failed to clean out channel", () =>
+            cleanOutThread({
+              environmentId: threadRef.environmentId,
+              input: { threadId: threadRef.threadId },
+            }),
+          );
+          return;
+        }
         case "archive": {
           if (confirmThreadArchive) {
             const confirmed = await settlePromise(() =>

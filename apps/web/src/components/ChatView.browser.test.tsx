@@ -3,6 +3,9 @@ import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environ
 import {
   EnvironmentId,
   ORCHESTRATION_V2_WS_METHODS,
+  ProviderDriverKind,
+  ProviderInstanceId,
+  ProviderThreadId,
   RunId,
   ThreadId,
   WS_METHODS,
@@ -18,6 +21,7 @@ import { expect, it, vi } from "vite-plus/test";
 import { cdp, page, userEvent } from "vite-plus/test/browser";
 
 import { AppRoot } from "~/AppRoot";
+import { openCommandPalette } from "~/commandPaletteBus";
 // The route loads ChatView lazily, and its first transform (React Compiler over ~4k lines)
 // takes 6-11s; importing it here keeps that out of the test's timeout.
 import "~/components/ChatView";
@@ -30,8 +34,12 @@ import { usePromptStashStore } from "~/promptStashStore";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { getRouter } from "~/router";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { serverEnvironment } from "~/state/server";
+import { environmentShell } from "~/state/shell";
 import { environmentThreadDetails } from "~/state/threads";
 import {
+  CLAUDE_PROVIDER,
+  CODEX_PROVIDER,
   ENVIRONMENT_ID,
   PROJECT_ID,
   answerAssetUrls,
@@ -592,6 +600,9 @@ it("a shortcut conditioned on rightPanelOpen sees the thread's open right panel"
       ]),
     ),
   });
+  appAtomRegistry.refresh(
+    serverEnvironment.configProjection({ environmentId: ENVIRONMENT_ID, input: {} }),
+  );
   __setClientSettingsForTests({
     ...DEFAULT_CLIENT_SETTINGS,
     onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
@@ -608,7 +619,10 @@ it("a shortcut conditioned on rightPanelOpen sees the thread's open right panel"
   const toggle = page.getByRole("button", { name: "Toggle right panel", exact: true });
   await expect.element(toggle).toHaveAttribute("aria-pressed", "false");
   await toggle.click();
-  await page.getByRole("button", { name: /^Files/ }).click();
+  await page
+    .getByRole("button", { name: /^Files/ })
+    .last()
+    .click();
   await composer.click();
   await userEvent.keyboard("{Control>}t{/Control}");
   await expect.element(page.getByRole("menuitem", { name: /Files/ })).toBeVisible();
@@ -661,4 +675,118 @@ it("selecting a side-chat tab focuses that side chat's composer", async () => {
   await userEvent.click(screen.getByRole("button", { name: side.title, exact: true }));
   await expect.element(sideEditor).toHaveFocus();
   await expect.element(mainEditor).toHaveTextContent("main draft");
+});
+
+it("routes @gemini and @claude mentions in a #channel, shows @provider author headers, searches #channels in command palette, and cleans out the channel", async () => {
+  await page.viewport(1400, 900);
+  const claudeModelSelection = {
+    instanceId: ProviderInstanceId.make("claudeAgent"),
+    model: "claude-opus-4-6",
+  };
+  const codexWithGemini = {
+    ...CODEX_PROVIDER,
+    models: [
+      ...CODEX_PROVIDER.models,
+      {
+        slug: "gemini-4-argon",
+        name: "Gemini 4 Argon",
+        subProvider: "google-gemini",
+        isCustom: false,
+        capabilities: null,
+      },
+    ],
+  };
+  const baseChannel = threadWithHistory("slack-channel", 1, claudeModelSelection);
+  const channel = {
+    ...baseChannel,
+    providerThreads: [
+      {
+        id: ProviderThreadId.make("provider-thread-1"),
+        driver: ProviderDriverKind.make("claudeAgent"),
+        providerInstanceId: claudeModelSelection.instanceId,
+        providerSessionId: null,
+        appThreadId: baseChannel.id,
+        ownerNodeId: null,
+        nativeThreadRef: null,
+        nativeConversationHeadRef: null,
+        status: "idle" as const,
+        firstRunOrdinal: 1,
+        lastRunOrdinal: 1,
+        handoffIds: [],
+        forkedFrom: null,
+        pendingBackgroundTasks: [],
+        contextUsage: null,
+        nativeMetadata: null,
+        goal: null,
+        createdAt: baseChannel.runs[0]!.requestedAt,
+        updatedAt: baseChannel.runs[0]!.requestedAt,
+      },
+    ],
+  };
+  using _environment = installFakeEnvironment([channel], {
+    acceptCommands: true,
+    providers: [codexWithGemini, CLAUDE_PROVIDER],
+  });
+  appAtomRegistry.refresh(
+    serverEnvironment.configProjection({ environmentId: ENVIRONMENT_ID, input: {} }),
+  );
+  appAtomRegistry.refresh(environmentShell.stateAtom(ENVIRONMENT_ID));
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${channel.id}`] }),
+  );
+  await router.load();
+  await using _screen = await render(<AppRoot router={router} />, {
+    // AppRoot brings its own router.
+    router: false,
+  });
+
+  await expect.element(page.getByText(`Answer 0 for ${channel.id}.`)).toBeVisible();
+  await vi.waitFor(() => {
+    const authorHeader = document.querySelector('[data-provider-handle="@claude"]');
+    expect(authorHeader).not.toBeNull();
+    expect(authorHeader?.textContent).toContain("@claude");
+  });
+
+  const cleanOutButton = page.getByRole("button", { name: "Clean out channel", exact: true });
+  await expect.element(cleanOutButton).toBeVisible();
+
+  const editor = page.getByTestId("composer-editor");
+  await userEvent.click(editor);
+  await userEvent.keyboard("@gemini summarize the previous reply");
+  await vi.waitFor(() => {
+    const badge = document.querySelector('[data-composer-routing-target="true"]');
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toContain("@gemini");
+  });
+  await userEvent.keyboard("{Escape}{Enter}");
+
+  await vi.waitFor(() =>
+    expect(dispatchedCommands()).toContainEqual(
+      expect.objectContaining({
+        type: "message.dispatch",
+        threadId: channel.id,
+        modelSelection: expect.objectContaining({
+          instanceId: "codex",
+          model: "gemini-4-argon",
+        }),
+      }),
+    ),
+  );
+
+  await userEvent.click(cleanOutButton);
+  await vi.waitFor(() =>
+    expect(dispatchedCommands()).toContainEqual(
+      expect.objectContaining({
+        type: "thread.clean-out",
+        threadId: channel.id,
+      }),
+    ),
+  );
+
+  await act(() => openCommandPalette({ query: "#slack" }));
+  await expect.element(page.getByRole("option", { name: /#Thread slack-channel/ })).toBeVisible();
 });

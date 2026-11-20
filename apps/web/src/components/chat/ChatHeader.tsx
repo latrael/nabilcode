@@ -5,12 +5,15 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
+import {
+  threadRuntimeIsActive,
+  type EnvironmentProject,
+} from "@t3tools/client-runtime/state/shell";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, EraserIcon } from "lucide-react";
 import {
   memo,
   useEffect,
@@ -21,11 +24,13 @@ import {
 } from "react";
 import { isTrailingDoubleClick } from "../Sidebar.logic";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import { useThreadActionMenu } from "~/hooks/useThreadActionMenu";
 import { readLocalApi } from "~/localApi";
+import { useQuietThreadProjection, useQuietThreadShell } from "../../state/entities";
 import { threadEnvironment } from "../../state/threads";
 import { canShareWithGuestAtom } from "./guestShareAvailability";
 import { useAtomValue } from "@effect/atom-react";
@@ -58,6 +63,12 @@ interface ChatHeaderProps {
   onNewThreadInProject: () => void;
   onOpenProjectSettings?: (() => void) | undefined;
   onFindInThread?: ((threadRef: ScopedThreadRef) => void) | undefined;
+}
+
+function formatChannelTitle(title: string): string {
+  const trimmed = title.trim();
+  if (trimmed.length === 0) return title;
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
 }
 
 function resolveRenameCommit(input: {
@@ -98,6 +109,57 @@ export const ChatHeader = memo(function ChatHeader({
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
+  const cleanOutThread = useOrchestrationCommand(threadEnvironment.cleanOut, {
+    reportFailure: false,
+  });
+  const threadShell = useQuietThreadShell(isServerThread ? activeThreadRef : null);
+  const threadProjection = useQuietThreadProjection(isServerThread ? activeThreadRef : null);
+  const [cleaningOutThreadKey, setCleaningOutThreadKey] = useState<string | null>(null);
+  const activeThreadKey = `${activeThreadEnvironmentId}:${activeThreadId}`;
+  const cleaningOut = cleaningOutThreadKey === activeThreadKey;
+  const hasChannelHistory =
+    (threadProjection?.projection.messages.length ?? 0) > 0 ||
+    (threadProjection?.projection.visibleTurnItems.length ?? 0) > 0 ||
+    (threadShell?.visibleItemCount ?? 0) > 0 ||
+    (threadShell?.itemCount ?? 0) > 0;
+  const hasActiveRun =
+    threadRuntimeIsActive(threadShell?.runtime) ||
+    (threadProjection?.projection.runs.some(
+      (run) =>
+        run.status === "preparing" ||
+        run.status === "queued" ||
+        run.status === "starting" ||
+        run.status === "running" ||
+        run.status === "waiting",
+    ) ??
+      false);
+  const canShowCleanOut = isServerThread && canOperateThread && hasChannelHistory;
+  const displayChannelTitle = formatChannelTitle(activeThreadTitle);
+  const handleCleanOut = () => {
+    if (
+      cleaningOut ||
+      hasActiveRun ||
+      !isServerThread ||
+      !readEnvironmentScope(activeThreadEnvironmentId, AuthOrchestrationOperateScope)
+    ) {
+      return;
+    }
+    setCleaningOutThreadKey(activeThreadKey);
+    void cleanOutThread({
+      environmentId: activeThreadEnvironmentId,
+      input: { threadId: activeThreadId },
+    }).then((result) => {
+      setCleaningOutThreadKey((current) => (current === activeThreadKey ? null : current));
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add({
+          type: "error",
+          title: "Failed to clean out channel",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+      }
+    });
+  };
   const [renaming, setRenaming] = useState<{
     threadId: ThreadId;
     environmentId: EnvironmentId;
@@ -361,7 +423,7 @@ export const ChatHeader = memo(function ChatHeader({
                 }
               >
                 <h2 className="min-w-0" dir={textDirection(activeThreadTitle)}>
-                  <WorkspaceBreadcrumbText>{activeThreadTitle}</WorkspaceBreadcrumbText>
+                  <WorkspaceBreadcrumbText>{displayChannelTitle}</WorkspaceBreadcrumbText>
                 </h2>
                 <ChevronDownIcon
                   aria-hidden
@@ -369,7 +431,7 @@ export const ChatHeader = memo(function ChatHeader({
                   className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/thread-title:opacity-100 group-focus-visible/thread-title:opacity-100"
                 />
               </TooltipTrigger>
-              <TooltipPopup side="top">{activeThreadTitle}</TooltipPopup>
+              <TooltipPopup side="top">{displayChannelTitle}</TooltipPopup>
             </Tooltip>
           ) : (
             <Tooltip>
@@ -382,9 +444,9 @@ export const ChatHeader = memo(function ChatHeader({
                   />
                 }
               >
-                <WorkspaceBreadcrumbText>{activeThreadTitle}</WorkspaceBreadcrumbText>
+                <WorkspaceBreadcrumbText>{displayChannelTitle}</WorkspaceBreadcrumbText>
               </TooltipTrigger>
-              <TooltipPopup side="top">{activeThreadTitle}</TooltipPopup>
+              <TooltipPopup side="top">{displayChannelTitle}</TooltipPopup>
             </Tooltip>
           )}
           {renamingTitle === null && activeThreadLinkOrigin ? (
@@ -399,6 +461,28 @@ export const ChatHeader = memo(function ChatHeader({
           ) : null}
         </WorkspaceBreadcrumbItem>
       </WorkspaceBreadcrumb>
+      {canShowCleanOut ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost-muted"
+                aria-label="Clean out channel"
+                disabled={hasActiveRun || cleaningOut}
+                onClick={handleCleanOut}
+              />
+            }
+          >
+            <EraserIcon aria-hidden />
+            <span>Clean out</span>
+          </TooltipTrigger>
+          <TooltipPopup side="bottom">
+            Clean out channel history and reset agent context
+          </TooltipPopup>
+        </Tooltip>
+      ) : null}
       {isServerThread ? <ThreadHeaderChips threadRef={activeThreadRef} /> : null}
       {isServerThread ? <GuestShareIndicator threadRef={activeThreadRef} /> : null}
     </div>

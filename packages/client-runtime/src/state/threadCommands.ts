@@ -25,6 +25,7 @@ import {
   type InterruptThreadTurnInput,
   type UpdateThreadMetadataInput,
   archiveThread,
+  cleanOutThread,
   closeGuestShare,
   resolveGuestMessage,
   cancelQueuedRun,
@@ -193,6 +194,12 @@ export function createThreadEnvironmentAtoms<R, E>(
     unarchive: createEnvironmentCommand(runtime, {
       label: "environment-data:commands:thread:unarchive",
       execute: unarchiveThread,
+      scheduler,
+      concurrency,
+    }),
+    cleanOut: createEnvironmentCommand(runtime, {
+      label: "environment-data:commands:thread:clean-out",
+      execute: cleanOutThread,
       scheduler,
       concurrency,
     }),

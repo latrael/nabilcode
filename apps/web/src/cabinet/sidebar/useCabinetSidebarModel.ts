@@ -25,6 +25,7 @@ import { useOlderSettledShelf, useOlderSettledShelfGrowth } from "~/state/olderS
 import { resolveProjectExpanded, useUiStateStore } from "~/uiStateStore";
 
 const PARKED_EXPANDED_KEY = "nabilinc:sidebar:parked-expanded";
+const GENERAL_SECTION_KEY = "general";
 const SETTLED_PAGE_COUNT = 25;
 const EMPTY_THREADS: readonly EnvironmentThreadShell[] = [];
 
@@ -46,7 +47,8 @@ function partitionThreads(input: {
   readonly clockKey: string;
 }) {
   const now = new Date().toISOString();
-  const query = input.query.trim().toLowerCase();
+  const rawQuery = input.query.trim().toLowerCase();
+  const query = rawQuery.startsWith("#") ? rawQuery.slice(1) : rawQuery;
   const visible = filterSidebarV2VisibleThreads(input.threads, null, input.delegatedUnderParent);
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
@@ -154,8 +156,31 @@ export function useCabinetSidebarModel(input: {
     ? partition.snoozed
     : routeThreadOnly(partition.snoozed, routeRowThreadKey);
 
+  const scratchGroup =
+    projectGroups.find((group) => group.isScratch === true && !group.archived) ??
+    projectGroups.find((group) => group.isScratch === true) ??
+    null;
+  const generalExpansionKeys = scratchGroup
+    ? [GENERAL_SECTION_KEY, ...sidebarFolderExpansionKeys(scratchGroup)]
+    : [GENERAL_SECTION_KEY];
+  const generalThreadsAll = scratchGroup
+    ? (groupSidebarThreadsByProject([scratchGroup], partition.projectThreads, () => true)[0]
+        ?.threads ?? EMPTY_THREADS)
+    : EMPTY_THREADS;
+  const generalExpanded =
+    isSearching || resolveProjectExpanded(projectExpandedById, generalExpansionKeys);
+  const generalSection = {
+    key: scratchGroup?.projectKey ?? GENERAL_SECTION_KEY,
+    group: scratchGroup,
+    expanded: generalExpanded,
+    threadCount: generalThreadsAll.length,
+    threads: generalExpanded
+      ? generalThreadsAll
+      : routeThreadOnly(generalThreadsAll, routeRowThreadKey),
+  };
+
   const sections = groupSidebarThreadsByProject(
-    projectGroups.filter((group) => !group.archived),
+    projectGroups.filter((group) => !group.isScratch && !group.archived),
     partition.projectThreads,
     // While filtering, projects with no match would only be noise.
     () => !isSearching,
@@ -172,12 +197,14 @@ export function useCabinetSidebarModel(input: {
   });
 
   const orderedThreads = [
+    ...generalSection.threads,
     ...sections.flatMap((section) => section.threads),
     ...renderedSnoozed,
     ...renderedSettled,
   ];
   return {
     routeRowThreadKey,
+    generalSection,
     sections,
     orderedThreads,
     snoozed: renderedSnoozed,
@@ -188,6 +215,12 @@ export function useCabinetSidebarModel(input: {
     hiddenSettledCount: showParked ? Math.max(0, settledCount - shownSettled.length) : 0,
     settledLoading: olderSettledShelf.loading,
     showMoreSettled: () => setSettledVisibleCount((count) => count + SETTLED_PAGE_COUNT),
+    toggleGeneral: () => {
+      setProjectExpanded(
+        generalExpansionKeys,
+        !resolveProjectExpanded(projectExpandedById, generalExpansionKeys),
+      );
+    },
     toggleProject: (group: (typeof sections)[number]["group"]) => {
       const keys = sidebarFolderExpansionKeys(group);
       setProjectExpanded(keys, !resolveProjectExpanded(projectExpandedById, keys));

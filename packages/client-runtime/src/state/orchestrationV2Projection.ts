@@ -330,6 +330,31 @@ export function applyOrchestrationV2ProjectionEvent(
         ...projection,
         thread: applyOrchestrationV2ThreadVisit(projection.thread, event.payload),
       };
+    case "thread.cleaned-out": {
+      const releasedProviderSessionIds = new Set(event.payload.releasedProviderSessionIds);
+      return {
+        ...base,
+        thread: event.payload.thread,
+        runs: [],
+        attempts: [],
+        nodes: [],
+        subagents: [],
+        providerSessions: base.providerSessions.filter(
+          (session) => !releasedProviderSessionIds.has(session.id),
+        ),
+        providerThreads: [],
+        providerTurns: [],
+        runtimeRequests: [],
+        messages: [],
+        plans: [],
+        turnItems: [],
+        checkpointScopes: [],
+        checkpoints: [],
+        contextHandoffs: [],
+        contextTransfers: [],
+        visibleTurnItems: [],
+      };
+    }
     case "run.created":
     case "run.updated": {
       const next = { ...base, runs: upsertEntity(base.runs, event.payload) };

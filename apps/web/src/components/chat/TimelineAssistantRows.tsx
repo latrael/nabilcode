@@ -31,16 +31,16 @@ import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../times
 import { readThreadTurnItems } from "../../state/entities";
 import { useV2ItemSupport } from "../../state/v2ItemSupport";
 import { TimelineRowCtx, TimelineRowActivityCtx, type TimelineRow } from "./timelineRowContext";
-import { MESSAGE_HEADING_LEVEL, MessageAuthorHeading } from "./TimelineRowParts";
+import { AssistantAuthorHeader, MESSAGE_HEADING_LEVEL } from "./TimelineRowParts";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { vcsEnvironment } from "../../state/vcs";
-import { APP_BASE_NAME } from "~/branding";
 
 const NO_VCS_STATUS = Atom.make(AsyncResult.initial());
 
 export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
+  const thread = useQuietThreadShell(ctx.threadRef);
   // The timeline holds a streaming message's row while only its text grows.
   const liveText = useAssistantMessageText(
     row.message.streaming ? ctx.threadRef : null,
@@ -49,11 +49,26 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
   const text = liveText ?? row.message.text;
   const messageText =
     text || (row.message.streaming || row.suppressEmptyResponse ? "" : "(empty response)");
+  const runId = row.message.runId ?? row.projectedItem?.item.runId ?? null;
+  const run = runId !== null ? ctx.runs.find((candidate) => candidate.id === runId) : undefined;
+  const providerInstanceId =
+    run?.providerInstanceId ??
+    run?.modelSelection.instanceId ??
+    thread?.modelSelection.instanceId ??
+    thread?.providerInstanceId ??
+    null;
+  const model = run?.modelSelection.model ?? thread?.modelSelection.model ?? null;
 
   return (
     <>
       <div className="relative min-w-0 px-1 py-0.5">
-        <MessageAuthorHeading>{APP_BASE_NAME}</MessageAuthorHeading>
+        <AssistantAuthorHeader
+          environmentId={ctx.activeThreadEnvironmentId}
+          providerInstanceId={providerInstanceId}
+          model={model}
+          createdAt={row.message.createdAt}
+          timestampFormat={ctx.timestampFormat}
+        />
         <div data-thread-find-text="true">
           <AssistantCitationSource
             messageId={row.message.id}
@@ -116,10 +131,24 @@ export function SentMessageTimelineRow({
   row: Extract<TimelineRow, { kind: "sent-message" }>;
 }) {
   const ctx = use(TimelineRowCtx);
+  const thread = useQuietThreadShell(ctx.threadRef);
+  const latestRun = ctx.runs.at(-1);
+  const providerInstanceId =
+    latestRun?.providerInstanceId ??
+    thread?.modelSelection.instanceId ??
+    thread?.providerInstanceId ??
+    null;
+  const model = latestRun?.modelSelection.model ?? thread?.modelSelection.model ?? null;
 
   return (
     <div className="min-w-0 px-1 py-0.5">
-      <MessageAuthorHeading>{APP_BASE_NAME}</MessageAuthorHeading>
+      <AssistantAuthorHeader
+        environmentId={ctx.activeThreadEnvironmentId}
+        providerInstanceId={providerInstanceId}
+        model={model}
+        createdAt={row.createdAt}
+        timestampFormat={ctx.timestampFormat}
+      />
       {/* Sent messages have no message id; citations name their turn item instead. */}
       <AssistantCitationSource
         messageId={MessageId.make(row.id)}

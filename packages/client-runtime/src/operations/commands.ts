@@ -101,6 +101,7 @@ export interface DeleteThreadInput extends ThreadCommandInput {
 }
 export type ArchiveThreadInput = ThreadCommandInput;
 export type UnarchiveThreadInput = ThreadCommandInput;
+export type CleanOutThreadInput = ThreadCommandInput;
 export type SettleThreadInput = ThreadCommandInput;
 
 export interface UnsettleThreadInput extends ThreadCommandInput {
@@ -488,6 +489,7 @@ function simpleThreadCommand(
   type:
     | "thread.archive"
     | "thread.unarchive"
+    | "thread.clean-out"
     | "thread.settle"
     | "thread.pin"
     | "thread.unpin"
@@ -559,6 +561,12 @@ export const unarchiveThread = Effect.fn("EnvironmentCommands.unarchiveThread")(
   input: UnarchiveThreadInput,
 ) {
   return yield* simpleThreadCommand("thread.unarchive", input);
+});
+
+export const cleanOutThread = Effect.fn("EnvironmentCommands.cleanOutThread")(function* (
+  input: CleanOutThreadInput,
+) {
+  return yield* simpleThreadCommand("thread.clean-out", input);
 });
 
 export const settleThread = Effect.fn("EnvironmentCommands.settleThread")(function* (

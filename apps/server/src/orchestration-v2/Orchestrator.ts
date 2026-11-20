@@ -623,6 +623,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.archive":
     case "thread.unarchive":
     case "thread.delete":
+    case "thread.clean-out":
     case "thread.guest-share.open":
     case "thread.guest-share.redeem":
     case "thread.guest-share.close":
@@ -5559,6 +5560,65 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     },
   );
 
+  const dispatchThreadCleanOut = Effect.fn("Orchestrator.dispatchThreadCleanOut")(function* (
+    command: Extract<OrchestrationV2Command, { readonly type: "thread.clean-out" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
+  ) {
+    const projection = yield* loadProjectionForCommand(command, ["runs", "providerSessions"]);
+    if (projection.thread.deletedAt !== null) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Thread ${command.threadId} is deleted.`,
+      });
+    }
+    if (projection.runs.some(isActiveRun)) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Thread ${command.threadId} has an active run. Stop it before cleaning out the channel.`,
+      });
+    }
+    const now = yield* DateTime.now;
+    const releasedProviderSessionIds = projection.providerSessions.map((session) => session.id);
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "thread.cleaned-out",
+      threadId: command.threadId,
+      providerInstanceId: projection.thread.providerInstanceId,
+      occurredAt: now,
+      payload: {
+        thread: {
+          ...projection.thread,
+          activeProviderThreadId: null,
+          settledOverride: null,
+          unsettledAt: null,
+          updatedAt: now,
+        },
+        releasedProviderSessionIds,
+      },
+    });
+    for (const session of projection.providerSessions) {
+      if (session.status === "stopped") continue;
+      yield* Ref.update(effects, (existing) => [
+        ...existing,
+        {
+          id: `effect:${command.commandId}:provider-session.detach:${session.id}`,
+          commandId: command.commandId,
+          threadId: command.threadId,
+          request: {
+            type: "provider-session.detach",
+            providerSessionId: session.id,
+            detail: "Thread cleaned out.",
+          },
+        } satisfies PendingOrchestrationEffectV2,
+      ]);
+    }
+  });
+
   const dispatchThreadProjectAdoptFolder = Effect.fn(
     "orchestrationV2.dispatch.threadProjectAdoptFolder",
   )(function* (
@@ -6815,12 +6875,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     const activeProviderInstanceId = projection.providerThreads.find(
       (candidate) => candidate.id === projection.thread.activeProviderThreadId,
     )?.providerInstanceId;
+    const targetProviderInstanceId = (command.modelSelection ?? projection.thread.modelSelection)
+      .instanceId;
     // Another provider is handed what ran since it last saw the thread, which can be older than
     // the compaction, so a provider switch reads the whole history.
     if (
-      activeProviderInstanceId !== undefined &&
-      activeProviderInstanceId !==
-        (command.modelSelection ?? projection.thread.modelSelection).instanceId
+      (activeProviderInstanceId !== undefined &&
+        activeProviderInstanceId !== targetProviderInstanceId) ||
+      projection.thread.providerInstanceId !== targetProviderInstanceId
     ) {
       projection = yield* getProjectionWithPendingEvents(command.threadId, events);
     }
@@ -7870,29 +7932,28 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       (transfer) => transfer.id !== pendingMergeBackTransfer?.id,
     );
     const now = yield* DateTime.now;
-    if (
+    const selectionUpdatedEvent =
       !modelSelectionsEqual(projection.thread.modelSelection, modelSelection) ||
       projection.thread.providerInstanceId !== modelSelection.instanceId
-    ) {
-      yield* emit(
-        events,
-        command,
-      )({
-        type:
-          projection.thread.providerInstanceId === modelSelection.instanceId
-            ? "thread.model-selection-updated"
-            : "thread.provider-switched",
-        threadId: command.threadId,
-        providerInstanceId: modelSelection.instanceId,
-        occurredAt: now,
-        payload: {
-          ...projection.thread,
-          providerInstanceId: modelSelection.instanceId,
-          modelSelection,
-          updatedAt: now,
-        },
-      });
-    }
+        ? yield* emit(
+            events,
+            command,
+          )({
+            type:
+              projection.thread.providerInstanceId === modelSelection.instanceId
+                ? "thread.model-selection-updated"
+                : "thread.provider-switched",
+            threadId: command.threadId,
+            providerInstanceId: modelSelection.instanceId,
+            occurredAt: now,
+            payload: {
+              ...projection.thread,
+              providerInstanceId: modelSelection.instanceId,
+              modelSelection,
+              updatedAt: now,
+            },
+          })
+        : null;
     if (
       freshContext &&
       (pendingForkTransfer !== undefined || pendingMergeBackTransfer !== undefined)
@@ -7934,6 +7995,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           })
           .pipe(mapDispatchError(command))
       : null;
+    if (selectionUpdatedEvent !== null) {
+      projection = applyToProjection(projection, selectionUpdatedEvent);
+    }
     const canResumeAcrossInstances =
       !freshContext &&
       isProviderSwitch &&
@@ -15050,6 +15114,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           effects: plans.flatMap((plan) => plan.effects),
         };
       }
+      case "thread.clean-out":
+        yield* dispatchThreadCleanOut(command, events, effects);
+        break;
       case "thread.archive":
       case "thread.unarchive":
       case "thread.settle":

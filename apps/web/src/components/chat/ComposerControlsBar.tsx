@@ -3,6 +3,7 @@ import type { PromptUltrathink } from "./TraitsPicker";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 import { type AppModelOption } from "../../modelSelection";
 import { CircleAlertIcon } from "lucide-react";
+import { Badge } from "../ui/badge";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerControl } from "./ComposerControl";
 import {
@@ -10,6 +11,8 @@ import {
   ComposerModelPicker,
   type RuntimeModeOption,
 } from "./ComposerFooterControls";
+import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
+import { getDisplayModelName } from "./providerIconUtils";
 import {
   type EnvironmentId,
   type ModelSelection,
@@ -86,6 +89,12 @@ export function ComposerControlsBar(props: {
   onModelPickerOpenChange: (open: boolean) => void;
   modelPickerIconClassName: string | undefined;
   getModelDisabledReason: ChatComposerProps["getModelDisabledReason"];
+  routingTarget?: {
+    readonly instanceId: ProviderInstanceId;
+    readonly model: string;
+    readonly matchedHandle: string | null;
+    readonly matchedTargetLabel: string | null;
+  } | null;
 }) {
   const {
     environmentId,
@@ -130,6 +139,7 @@ export function ComposerControlsBar(props: {
     onModelPickerOpenChange,
     modelPickerIconClassName,
     getModelDisabledReason,
+    routingTarget,
   } = props;
   const accessMatchesDefault = compatibleRuntimeMode === defaultRuntimeMode;
   const {
@@ -245,6 +255,47 @@ export function ComposerControlsBar(props: {
       onOpenProviderSetup={onOpenProviderSetup}
     />
   );
+  const routingTargetBadge = (() => {
+    if (!routingTarget) return null;
+    const targetEntry = providerInstanceEntries.find(
+      (entry) => entry.instanceId === routingTarget.instanceId,
+    );
+    const targetModelOption = modelOptionsByInstance
+      .get(routingTarget.instanceId)
+      ?.find((option) => option.slug === routingTarget.model);
+    const modelLabel = targetModelOption
+      ? getDisplayModelName(targetModelOption)
+      : routingTarget.model;
+    const handle = routingTarget.matchedHandle?.trim() || null;
+    const targetLabel =
+      routingTarget.matchedTargetLabel?.trim() ||
+      (handle === null
+        ? modelLabel
+        : handle.includes("·") || handle.toLowerCase().includes(modelLabel.toLowerCase())
+          ? handle
+          : `${handle} · ${modelLabel}`);
+    return (
+      <div
+        data-composer-routing-target="true"
+        className="ms-1 flex min-w-0 max-w-56 shrink items-center"
+      >
+        <Badge variant="info" size={composerControlsCollapsed ? "sm" : "control"}>
+          {targetEntry ? (
+            <ProviderInstanceIcon
+              driverKind={targetEntry.driverKind}
+              displayName={targetEntry.displayName}
+              accentColor={targetEntry.accentColor}
+              acpRegistryAgentId={targetEntry.acpRegistryAgentId}
+              acpRegistryIconUrl={targetEntry.acpRegistryIconUrl}
+              size="compact"
+              iconClassName="size-3.5"
+            />
+          ) : null}
+          <span className="truncate">→ {targetLabel}</span>
+        </Badge>
+      </div>
+    );
+  })();
   return showProviderUnavailable ? (
     <ComposerControl
       type="button"
@@ -263,6 +314,7 @@ export function ComposerControlsBar(props: {
   ) : (
     <>
       {composerModelPicker}
+      {routingTargetBadge}
 
       <>
         {restingBlockDefs.map((def, index) => {

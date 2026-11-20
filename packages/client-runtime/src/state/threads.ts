@@ -589,7 +589,9 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
       }
 
       let history = current.history;
-      if (partial !== undefined && item.event.type === "turn-item.updated") {
+      if (item.event.type === "thread.cleaned-out") {
+        history = EMPTY_THREAD_HISTORY_META;
+      } else if (partial !== undefined && item.event.type === "turn-item.updated") {
         const ordinal = item.event.payload.ordinal;
         const watermark = history.latestLocalTurnOrdinal;
         if (watermark === null || ordinal > watermark) {

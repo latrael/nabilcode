@@ -2960,3 +2960,308 @@ it.effect(
       assert.equal(yield* captureReads, quietParent);
     }).pipe(Effect.provide(layerTest)),
 );
+
+it.effect(
+  "thread.clean-out rejects active runs, wipes channel state in place when idle, and allows a fresh turn afterward",
+  () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const outbox = yield* EffectOutbox.EffectOutboxV2;
+      const threadId = ThreadId.make("thread:clean-out-channel");
+      const sessionId = ProviderSessionId.make("session:clean-out-channel");
+      const now = yield* DateTime.now;
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("create-clean-out-channel"),
+        threadId,
+        projectId: ProjectId.make("project:general"),
+        title: "#general",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdBy: "user",
+        creationSource: "web",
+      });
+      yield* projections.apply({
+        id: EventId.make("event:clean-out-session"),
+        type: "provider-session.attached",
+        threadId,
+        occurredAt: now,
+        payload: {
+          id: sessionId,
+          driver: adapter.driver,
+          providerInstanceId: instanceId,
+          status: "ready",
+          cwd: "/repo",
+          model: modelSelection.model,
+          capabilities: CodexProviderCapabilitiesV2,
+          createdAt: now,
+          updatedAt: now,
+          lastError: null,
+        },
+      });
+      yield* orchestrator.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make("start-clean-out-turn-1"),
+        threadId,
+        messageId: MessageId.make("message:clean-out-1"),
+        text: "First message in #general",
+        attachments: [],
+        dispatchMode: { type: "start_immediately" },
+        createdBy: "user",
+        creationSource: "web",
+      });
+
+      const rejectedWhileActive = yield* orchestrator
+        .dispatch({
+          type: "thread.clean-out",
+          commandId: CommandId.make("clean-out-while-active"),
+          threadId,
+        })
+        .pipe(Effect.result);
+      assert.isTrue(Result.isFailure(rejectedWhileActive));
+
+      const beforeClean = yield* projections.getThreadProjection(threadId);
+      const firstRun = beforeClean.runs[0]!;
+      yield* projections.apply({
+        id: EventId.make("event:clean-out-run-complete"),
+        type: "run.updated",
+        threadId,
+        runId: firstRun.id,
+        occurredAt: now,
+        payload: {
+          ...firstRun,
+          status: "completed",
+          startedAt: now,
+          completedAt: now,
+        },
+      });
+
+      const cleanCommandId = CommandId.make("clean-out-idle");
+      yield* orchestrator.dispatch({
+        type: "thread.clean-out",
+        commandId: cleanCommandId,
+        threadId,
+      });
+
+      const cleaned = yield* projections.getThreadProjection(threadId);
+      assert.equal(cleaned.thread.id, threadId);
+      assert.equal(cleaned.thread.title, "#general");
+      assert.equal(cleaned.thread.activeProviderThreadId, null);
+      assert.deepEqual(cleaned.messages, []);
+      assert.deepEqual(cleaned.runs, []);
+      assert.deepEqual(cleaned.attempts, []);
+      assert.deepEqual(cleaned.nodes, []);
+      assert.deepEqual(cleaned.turnItems, []);
+      assert.deepEqual(cleaned.visibleTurnItems, []);
+      assert.deepEqual(cleaned.providerThreads, []);
+      assert.deepEqual(cleaned.providerSessions, []);
+      assert.deepEqual(
+        (yield* outbox.listByCommandId(cleanCommandId)).map((effect) => effect.request),
+        [
+          {
+            type: "provider-session.detach",
+            providerSessionId: sessionId,
+            detail: "Thread cleaned out.",
+          },
+        ],
+      );
+
+      yield* orchestrator.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make("start-clean-out-turn-2"),
+        threadId,
+        messageId: MessageId.make("message:clean-out-2"),
+        text: "Fresh start in #general",
+        attachments: [],
+        dispatchMode: { type: "start_immediately" },
+        createdBy: "user",
+        creationSource: "web",
+      });
+      const afterFreshTurn = yield* projections.getThreadProjection(threadId);
+      assert.equal(afterFreshTurn.runs.length, 1);
+      assert.equal(afterFreshTurn.runs[0]?.ordinal, 1);
+      assert.equal(afterFreshTurn.messages.length, 1);
+      assert.equal(afterFreshTurn.messages[0]?.text, "Fresh start in #general");
+    }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect(
+  "message.dispatch with modelSelection switches sticky channel provider, hands off prior context, and keeps follow-up turns sticky",
+  () => {
+    const claudeInstanceId = ProviderInstanceId.make("claude");
+    const geminiInstanceId = ProviderInstanceId.make("antigravity");
+    const claudeSelection = { instanceId: claudeInstanceId, model: "claude-sonnet-4-6" };
+    const geminiSelection = { instanceId: geminiInstanceId, model: "gemini-4-argon" };
+    const claudeAdapter = {
+      ...adapter,
+      instanceId: claudeInstanceId,
+      driver: ProviderDriverKind.make("claude"),
+    } as ProviderAdapter.ProviderAdapterV2["Service"];
+    const geminiAdapter = {
+      ...adapter,
+      instanceId: geminiInstanceId,
+      driver: ProviderDriverKind.make("antigravity"),
+    } as ProviderAdapter.ProviderAdapterV2["Service"];
+    return Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const threadId = ThreadId.make("thread:multi-provider-channel");
+      const now = yield* DateTime.now;
+
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("create-multi-provider-channel"),
+        threadId,
+        projectId: ProjectId.make("project:general"),
+        title: "#general",
+        modelSelection: claudeSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdBy: "user",
+        creationSource: "web",
+      });
+
+      yield* orchestrator.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make("dispatch-claude-turn"),
+        threadId,
+        messageId: MessageId.make("message:claude-1"),
+        text: "@claude give me a quick bash one-liner to find open ports on macOS",
+        attachments: [],
+        modelSelection: claudeSelection,
+        dispatchMode: { type: "start_immediately" },
+        createdBy: "user",
+        creationSource: "web",
+      });
+
+      const afterTurn1Start = yield* projections.getThreadProjection(threadId);
+      const run1 = afterTurn1Start.runs[0]!;
+      yield* projections.apply({
+        id: EventId.make("event:claude-assistant-item"),
+        type: "turn-item.updated",
+        threadId,
+        runId: run1.id,
+        nodeId: run1.rootNodeId ?? undefined,
+        providerInstanceId: claudeInstanceId,
+        occurredAt: now,
+        payload: {
+          id: TurnItemId.make("item:claude-reply-1"),
+          threadId,
+          runId: run1.id,
+          nodeId: run1.rootNodeId,
+          providerThreadId: run1.providerThreadId,
+          providerTurnId: null,
+          nativeItemRef: null,
+          parentItemId: null,
+          ordinal: 101,
+          status: "completed",
+          title: null,
+          startedAt: now,
+          completedAt: now,
+          updatedAt: now,
+          type: "assistant_message",
+          messageId: MessageId.make("message:claude-assistant-1"),
+          text: "Use `lsof -iTCP -sTCP:LISTEN -P -n`.",
+          streaming: false,
+        },
+      });
+      yield* projections.apply({
+        id: EventId.make("event:claude-run-complete"),
+        type: "run.updated",
+        threadId,
+        runId: run1.id,
+        providerInstanceId: claudeInstanceId,
+        occurredAt: now,
+        payload: {
+          ...run1,
+          status: "completed",
+          startedAt: now,
+          completedAt: now,
+        },
+      });
+
+      yield* orchestrator.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make("dispatch-gemini-turn"),
+        threadId,
+        messageId: MessageId.make("message:gemini-2"),
+        text: "@gemini now turn that into a tiny zsh function with fzf",
+        attachments: [],
+        modelSelection: geminiSelection,
+        dispatchMode: { type: "start_immediately" },
+        createdBy: "user",
+        creationSource: "web",
+      });
+
+      const afterTurn2Start = yield* projections.getThreadProjection(threadId);
+      assert.equal(afterTurn2Start.thread.providerInstanceId, geminiInstanceId);
+      assert.deepEqual(afterTurn2Start.thread.modelSelection, geminiSelection);
+      assert.equal(afterTurn2Start.runs.length, 2);
+      const run2 = afterTurn2Start.runs[1]!;
+      assert.equal(run2.providerInstanceId, geminiInstanceId);
+      assert.deepEqual(run2.modelSelection, geminiSelection);
+      assert.isNotNull(run2.contextHandoffId);
+      assert.equal(afterTurn2Start.contextHandoffs.length, 1);
+      assert.equal(afterTurn2Start.contextTransfers.length, 1);
+      assert.equal(afterTurn2Start.contextTransfers[0]?.sourceProviderInstanceId, claudeInstanceId);
+      assert.equal(afterTurn2Start.contextTransfers[0]?.targetProviderInstanceId, geminiInstanceId);
+      assert.deepEqual(afterTurn2Start.contextHandoffs[0]?.coveredRunOrdinals, { from: 1, to: 1 });
+      assert.include(
+        JSON.stringify(afterTurn2Start.contextHandoffs[0]),
+        "lsof -iTCP -sTCP:LISTEN -P -n",
+      );
+
+      yield* projections.apply({
+        id: EventId.make("event:gemini-run-complete"),
+        type: "run.updated",
+        threadId,
+        runId: run2.id,
+        providerInstanceId: geminiInstanceId,
+        occurredAt: now,
+        payload: {
+          ...run2,
+          status: "completed",
+          startedAt: now,
+          completedAt: now,
+        },
+      });
+
+      yield* orchestrator.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make("dispatch-untagged-followup"),
+        threadId,
+        messageId: MessageId.make("message:followup-3"),
+        text: "Also add a flag to kill the selected port process",
+        attachments: [],
+        dispatchMode: { type: "start_immediately" },
+        createdBy: "user",
+        creationSource: "web",
+      });
+
+      const afterTurn3Start = yield* projections.getThreadProjection(threadId);
+      assert.equal(afterTurn3Start.runs.length, 3);
+      const run3 = afterTurn3Start.runs[2]!;
+      assert.equal(run3.providerInstanceId, geminiInstanceId);
+      assert.deepEqual(run3.modelSelection, geminiSelection);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          layerDatabase,
+          ProjectionStore.layer.pipe(Layer.provide(layerDatabase)),
+          EffectOutbox.layer.pipe(Layer.provide(layerDatabase)),
+          ProviderReplayHarness.layerWithRegistry(
+            { name: "multi-provider-channel" },
+            ProviderAdapterRegistry.layerFromAdapters([claudeAdapter, geminiAdapter]),
+            { databaseLayer: layerDatabase, runEffectWorker: false },
+          ),
+        ),
+      ),
+    );
+  },
+);

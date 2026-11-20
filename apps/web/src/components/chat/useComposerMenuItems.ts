@@ -76,6 +76,7 @@ export function useComposerMenuItems({
   sideChatAvailable,
   sideChatDisabledReason,
   freshSessionAvailable,
+  cleanOutAvailable,
   compactSlashCommandAvailable,
   selectedProvider,
   selectedProviderSkills,
@@ -96,6 +97,7 @@ export function useComposerMenuItems({
   readonly sideChatAvailable: boolean;
   readonly sideChatDisabledReason: string | null;
   readonly freshSessionAvailable: boolean;
+  readonly cleanOutAvailable: boolean;
   readonly compactSlashCommandAvailable: boolean;
   readonly selectedProvider: ProviderDriverKind;
   readonly selectedProviderSkills: ServerProvider["skills"];
@@ -106,6 +108,7 @@ export function useComposerMenuItems({
   readonly modelMentions: {
     readonly instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
     readonly modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>;
+    readonly lastUsedModelByInstance?: ReadonlyMap<ProviderInstanceId, string>;
   };
 }) {
   // Thread mentions rank by recency as of when the composer mounted.
@@ -214,6 +217,14 @@ export function useComposerMenuItems({
     if (!composerTrigger) return [];
     if (composerTrigger.kind === "path") {
       return [
+        ...matchComposerModelItems({
+          instanceEntries: modelMentions.instanceEntries,
+          modelOptionsByInstance: modelMentions.modelOptionsByInstance,
+          query: composerTrigger.query,
+          ...(modelMentions.lastUsedModelByInstance
+            ? { lastUsedModelByInstance: modelMentions.lastUsedModelByInstance }
+            : {}),
+        }),
         ...matchComposerThreadItems({
           shells: environmentThreadShells,
           environmentId,
@@ -230,11 +241,6 @@ export function useComposerMenuItems({
               query: composerTrigger.query,
             })
           : []),
-        ...matchComposerModelItems({
-          instanceEntries: modelMentions.instanceEntries,
-          modelOptionsByInstance: modelMentions.modelOptionsByInstance,
-          query: composerTrigger.query,
-        }),
         ...workspaceEntries.entries.map((entry) => ({
           id: `path:${entry.kind}:${entry.path}`,
           type: "path" as const,
@@ -285,6 +291,17 @@ export function useComposerMenuItems({
               },
             ] as const)
           : []),
+        ...(cleanOutAvailable
+          ? ([
+              {
+                id: "slash:clean",
+                type: "slash-command",
+                command: "clean",
+                label: "/clean",
+                description: "Clean out channel history and reset agent context in place",
+              },
+            ] as const)
+          : []),
       ] satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "slash-command" }>>;
       const slashMenuSkills = getProviderSkillsForSlashMenu(
         selectedProviderSkills,
@@ -317,7 +334,8 @@ export function useComposerMenuItems({
       const visibleProviderSlashCommandItems = providerSlashCommandItems.filter(
         (item) =>
           (item.command.name !== "compact" || compactSlashCommandAvailable) &&
-          (item.command.name !== "clear" || !freshSessionAvailable),
+          (item.command.name !== "clear" || !freshSessionAvailable) &&
+          (item.command.name !== "clean" || !cleanOutAvailable),
       );
       const slashCommandItems = slashCommandItemsForPromptPosition(
         [...builtInSlashCommandItems, ...visibleProviderSlashCommandItems, ...skillItems],

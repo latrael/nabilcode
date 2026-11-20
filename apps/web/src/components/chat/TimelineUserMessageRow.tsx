@@ -8,10 +8,16 @@ import { findRevealRef } from "./markdownFindContext";
 import {
   type EnvironmentId,
   type MessageId,
+  ProviderDriverKind,
   type ScheduledTaskId,
   type ServerProviderSkill,
   ThreadId,
 } from "@t3tools/contracts";
+import {
+  collectComposerProviderMentions,
+  collectInlineProviderHandles,
+  getProviderHandle,
+} from "@t3tools/client-runtime/composer-model-mentions";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
 import { Link } from "@tanstack/react-router";
@@ -96,6 +102,7 @@ import {
   resolvePreviewAnnotationImage,
   userMessageFileLabel,
 } from "./TimelineUserMessageRow.logic";
+import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { APP_BASE_NAME } from "~/branding";
 
 // Drawn inside the media so dark screenshots keep an edge on the dark background.
@@ -1206,9 +1213,179 @@ const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(prop
   );
 });
 
+const PROVIDER_MENTION_CONTEXT_KIND = "provider-mention";
+
+const PROVIDER_MENTION_PRESENTATION: Readonly<
+  Record<
+    string,
+    {
+      readonly driverKind: ProviderDriverKind;
+      readonly displayName: string;
+      readonly pillClassName: string;
+    }
+  >
+> = {
+  gemini: {
+    driverKind: ProviderDriverKind.make("antigravity"),
+    displayName: "Gemini",
+    pillClassName:
+      "border-[#5b87bf]/35 bg-[#5b87bf]/12 text-[#3b669e] dark:border-[#5b87bf]/40 dark:bg-[#5b87bf]/18 dark:text-[#8eb5e8]",
+  },
+  antigravity: {
+    driverKind: ProviderDriverKind.make("antigravity"),
+    displayName: "Antigravity",
+    pillClassName:
+      "border-[#5b87bf]/35 bg-[#5b87bf]/12 text-[#3b669e] dark:border-[#5b87bf]/40 dark:bg-[#5b87bf]/18 dark:text-[#8eb5e8]",
+  },
+  claude: {
+    driverKind: ProviderDriverKind.make("claudeAgent"),
+    displayName: "Claude",
+    pillClassName:
+      "border-[#d97757]/35 bg-[#d97757]/12 text-[#b85636] dark:border-[#d97757]/40 dark:bg-[#d97757]/18 dark:text-[#f09a7d]",
+  },
+  codex: {
+    driverKind: ProviderDriverKind.make("codex"),
+    displayName: "Codex",
+    pillClassName: "border-foreground/20 bg-foreground/8 text-foreground",
+  },
+  gpt: {
+    driverKind: ProviderDriverKind.make("codex"),
+    displayName: "Codex",
+    pillClassName: "border-foreground/20 bg-foreground/8 text-foreground",
+  },
+  grok: {
+    driverKind: ProviderDriverKind.make("grok"),
+    displayName: "Grok",
+    pillClassName: "border-foreground/20 bg-foreground/8 text-foreground",
+  },
+  kiro: {
+    driverKind: ProviderDriverKind.make("kiro"),
+    displayName: "Kiro",
+    pillClassName: "border-primary/30 bg-primary/10 text-primary",
+  },
+  fx: {
+    driverKind: ProviderDriverKind.make("fx"),
+    displayName: "fx",
+    pillClassName: "border-foreground/20 bg-foreground/8 text-foreground",
+  },
+};
+
+interface RemarkProviderMentionNode {
+  type: string;
+  value?: string;
+  url?: string;
+  children?: RemarkProviderMentionNode[];
+}
+
+function remarkUserProviderMentions() {
+  return (tree: RemarkProviderMentionNode) => {
+    const visit = (node: RemarkProviderMentionNode) => {
+      if (
+        !node.children ||
+        node.type === "link" ||
+        node.type === "linkReference" ||
+        node.type === "code" ||
+        node.type === "inlineCode"
+      ) {
+        return;
+      }
+      let changed = false;
+      const nextChildren: RemarkProviderMentionNode[] = [];
+      for (const child of node.children) {
+        if (
+          child.type !== "text" ||
+          typeof child.value !== "string" ||
+          (!child.value.includes("@") && !child.value.includes("provider:"))
+        ) {
+          visit(child);
+          nextChildren.push(child);
+          continue;
+        }
+        const matches: Array<{ start: number; end: number; handle: string; label: string }> = [];
+        for (const occurrence of collectInlineProviderHandles(child.value)) {
+          matches.push({
+            start: occurrence.start,
+            end: occurrence.end,
+            handle: occurrence.handle.replace(/^@/, "").toLowerCase(),
+            label: occurrence.source,
+          });
+        }
+        for (const occurrence of collectComposerProviderMentions(child.value)) {
+          const canonical = getProviderHandle({ instanceId: occurrence.instanceId });
+          matches.push({
+            start: occurrence.start,
+            end: occurrence.end,
+            handle: canonical.replace(/^@/, "").toLowerCase(),
+            label: canonical,
+          });
+        }
+        if (matches.length === 0) {
+          nextChildren.push(child);
+          continue;
+        }
+        matches.sort((left, right) => left.start - right.start);
+        let cursor = 0;
+        for (const match of matches) {
+          if (match.start < cursor) continue;
+          if (match.start > cursor) {
+            nextChildren.push({ type: "text", value: child.value.slice(cursor, match.start) });
+          }
+          nextChildren.push({
+            type: "link",
+            url: `t3-context://v1/${PROVIDER_MENTION_CONTEXT_KIND}/${match.handle}`,
+            children: [{ type: "text", value: match.label }],
+          });
+          cursor = match.end;
+        }
+        if (cursor < child.value.length) {
+          nextChildren.push({ type: "text", value: child.value.slice(cursor) });
+        }
+        changed = true;
+      }
+      if (changed) {
+        node.children = nextChildren;
+      }
+    };
+    visit(tree);
+  };
+}
+
+function ProviderMentionPill({
+  handle,
+  label,
+}: {
+  readonly handle: string;
+  readonly label: string;
+}) {
+  const presentation = PROVIDER_MENTION_PRESENTATION[handle.toLowerCase()];
+  if (!presentation) {
+    return <span>{label}</span>;
+  }
+  return (
+    <span
+      data-provider-mention={handle.toLowerCase()}
+      data-markdown-copy={label}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.25 align-baseline text-xs font-medium leading-snug",
+        presentation.pillClassName,
+      )}
+    >
+      <ProviderInstanceIcon
+        driverKind={presentation.driverKind}
+        displayName={presentation.displayName}
+        size="compact"
+        className="z-auto"
+        iconClassName="size-3"
+      />
+      <span>{label}</span>
+    </span>
+  );
+}
+
 const USER_MESSAGE_REMARK_PLUGINS = [
   ...CHAT_USER_MARKDOWN_REMARK_PLUGINS,
   remarkEnableOrderedListNumbers,
+  remarkUserProviderMentions,
 ];
 
 const UserMessageBody = memo(function UserMessageBody(props: {
@@ -1221,6 +1398,16 @@ const UserMessageBody = memo(function UserMessageBody(props: {
   if (props.text.length === 0) {
     return null;
   }
+  const renderContextReference = (reference: ChatMarkdownContextReference) => {
+    if (reference.kind === PROVIDER_MENTION_CONTEXT_KIND) {
+      return <ProviderMentionPill handle={reference.contextId} label={reference.label} />;
+    }
+    return props.renderContextReference ? (
+      props.renderContextReference(reference)
+    ) : (
+      <span>{reference.label}</span>
+    );
+  };
   return (
     <ChatMarkdown
       text={props.text}
@@ -1231,7 +1418,7 @@ const UserMessageBody = memo(function UserMessageBody(props: {
       lineBreaks
       parseRawHtml={false}
       extraRemarkPlugins={USER_MESSAGE_REMARK_PLUGINS}
-      renderContextReference={props.renderContextReference}
+      renderContextReference={renderContextReference}
       headingLevelOffset={MESSAGE_HEADING_LEVEL}
     />
   );
