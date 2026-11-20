@@ -10,7 +10,7 @@ import { DraftId } from "../composerDraftStore";
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
-      text: ["2xs", "3xs", "4xs", "5xs", "13", "12_5", "11_5", "10_5"],
+      text: ["2xs", "3xs", "4xs", "5xs", "14_5", "13", "12_5", "11_5", "10_5"],
       tracking: ["label"],
     },
     classGroups: { "bg-image": [{ bg: ["composer-seam-below", "composer-seam-above"] }] },

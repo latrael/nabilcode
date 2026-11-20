@@ -1,9 +1,9 @@
+import { getProviderHandle } from "@t3tools/client-runtime/composer-model-mentions";
 import type { ChatComposerProps } from "./ChatComposer";
 import type { PromptUltrathink } from "./TraitsPicker";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 import { type AppModelOption } from "../../modelSelection";
 import { CircleAlertIcon } from "lucide-react";
-import { Badge } from "../ui/badge";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerControl } from "./ComposerControl";
 import {
@@ -11,7 +11,6 @@ import {
   ComposerModelPicker,
   type RuntimeModeOption,
 } from "./ComposerFooterControls";
-import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { getDisplayModelName } from "./providerIconUtils";
 import {
   type EnvironmentId,
@@ -256,19 +255,23 @@ export function ComposerControlsBar(props: {
     />
   );
   const routingTargetBadge = (() => {
-    if (!routingTarget) return null;
-    const targetEntry = providerInstanceEntries.find(
-      (entry) => entry.instanceId === routingTarget.instanceId,
-    );
+    const target = routingTarget ?? {
+      instanceId: selectedInstanceId,
+      model: selectedModel,
+      matchedHandle: getProviderHandle({
+        driverKind: selectedProvider,
+        instanceId: selectedInstanceId,
+        model: selectedModel,
+      }),
+      matchedTargetLabel: null,
+    };
     const targetModelOption = modelOptionsByInstance
-      .get(routingTarget.instanceId)
-      ?.find((option) => option.slug === routingTarget.model);
-    const modelLabel = targetModelOption
-      ? getDisplayModelName(targetModelOption)
-      : routingTarget.model;
-    const handle = routingTarget.matchedHandle?.trim() || null;
+      .get(target.instanceId)
+      ?.find((option) => option.slug === target.model);
+    const modelLabel = targetModelOption ? getDisplayModelName(targetModelOption) : target.model;
+    const handle = target.matchedHandle?.trim() || null;
     const targetLabel =
-      routingTarget.matchedTargetLabel?.trim() ||
+      target.matchedTargetLabel?.trim() ||
       (handle === null
         ? modelLabel
         : handle.includes("·") || handle.toLowerCase().includes(modelLabel.toLowerCase())
@@ -279,20 +282,9 @@ export function ComposerControlsBar(props: {
         data-composer-routing-target="true"
         className="ms-1 flex min-w-0 max-w-56 shrink items-center"
       >
-        <Badge variant="info" size={composerControlsCollapsed ? "sm" : "control"}>
-          {targetEntry ? (
-            <ProviderInstanceIcon
-              driverKind={targetEntry.driverKind}
-              displayName={targetEntry.displayName}
-              accentColor={targetEntry.accentColor}
-              acpRegistryAgentId={targetEntry.acpRegistryAgentId}
-              acpRegistryIconUrl={targetEntry.acpRegistryIconUrl}
-              size="compact"
-              iconClassName="size-3.5"
-            />
-          ) : null}
-          <span className="truncate">→ {targetLabel}</span>
-        </Badge>
+        <span className="truncate text-2xs text-muted-foreground">
+          Replying to <strong className="font-semibold">{targetLabel}</strong>
+        </span>
       </div>
     );
   })();

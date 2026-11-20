@@ -1,9 +1,7 @@
+import { useMessages } from "gt-react";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import { resolveThreadProviderStack } from "@t3tools/client-runtime/state/models";
-import { resolveThreadActivityTimestamp } from "@t3tools/client-runtime/state/thread-sort";
 import type { ScopedThreadRef } from "@t3tools/contracts";
-import { useMessages } from "gt-react";
 import {
   memo,
   useRef,
@@ -12,17 +10,17 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 
-import { ProviderInstanceIcon } from "~/components/chat/ProviderInstanceIcon";
 import { Kbd } from "~/components/ui/kbd";
-import { resolveSidebarRowStatus, resolveThreadLastVisitedAt } from "~/components/Sidebar.logic";
-import { useNowMinute } from "~/hooks/useNowMinute";
+import {
+  hasUnseenCompletion,
+  resolveSidebarRowStatus,
+  resolveThreadLastVisitedAt,
+} from "~/components/Sidebar.logic";
 import { cn } from "~/lib/utils";
-import { formatRelativeTimeLabel } from "~/timestampFormat";
 import { useUiStateStore } from "~/uiStateStore";
 import { MemoryBadge } from "../memory/MemoryBadge";
 import { useThreadProposalCount } from "../memory/useMemoryProposals";
 import { cabinetRowStatus, type CabinetThreadStatus } from "./cabinetStatus.logic";
-import type { CabinetProviderEntry } from "./providerEntries";
 
 // Static dots only: a continuously repainting animation pegs the GPU on high-refresh displays.
 export const DOT_CLASS: Record<CabinetThreadStatus, string> = {
@@ -31,26 +29,6 @@ export const DOT_CLASS: Record<CabinetThreadStatus, string> = {
   failed: "bg-destructive",
   idle: "bg-sidebar-muted-foreground/40",
 };
-
-const TEXT_CLASS: Record<CabinetThreadStatus, string> = {
-  working: "text-success",
-  waiting: "text-warning",
-  failed: "text-destructive",
-  idle: "",
-};
-
-function compactAge(label: string): string {
-  if (label === "just now") return "now";
-  return label.endsWith(" ago") ? label.slice(0, -4) : label;
-}
-
-// Subscribes to the minute tick itself, so only the label re-renders each minute.
-function AgeLabel(props: { timestamp: string | null }) {
-  const nowMinute = useNowMinute();
-  return props.timestamp === null
-    ? null
-    : compactAge(formatRelativeTimeLabel(props.timestamp, Date.parse(`${nowMinute}:00.000Z`)));
-}
 
 // Mounted only while renaming, so each rename starts uncommitted.
 export function RenameInput(props: {
@@ -95,7 +73,6 @@ export function RenameInput(props: {
 export const CabinetThreadRow = memo(function CabinetThreadRow(props: {
   thread: EnvironmentThreadShell;
   selected: boolean;
-  providerEntry: CabinetProviderEntry | null;
   jumpLabel: string | null;
   /** The project or group row that owns this row, for arrow-key navigation. */
   parentKey: string;
@@ -107,83 +84,67 @@ export const CabinetThreadRow = memo(function CabinetThreadRow(props: {
   onCommitRename: (threadRef: ScopedThreadRef, title: string) => void;
   onCancelRename: () => void;
 }) {
-  const { thread, selected, providerEntry, jumpLabel, renaming, revealRef } = props;
+  const { thread, selected, jumpLabel, renaming, revealRef } = props;
   const m = useMessages();
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
   const localLastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[threadKey]);
   const lastVisitedAt = resolveThreadLastVisitedAt(thread.lastVisitedAt, localLastVisitedAt);
-  const { status, text } = cabinetRowStatus(resolveSidebarRowStatus({ ...thread, lastVisitedAt }));
+  const statusInput = { ...thread, lastVisitedAt };
+  const { status, text } = cabinetRowStatus(resolveSidebarRowStatus(statusInput));
+  const unread = status === "idle" && hasUnseenCompletion(statusInput);
   const proposalCount = useThreadProposalCount(thread.environmentId, thread.id);
-  const currentInstanceId = resolveThreadProviderStack(thread).at(-1) ?? thread.providerInstanceId;
-  const provider = providerEntry?.instanceId === currentInstanceId ? providerEntry : null;
   const displayTitle = thread.title.replace(/^#+\s*/, "") || thread.title;
-  const showChannelPrefix = !displayTitle.startsWith("#");
   const rowClass = cn(
-    "mx-1.5 flex w-[calc(100%-0.75rem)] min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70",
-    selected ? "bg-sidebar-row-selected" : "hover:bg-sidebar-row-hover",
+    "mx-1.5 flex w-[calc(100%-0.75rem)] min-w-0 h-7 items-center gap-1.75 rounded-md px-2.5 py-0 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70",
+    selected
+      ? "bg-sidebar-row-selected font-semibold text-sidebar-foreground ring-1 ring-inset ring-sidebar-foreground/8"
+      : "hover:bg-sidebar-row-hover",
   );
   const body = (
     <>
       <span
         aria-hidden
-        data-cabinet-status={status}
-        className={cn("mt-[7px] ml-[3px] size-[7px] shrink-0 rounded-full", DOT_CLASS[status])}
-      />
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="flex size-3.5 shrink-0 items-center justify-center text-xs">
-            {provider ? (
-              <ProviderInstanceIcon
-                driverKind={provider.driverKind}
-                displayName={provider.displayName}
-                accentColor={provider.accentColor}
-                acpRegistryAgentId={provider.acpRegistryAgentId}
-                acpRegistryIconUrl={provider.acpRegistryIconUrl}
-                size="compact"
-                iconClassName="opacity-60"
-              />
-            ) : null}
-          </span>
-          {renaming ? (
-            <RenameInput
-              initialTitle={thread.title}
-              label={props.renameLabel}
-              onCommit={(title) => props.onCommitRename(threadRef, title)}
-              onCancel={props.onCancelRename}
-            />
-          ) : (
-            <span
-              className={cn(
-                "min-w-0 flex-1 truncate text-13",
-                selected || status !== "idle"
-                  ? "font-medium text-sidebar-foreground"
-                  : "text-sidebar-muted-foreground",
-              )}
-            >
-              {showChannelPrefix ? (
-                <span aria-hidden className="mr-0.5 text-sidebar-muted-foreground/75">
-                  #
-                </span>
-              ) : null}
-              {displayTitle}
-            </span>
-          )}
-        </span>
-        <span className="flex min-w-0 items-center gap-1.5 pl-5 text-11_5 text-sidebar-muted-foreground">
-          {jumpLabel ? (
-            <Kbd aria-hidden data-jump-hint>
-              {jumpLabel}
-            </Kbd>
-          ) : (
-            <span className="tabular-nums">
-              <AgeLabel timestamp={resolveThreadActivityTimestamp(thread)} />
-            </span>
-          )}
-          {text ? <span className={TEXT_CLASS[status]}>{m(text)}</span> : null}
-          <MemoryBadge count={proposalCount} className="ml-auto" />
-        </span>
+        className="w-3 shrink-0 text-center text-13 text-sidebar-muted-foreground/70"
+      >
+        #
       </span>
+      {renaming ? (
+        <RenameInput
+          initialTitle={thread.title}
+          label={props.renameLabel}
+          onCommit={(title) => props.onCommitRename(threadRef, title)}
+          onCancel={props.onCancelRename}
+        />
+      ) : (
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate text-13",
+            selected || unread
+              ? "font-semibold text-sidebar-foreground"
+              : "text-sidebar-muted-foreground",
+          )}
+        >
+          {displayTitle}
+        </span>
+      )}
+      {status !== "idle" || unread ? (
+        <span
+          role="img"
+          aria-label={text ? m(text) : "Unread"}
+          data-cabinet-status={unread ? "unread" : status}
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            unread ? "bg-sidebar-foreground/70" : DOT_CLASS[status],
+          )}
+        />
+      ) : null}
+      <MemoryBadge count={proposalCount} />
+      {jumpLabel ? (
+        <Kbd aria-hidden data-jump-hint>
+          {jumpLabel}
+        </Kbd>
+      ) : null}
     </>
   );
   const handleContextMenu = (event: ReactMouseEvent) => {

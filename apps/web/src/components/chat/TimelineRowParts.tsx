@@ -8,19 +8,21 @@ import {
 import { type TimestampFormat } from "@t3tools/contracts/settings";
 import * as Option from "effect/Option";
 import { Atom } from "effect/reactivity";
-import { BotIcon } from "lucide-react";
 import { type ReactNode } from "react";
 import { APP_BASE_NAME } from "~/branding";
 import { cn } from "~/lib/utils";
 import {
   brandProviderInstanceEntries,
   deriveProviderInstanceEntries,
-  shouldShowInstanceBadge,
 } from "../../providerInstances";
 import { serverEnvironment } from "../../state/server";
-import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
+import {
+  formatChatTimestampTooltip,
+  formatDayAwareTimestamp,
+  formatShortTimestamp,
+} from "../../timestampFormat";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { ProviderInstanceIcon, providerTextColor } from "./ProviderInstanceIcon";
+import { providerTextColor } from "./ProviderInstanceIcon";
 import { getTriggerDisplayModelName } from "./providerIconUtils";
 
 export const MESSAGE_HEADING_LEVEL = 3;
@@ -82,10 +84,6 @@ interface AssistantAuthorPresentation {
   readonly displayName: string;
   readonly handle: string;
   readonly modelLabel: string | null;
-  readonly accentColor: string | undefined;
-  readonly acpRegistryAgentId: string | undefined;
-  readonly acpRegistryIconUrl: string | undefined;
-  readonly showBadge: boolean;
 }
 
 function presentationsEqual(
@@ -96,11 +94,7 @@ function presentationsEqual(
     left.driverKind === right.driverKind &&
     left.displayName === right.displayName &&
     left.handle === right.handle &&
-    left.modelLabel === right.modelLabel &&
-    left.accentColor === right.accentColor &&
-    left.acpRegistryAgentId === right.acpRegistryAgentId &&
-    left.acpRegistryIconUrl === right.acpRegistryIconUrl &&
-    left.showBadge === right.showBadge
+    left.modelLabel === right.modelLabel
   );
 }
 
@@ -146,10 +140,6 @@ const assistantAuthorPresentationAtom = Atom.family((key: string) =>
       displayName,
       handle,
       modelLabel,
-      accentColor: entry?.accentColor,
-      acpRegistryAgentId: entry?.acpRegistryAgentId,
-      acpRegistryIconUrl: entry?.acpRegistryIconUrl,
-      showBadge: entry !== undefined && shouldShowInstanceBadge(entry, entries),
     };
     const previous = Option.getOrNull(get.self<AssistantAuthorPresentation>());
     return previous && presentationsEqual(previous, next) ? previous : next;
@@ -160,14 +150,10 @@ export function AssistantAuthorHeader({
   environmentId,
   providerInstanceId,
   model,
-  createdAt,
-  timestampFormat,
 }: {
   readonly environmentId: EnvironmentId;
   readonly providerInstanceId: ProviderInstanceId | null;
   readonly model: string | null;
-  readonly createdAt: string;
-  readonly timestampFormat: TimestampFormat;
 }) {
   const presentation = useAtomValue(
     assistantAuthorPresentationAtom(
@@ -175,54 +161,76 @@ export function AssistantAuthorHeader({
     ),
   );
   const labelColor = presentation.driverKind ? providerTextColor(presentation.driverKind) : {};
-
+  const handle = presentation.handle.replace(/^@/, "");
+  const color =
+    handle === "codex"
+      ? "text-channel-codex"
+      : handle === "claude"
+        ? "text-channel-claude"
+        : handle === "gemini"
+          ? "text-channel-gemini"
+          : (labelColor.className ?? "text-foreground");
   return (
     <h3
       data-assistant-author-header=""
       data-provider-handle={presentation.handle}
-      className="mb-1 flex min-w-0 items-center gap-1.5 text-xs leading-none"
+      className="inline text-13"
     >
-      {presentation.driverKind ? (
-        <ProviderInstanceIcon
-          driverKind={presentation.driverKind}
-          displayName={presentation.displayName}
-          accentColor={presentation.accentColor}
-          acpRegistryAgentId={presentation.acpRegistryAgentId}
-          acpRegistryIconUrl={presentation.acpRegistryIconUrl}
-          showBadge={presentation.showBadge}
-          size="compact"
-          className="z-auto"
-          iconClassName="size-3.5"
-          indicatorBackground="var(--background)"
-        />
-      ) : (
-        <BotIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-      )}
       <span
-        className={cn("shrink-0 font-semibold", labelColor.className ?? "text-foreground")}
-        style={labelColor.style}
+        className={cn("mr-1.5 font-bold", color)}
+        style={
+          handle === "codex" || handle === "claude" || handle === "gemini"
+            ? undefined
+            : labelColor.style
+        }
       >
-        {presentation.handle}
+        {handle}
       </span>
       {presentation.modelLabel ? (
-        <>
-          <span aria-hidden className="text-muted-foreground/60">
-            ·
-          </span>
-          <span className="min-w-0 truncate rounded-sm bg-muted/60 px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
-            {presentation.modelLabel}
-          </span>
-        </>
+        <span className="mr-1.5 text-10_5 font-medium text-muted-foreground/70">
+          {presentation.modelLabel}
+        </span>
       ) : null}
-      <TimelineRowTimestamp
-        createdAt={createdAt}
-        timestampFormat={timestampFormat}
-        alwaysVisible
-        className="ms-auto me-0 text-2xs"
-      />
     </h3>
   );
 }
+
+export function CompactMessageRow({
+  createdAt,
+  timestampFormat,
+  children,
+}: {
+  createdAt: string;
+  timestampFormat: TimestampFormat;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      data-compact-message-row=""
+      className="group/compact-message relative flex min-w-0 items-baseline gap-2.5 py-channel-message pr-5 pl-3 text-13 leading-channel hover:bg-foreground/[0.025]"
+    >
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <time
+              dateTime={createdAt}
+              className="w-[58px] shrink-0 text-right text-2xs whitespace-nowrap text-muted-foreground/70 tabular-nums"
+            />
+          }
+        >
+          {formatShortTimestamp(createdAt, timestampFormat)}
+        </TooltipTrigger>
+        <TooltipPopup>{formatChatTimestampTooltip(createdAt, timestampFormat)}</TooltipPopup>
+      </Tooltip>
+      <div className="min-w-0 max-w-[820px] flex-1 [&_.chat-markdown]:inline [&_.chat-markdown>p:first-child]:inline">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export const MESSAGE_ACTIONS_CLASS =
+  "absolute -top-2 right-4 z-10 flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5 opacity-0 shadow-sm group-hover/compact-message:opacity-100 group-focus-within/compact-message:opacity-100 focus-within:opacity-100 pointer-coarse:static pointer-coarse:mt-1 pointer-coarse:w-fit pointer-coarse:opacity-100";
 
 export function TimelineRowTimestamp({
   createdAt,

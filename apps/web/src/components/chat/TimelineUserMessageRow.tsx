@@ -8,7 +8,6 @@ import { findRevealRef } from "./markdownFindContext";
 import {
   type EnvironmentId,
   type MessageId,
-  ProviderDriverKind,
   type ScheduledTaskId,
   type ServerProviderSkill,
   ThreadId,
@@ -63,7 +62,6 @@ import {
   SNAP_SHOT_ATTACHMENT_FRAME_CLASS,
   SnapShotAttachmentDetails,
 } from "./SnapShotAttachmentDetails";
-import { GuestMessageName, guestBubbleClassName } from "./guestMessageStyle";
 import { MessageCopyButton } from "./MessageCopyButton";
 import { promptLinkFor } from "../promptLinks/copyPromptLink";
 import { PierreEntryIcon } from "./PierreEntryIcon";
@@ -87,22 +85,20 @@ import { chatMarkdownClipboardPayload } from "../../markdown-clipboard";
 import type { ChatMarkdownContextReference } from "../ChatMarkdown";
 import { cn } from "~/lib/utils";
 import { markdownProseDirection } from "~/textDirection";
-import { useMediaQuery } from "~/hooks/useMediaQuery";
-import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
 import { WorkflowOpeningBlock } from "./WorkflowOpeningBlock";
 import { useTallEnoughToFold } from "./useTallEnoughToFold";
 import { TimelineRowCtx, TimelineRowActivityCtx, type TimelineRow } from "./timelineRowContext";
 import {
+  CompactMessageRow,
+  MESSAGE_ACTIONS_CLASS,
   MESSAGE_HEADING_LEVEL,
   MessageAuthorHeading,
-  TimelineRowTimestamp,
 } from "./TimelineRowParts";
 import { UserMessageContextReferenceChip } from "./UserMessageContextChips";
 import {
   resolvePreviewAnnotationImage,
   userMessageFileLabel,
 } from "./TimelineUserMessageRow.logic";
-import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { APP_BASE_NAME } from "~/branding";
 
 // Drawn inside the media so dark screenshots keep an edge on the dark background.
@@ -290,7 +286,7 @@ function UserMessageContent({ row }: { row: Extract<TimelineRow, { kind: "messag
   );
 }
 
-/** Automation prompts are long, repeated runbooks; a folded bubble keeps them out of the way. */
+/** Automation prompts are long, repeated runbooks; fold them under their task title. */
 function AutomationMessageRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
   const [expanded, setExpanded] = useState(false);
@@ -307,78 +303,71 @@ function AutomationMessageRow({ row }: { row: Extract<TimelineRow, { kind: "mess
   const bodyMounted = expanded || ctx.findActive;
 
   return (
-    <div className="group flex flex-col items-end gap-1" data-user-message-attribution="automation">
-      {row.message.inputIntent === "steer" ||
-      row.message.inputIntent === "promoted_queued_to_steer" ? (
-        <UserMessageIntentMarker
-          intent={row.message.inputIntent}
-          unread={row.projectedItem?.item.status === "pending"}
-        />
-      ) : null}
-      <div
-        className={cn(
-          "min-w-0 max-w-[88%] rounded-lg border border-border bg-message text-message-foreground",
-          BUBBLE_CHIP_CLASS_NAME,
-          expanded && "w-full",
-        )}
-        data-user-message-bubble=""
-      >
-        <MessageAuthorHeading>Automation</MessageAuthorHeading>
-        <FoldedMessageHeader
-          icon={CalendarClockIcon}
-          label="Automation"
-          summary={summary}
-          expanded={expanded}
-          onToggle={() => setExpanded((value) => !value)}
-        />
-        {bodyMounted ? (
-          // `beforematch` does not bubble, so the reveal listener sits on the hidden fold itself.
-          <div
-            ref={revealRef}
-            hidden={!expanded}
-            className={cn("px-3 pb-3", !ctx.findActive && "max-h-96 overflow-auto")}
-            data-thread-find-text="true"
-          >
-            <UserMessageBody text={text} skills={ctx.skills} markdownCwd={ctx.markdownCwd} />
+    <CompactMessageRow createdAt={row.message.createdAt} timestampFormat={ctx.timestampFormat}>
+      <div className="group" data-user-message-attribution="automation">
+        {row.message.inputIntent === "steer" ||
+        row.message.inputIntent === "promoted_queued_to_steer" ? (
+          <UserMessageIntentMarker
+            intent={row.message.inputIntent}
+            unread={row.projectedItem?.item.status === "pending"}
+          />
+        ) : null}
+        <div
+          className={cn("min-w-0 text-foreground", BUBBLE_CHIP_CLASS_NAME, expanded && "w-full")}
+          data-user-message-content=""
+        >
+          <MessageAuthorHeading>Automation</MessageAuthorHeading>
+          <FoldedMessageHeader
+            icon={CalendarClockIcon}
+            label="Automation"
+            summary={summary}
+            expanded={expanded}
+            onToggle={() => setExpanded((value) => !value)}
+          />
+          {bodyMounted ? (
+            // `beforematch` does not bubble, so the reveal listener sits on the hidden fold itself.
+            <div
+              ref={revealRef}
+              hidden={!expanded}
+              className={cn("px-3 pb-3", !ctx.findActive && "max-h-96 overflow-auto")}
+              data-thread-find-text="true"
+            >
+              <UserMessageBody text={text} skills={ctx.skills} markdownCwd={ctx.markdownCwd} />
+            </div>
+          ) : null}
+        </div>
+        <UserMessageProjectedStatus row={row} />
+        {expanded ? (
+          <div className={MESSAGE_ACTIONS_CLASS}>
+            <div className="flex shrink-0 items-center gap-2">
+              {scheduledTaskId ? (
+                <Link
+                  to="/settings/scheduled-tasks"
+                  search={{ environmentId: ctx.activeThreadEnvironmentId, taskId: scheduledTaskId }}
+                  className="rounded-sm text-xs text-muted-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  Open automation
+                </Link>
+              ) : null}
+              <div className="flex items-center gap-0.5">
+                {typeof revertTurnCount === "number" && (
+                  <RevertUserMessageButton turnCount={revertTurnCount} messageId={row.message.id} />
+                )}
+                <MessageCopyButton text={text} variant="ghost" />
+                {promptLink !== null && (
+                  <MessageCopyButton
+                    text={promptLink}
+                    label="Copy prompt link"
+                    icon={LinkIcon}
+                    variant="ghost"
+                  />
+                )}
+              </div>
+            </div>
           </div>
         ) : null}
       </div>
-      <UserMessageProjectedStatus row={row} />
-      {expanded ? (
-        <div className="flex w-full max-w-[80%] items-center justify-end pe-1 text-xs tabular-nums opacity-0 transition-opacity duration-200 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover:opacity-100">
-          <div className="flex shrink-0 items-center gap-2">
-            {scheduledTaskId ? (
-              <Link
-                to="/settings/scheduled-tasks"
-                search={{ environmentId: ctx.activeThreadEnvironmentId, taskId: scheduledTaskId }}
-                className="rounded-sm text-xs text-muted-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-              >
-                Open automation
-              </Link>
-            ) : null}
-            <TimelineRowTimestamp
-              createdAt={row.message.createdAt}
-              timestampFormat={ctx.timestampFormat}
-              alwaysVisible
-            />
-            <div className="flex items-center gap-0.5">
-              {typeof revertTurnCount === "number" && (
-                <RevertUserMessageButton turnCount={revertTurnCount} messageId={row.message.id} />
-              )}
-              <MessageCopyButton text={text} variant="ghost" />
-              {promptLink !== null && (
-                <MessageCopyButton
-                  text={promptLink}
-                  label="Copy prompt link"
-                  icon={LinkIcon}
-                  variant="ghost"
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
+    </CompactMessageRow>
   );
 }
 
@@ -442,7 +431,6 @@ function UserMessageProjectedStatus({ row }: { row: Extract<TimelineRow, { kind:
 function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
   const { onImageExpand, onFileOpen } = ctx;
-  const coarsePointer = useMediaQuery({ pointer: "coarse" });
   // A linked environment's agent sent it from a thread there.
   const senderRef =
     row.message.linkedSender ??
@@ -797,16 +785,8 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
       </div>
     ) : null;
 
-  // Touch shows actions all the time, and narrow lanes have no room beside the
-  // bubble, so both keep the actions on their own line.
-  const floatActions = row.groupedWithNext === true && !coarsePointer;
   const messageActions = (
-    <div
-      className={cn(
-        "flex items-center justify-end gap-x-2 gap-y-0.5",
-        floatActions ? "flex-wrap" : "shrink-0",
-      )}
-    >
+    <div className={MESSAGE_ACTIONS_CLASS}>
       {folded && senderRef && canOpenSender ? (
         <InlineButton
           onClick={() => ctx.onOpenThread(senderRef.threadId, senderRef.environmentId)}
@@ -815,15 +795,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
           Open thread
         </InlineButton>
       ) : null}
-      <Tooltip>
-        <TooltipTrigger render={<p className="text-muted-foreground text-xs tabular-nums" />}>
-          {formatDayAwareTimestamp(row.message.createdAt, ctx.timestampFormat)}
-        </TooltipTrigger>
-        <TooltipPopup>
-          {formatChatTimestampTooltip(row.message.createdAt, ctx.timestampFormat)}
-        </TooltipPopup>
-      </Tooltip>
-      <div className={cn("flex items-center gap-0.5", floatActions && "flex-wrap justify-end")}>
+      <div className="flex items-center gap-0.5">
         {typeof revertTurnCount === "number" && (
           <RevertUserMessageButton turnCount={revertTurnCount} messageId={row.message.id} />
         )}
@@ -852,231 +824,213 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
     </div>
   );
   return (
-    <div
-      className="group @container flex flex-col items-end gap-1"
-      data-user-message-attribution={folded ? "agent" : undefined}
-    >
-      {userMessage.attribution === "t3code" ? (
-        <p
-          className="me-1 text-2xs text-muted-foreground/70"
-          data-user-message-attribution="t3code"
-        >
-          Sent by {APP_BASE_NAME}
-        </p>
-      ) : null}
-      {/* The row's heading already names the guest for screen readers. */}
-      {userMessage.guestName !== undefined ? (
-        <div aria-hidden>
-          <GuestMessageName name={userMessage.guestName} />
-        </div>
-      ) : null}
-      {(row.message.inputIntent === "steer" ||
-        row.message.inputIntent === "promoted_queued_to_steer") &&
-      !row.continuesSteer ? (
-        <UserMessageIntentMarker
-          intent={row.message.inputIntent}
-          unread={row.projectedItem?.item.status === "pending"}
-        />
-      ) : null}
-      {mediaAboveText ? (
-        <div className="flex max-w-[80%] justify-end">
-          {/* The heading leads the media so screen readers reach it before the images. */}
-          <MessageAuthorHeading>You</MessageAuthorHeading>
-          {mediaBlock}
-        </div>
-      ) : null}
+    <CompactMessageRow createdAt={row.message.createdAt} timestampFormat={ctx.timestampFormat}>
       <div
-        className={cn(
-          "relative min-w-0 max-w-[88%] rounded-lg text-message-foreground",
-          (mediaAboveText || row.groupedWithPrevious) && "rounded-tr-md",
-          row.groupedWithNext && "rounded-br-md",
-          BUBBLE_CHIP_CLASS_NAME,
-          userMessage.attribution === "guest"
-            ? guestBubbleClassName(false)
-            : !mediaOnly && !fileCardsOnly && !audioOnly && "border border-border bg-message",
-          !folded && !mediaOnly && !fileCardsOnly && !audioOnly && "px-3 py-2",
-          folded && expanded && "w-full",
-        )}
-        data-user-message-bubble=""
+        className="group @container contents"
+        data-user-message-attribution={folded ? "agent" : undefined}
       >
-        {/* Outside the fold so a collapsed message still has a heading to navigate to. */}
-        {mediaAboveText ? null : (
-          <MessageAuthorHeading>
-            {folded
-              ? senderLabel
-              : userMessage.guestName === undefined
-                ? "You"
-                : `${userMessage.guestName} (guest)`}
-          </MessageAuthorHeading>
-        )}
-        {folded ? (
-          <FoldedMessageHeader
-            icon={MessagesSquareIcon}
-            label={senderLabel}
-            summary={foldSummary}
-            expanded={expanded}
-            onToggle={() => setExpanded((value) => !value)}
+        {folded || mediaOnly || fileCardsOnly || audioOnly ? (
+          <span aria-hidden data-thread-find-ignore className="mr-1.5 font-bold text-channel-user">
+            {folded ? senderLabel : (userMessage.guestName ?? "you")}
+          </span>
+        ) : null}
+        {userMessage.attribution === "t3code" ? (
+          <p
+            className="me-1 text-2xs text-muted-foreground/70"
+            data-user-message-attribution="t3code"
+          >
+            Sent by {APP_BASE_NAME}
+          </p>
+        ) : null}
+        {(row.message.inputIntent === "steer" ||
+          row.message.inputIntent === "promoted_queued_to_steer") &&
+        !row.continuesSteer ? (
+          <UserMessageIntentMarker
+            intent={row.message.inputIntent}
+            unread={row.projectedItem?.item.status === "pending"}
           />
         ) : null}
-        {/* Find reads the DOM, so a folded message stays mounted but hidden while find is open. */}
-        {!folded || expanded || ctx.findActive ? (
-          <div
-            ref={folded ? revealFoldRef : undefined}
-            hidden={folded && !expanded}
-            dir={markdownProseDirection(resolvedContext.text)}
-            className={cn(
-              folded && "px-3 pb-3",
-              folded && !ctx.findActive && "max-h-96 overflow-auto",
-            )}
-          >
-            {!mediaAboveText && mediaBlock}
-            {userAudio.length > 0 ? (
-              <div className={cn("flex max-w-full flex-col gap-1", !audioOnly && "mb-2")}>
-                {userAudio.map((file) => (
-                  <InlineAudioPreview
-                    key={file.id}
-                    name={file.name}
-                    variant={audioOnly ? "bubble" : "chip"}
-                    environmentId={ctx.activeThreadEnvironmentId}
-                    resource={{
-                      _tag: "attachment",
-                      attachmentId: file.id,
-                      fileName: file.name,
-                      mimeType: file.mimeType,
-                      disposition: "inline",
-                    }}
-                    onOpen={() => ctx.onFileOpen(file)}
-                  />
-                ))}
-              </div>
-            ) : null}
-            {fileCardsOnly ? (
-              <div className="flex flex-col items-end gap-1" onCopyCapture={onBodyCopyCapture}>
-                {otherUserFiles.map((file) => (
-                  <UserFileCard
-                    key={file.id}
-                    file={file}
-                    copyMarkdown={
-                      attachmentReferences.find((reference) => reference.attachmentId === file.id)
-                        ?.source
+        {mediaAboveText ? (
+          <div className="flex max-w-full">
+            {/* The heading leads the media so screen readers reach it before the images. */}
+            <MessageAuthorHeading>You</MessageAuthorHeading>
+            {mediaBlock}
+          </div>
+        ) : null}
+        <div className={cn("min-w-0", folded ? "block" : "contents")} data-user-message-content="">
+          {/* Outside the fold so a collapsed message still has a heading to navigate to. */}
+          {mediaAboveText ? null : (
+            <MessageAuthorHeading>
+              {folded
+                ? senderLabel
+                : userMessage.guestName === undefined
+                  ? "You"
+                  : `${userMessage.guestName} (guest)`}
+            </MessageAuthorHeading>
+          )}
+          {folded ? (
+            <FoldedMessageHeader
+              icon={MessagesSquareIcon}
+              label={senderLabel}
+              summary={foldSummary}
+              expanded={expanded}
+              onToggle={() => setExpanded((value) => !value)}
+            />
+          ) : null}
+          {/* Find reads the DOM, so a folded message stays mounted but hidden while find is open. */}
+          {!folded || expanded || ctx.findActive ? (
+            <div
+              ref={folded ? revealFoldRef : undefined}
+              hidden={folded && !expanded}
+              dir={markdownProseDirection(resolvedContext.text)}
+              className={cn(
+                !folded && "contents",
+                folded && "px-3 pb-3",
+                folded && !ctx.findActive && "max-h-96 overflow-auto",
+              )}
+            >
+              {!mediaAboveText && mediaBlock}
+              {userAudio.length > 0 ? (
+                <div className={cn("flex max-w-full flex-col gap-1", !audioOnly && "mb-2")}>
+                  {userAudio.map((file) => (
+                    <InlineAudioPreview
+                      key={file.id}
+                      name={file.name}
+                      variant={audioOnly ? "bubble" : "chip"}
+                      environmentId={ctx.activeThreadEnvironmentId}
+                      resource={{
+                        _tag: "attachment",
+                        attachmentId: file.id,
+                        fileName: file.name,
+                        mimeType: file.mimeType,
+                        disposition: "inline",
+                      }}
+                      onOpen={() => ctx.onFileOpen(file)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {fileCardsOnly ? (
+                <div className="flex flex-col items-start gap-1" onCopyCapture={onBodyCopyCapture}>
+                  {otherUserFiles.map((file) => (
+                    <UserFileCard
+                      key={file.id}
+                      file={file}
+                      copyMarkdown={
+                        attachmentReferences.find((reference) => reference.attachmentId === file.id)
+                          ?.source
+                      }
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {!fileCardsOnly && (unchippedFiles.length > 0 || unknownAttachments.length > 0) ? (
+                <div className="mb-2 flex flex-col gap-1">
+                  {unchippedFiles.map((file) => {
+                    const pastedText = file.source?._tag === "pasted-text";
+                    const label = userMessageFileLabel(file);
+                    const fileIdentity = (
+                      <>
+                        <PierreEntryIcon
+                          pathValue={file.name}
+                          kind="file"
+                          theme={ctx.resolvedTheme}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{label}</span>
+                          {file.downloadable === false || pastedText ? (
+                            <span className="block text-xs text-muted-foreground tabular-nums">
+                              {file.downloadable === false
+                                ? "Sending…"
+                                : formatBytes(file.sizeBytes)}
+                            </span>
+                          ) : null}
+                        </span>
+                      </>
+                    );
+                    if (file.downloadable !== false) {
+                      return (
+                        <div key={file.id} className="flex min-w-0 items-center gap-1">
+                          <button
+                            type="button"
+                            aria-label={`Preview ${label}`}
+                            onClick={() => ctx.onFileOpen(file)}
+                            className="focus-visible:ring-ring/70 flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md py-1 text-left text-sm hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none"
+                          >
+                            {fileIdentity}
+                            <EyeIcon className="size-4 shrink-0" />
+                          </button>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <Button
+                                  size="icon-xs"
+                                  variant="ghost-muted"
+                                  aria-label={`Download ${label}`}
+                                  onClick={() => ctx.onFileDownload(file)}
+                                />
+                              }
+                            >
+                              <DownloadIcon />
+                            </TooltipTrigger>
+                            <TooltipPopup side="top">Download {label}</TooltipPopup>
+                          </Tooltip>
+                        </div>
+                      );
                     }
-                  />
-                ))}
-              </div>
-            ) : null}
-            {!fileCardsOnly && (unchippedFiles.length > 0 || unknownAttachments.length > 0) ? (
-              <div className="mb-2 flex flex-col gap-1">
-                {unchippedFiles.map((file) => {
-                  const pastedText = file.source?._tag === "pasted-text";
-                  const label = userMessageFileLabel(file);
-                  const fileIdentity = (
-                    <>
+
+                    return (
+                      <div key={file.id} className="flex min-w-0 items-center gap-2 py-1 text-sm">
+                        {fileIdentity}
+                      </div>
+                    );
+                  })}
+                  {unknownAttachments.map((attachment) => (
+                    <div
+                      key={attachment.id}
+                      className="flex min-w-0 items-center gap-2 py-1 text-sm"
+                    >
                       <PierreEntryIcon
-                        pathValue={file.name}
+                        pathValue={attachment.name}
                         kind="file"
                         theme={ctx.resolvedTheme}
                       />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">{label}</span>
-                        {file.downloadable === false || pastedText ? (
-                          <span className="block text-xs text-muted-foreground tabular-nums">
-                            {file.downloadable === false ? "Sending…" : formatBytes(file.sizeBytes)}
-                          </span>
-                        ) : null}
-                      </span>
-                    </>
-                  );
-                  if (file.downloadable !== false) {
-                    return (
-                      <div key={file.id} className="flex min-w-0 items-center gap-1">
-                        <button
-                          type="button"
-                          aria-label={`Preview ${label}`}
-                          onClick={() => ctx.onFileOpen(file)}
-                          className="focus-visible:ring-ring/70 flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md py-1 text-left text-sm hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none"
-                        >
-                          {fileIdentity}
-                          <EyeIcon className="size-4 shrink-0" />
-                        </button>
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <Button
-                                size="icon-xs"
-                                variant="ghost-muted"
-                                aria-label={`Download ${label}`}
-                                onClick={() => ctx.onFileDownload(file)}
-                              />
-                            }
-                          >
-                            <DownloadIcon />
-                          </TooltipTrigger>
-                          <TooltipPopup side="top">Download {label}</TooltipPopup>
-                        </Tooltip>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div key={file.id} className="flex min-w-0 items-center gap-2 py-1 text-sm">
-                      {fileIdentity}
+                      <span className="min-w-0 flex-1 truncate">{attachment.name}</span>
                     </div>
-                  );
-                })}
-                {unknownAttachments.map((attachment) => (
-                  <div key={attachment.id} className="flex min-w-0 items-center gap-2 py-1 text-sm">
-                    <PierreEntryIcon
-                      pathValue={attachment.name}
-                      kind="file"
-                      theme={ctx.resolvedTheme}
-                    />
-                    <span className="min-w-0 flex-1 truncate">{attachment.name}</span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {fileCardsOnly || audioOnly ? null : (
-              <div onCopyCapture={onBodyCopyCapture}>
-                <CollapsibleUserMessageBody
-                  text={resolvedContext.text}
-                  renderContextReference={renderContextReference}
-                  skills={ctx.skills}
-                  markdownCwd={ctx.markdownCwd}
-                  collapsible={!folded}
-                />
-              </div>
-            )}
-          </div>
-        ) : null}
-        {floatActions ? (
-          <div
-            className={cn(
-              "absolute end-full top-1/2 me-2 hidden w-max max-w-[calc(20cqw-0.5rem)] -translate-y-1/2 @min-[37rem]:flex",
-              ACTIONS_REVEAL_CLASS_NAME,
-            )}
-          >
-            {messageActions}
-          </div>
-        ) : null}
-      </div>
-      <UserMessageProjectedStatus row={row} />
-      {!folded || expanded ? (
-        <div
-          className={cn(
-            "flex w-full max-w-[80%] justify-end pe-1",
-            floatActions && "@min-[37rem]:hidden",
-            ACTIONS_REVEAL_CLASS_NAME,
-          )}
-        >
-          {messageActions}
+                  ))}
+                </div>
+              ) : null}
+              {fileCardsOnly || audioOnly ? null : (
+                <div className="contents" onCopyCapture={onBodyCopyCapture}>
+                  <CollapsibleUserMessageBody
+                    author={
+                      folded ? null : (
+                        <span
+                          aria-hidden
+                          data-thread-find-ignore
+                          className="mr-1.5 font-bold text-channel-user"
+                        >
+                          {userMessage.guestName ?? "you"}
+                        </span>
+                      )
+                    }
+                    text={resolvedContext.text}
+                    renderContextReference={renderContextReference}
+                    skills={ctx.skills}
+                    markdownCwd={ctx.markdownCwd}
+                    collapsible={!folded}
+                  />
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
-      ) : null}
-    </div>
+        <UserMessageProjectedStatus row={row} />
+        {!folded || expanded ? messageActions : null}
+      </div>
+    </CompactMessageRow>
   );
 }
-
-const ACTIONS_REVEAL_CLASS_NAME =
-  "items-center text-xs tabular-nums opacity-0 transition-opacity duration-200 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover:opacity-100";
 
 function UserMessageIntentMarker({
   intent,
@@ -1145,6 +1099,7 @@ const COLLAPSED_USER_MESSAGE_FADE_HEIGHT_REM = 1.75;
 const COLLAPSED_USER_MESSAGE_FADE_MASK = `linear-gradient(to bottom, black calc(100% - ${COLLAPSED_USER_MESSAGE_FADE_HEIGHT_REM}rem), transparent)`;
 
 const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(props: {
+  author: ReactNode;
   text: string;
   renderContextReference: (reference: ChatMarkdownContextReference) => ReactNode;
   skills: ReadonlyArray<ServerProviderSkill>;
@@ -1162,7 +1117,7 @@ const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(prop
   const showCollapseControl = canCollapse;
 
   return (
-    <div>
+    <div className="contents">
       {hasVisibleBody ? (
         <div
           ref={revealRef}
@@ -1183,6 +1138,7 @@ const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(prop
           }
         >
           <div ref={contentRef}>
+            {props.author}
             <UserMessageBody
               text={props.text}
               renderContextReference={props.renderContextReference}
@@ -1215,60 +1171,16 @@ const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(prop
 
 const PROVIDER_MENTION_CONTEXT_KIND = "provider-mention";
 
-const PROVIDER_MENTION_PRESENTATION: Readonly<
-  Record<
-    string,
-    {
-      readonly driverKind: ProviderDriverKind;
-      readonly displayName: string;
-      readonly pillClassName: string;
-    }
-  >
-> = {
-  gemini: {
-    driverKind: ProviderDriverKind.make("antigravity"),
-    displayName: "Gemini",
-    pillClassName:
-      "border-[#5b87bf]/35 bg-[#5b87bf]/12 text-[#3b669e] dark:border-[#5b87bf]/40 dark:bg-[#5b87bf]/18 dark:text-[#8eb5e8]",
-  },
-  antigravity: {
-    driverKind: ProviderDriverKind.make("antigravity"),
-    displayName: "Antigravity",
-    pillClassName:
-      "border-[#5b87bf]/35 bg-[#5b87bf]/12 text-[#3b669e] dark:border-[#5b87bf]/40 dark:bg-[#5b87bf]/18 dark:text-[#8eb5e8]",
-  },
-  claude: {
-    driverKind: ProviderDriverKind.make("claudeAgent"),
-    displayName: "Claude",
-    pillClassName:
-      "border-[#d97757]/35 bg-[#d97757]/12 text-[#b85636] dark:border-[#d97757]/40 dark:bg-[#d97757]/18 dark:text-[#f09a7d]",
-  },
-  codex: {
-    driverKind: ProviderDriverKind.make("codex"),
-    displayName: "Codex",
-    pillClassName: "border-foreground/20 bg-foreground/8 text-foreground",
-  },
-  gpt: {
-    driverKind: ProviderDriverKind.make("codex"),
-    displayName: "Codex",
-    pillClassName: "border-foreground/20 bg-foreground/8 text-foreground",
-  },
-  grok: {
-    driverKind: ProviderDriverKind.make("grok"),
-    displayName: "Grok",
-    pillClassName: "border-foreground/20 bg-foreground/8 text-foreground",
-  },
-  kiro: {
-    driverKind: ProviderDriverKind.make("kiro"),
-    displayName: "Kiro",
-    pillClassName: "border-primary/30 bg-primary/10 text-primary",
-  },
-  fx: {
-    driverKind: ProviderDriverKind.make("fx"),
-    displayName: "fx",
-    pillClassName: "border-foreground/20 bg-foreground/8 text-foreground",
-  },
-};
+const PROVIDER_MENTION_HANDLES = new Set([
+  "gemini",
+  "antigravity",
+  "claude",
+  "codex",
+  "gpt",
+  "grok",
+  "kiro",
+  "fx",
+]);
 
 interface RemarkProviderMentionNode {
   type: string;
@@ -1357,26 +1269,15 @@ function ProviderMentionPill({
   readonly handle: string;
   readonly label: string;
 }) {
-  const presentation = PROVIDER_MENTION_PRESENTATION[handle.toLowerCase()];
-  if (!presentation) {
+  if (!PROVIDER_MENTION_HANDLES.has(handle.toLowerCase())) {
     return <span>{label}</span>;
   }
   return (
     <span
       data-provider-mention={handle.toLowerCase()}
       data-markdown-copy={label}
-      className={cn(
-        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.25 align-baseline text-xs font-medium leading-snug",
-        presentation.pillClassName,
-      )}
+      className="rounded bg-channel-gemini/9 px-1 align-baseline text-13 font-semibold text-channel-mention dark:bg-channel-gemini/14"
     >
-      <ProviderInstanceIcon
-        driverKind={presentation.driverKind}
-        displayName={presentation.displayName}
-        size="compact"
-        className="z-auto"
-        iconClassName="size-3"
-      />
       <span>{label}</span>
     </span>
   );

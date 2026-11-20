@@ -81,7 +81,6 @@ import {
   type FolderTerminalEntry,
   type FolderTerminalTarget,
 } from "./folderTerminals.logic";
-import { cabinetProviderEntriesAtom } from "./providerEntries";
 import type { RepoTreeTarget } from "./RepoTree";
 import { cabinetThreadKey, useCabinetSidebarModel } from "./useCabinetSidebarModel";
 import { useThreadNavigationShortcuts } from "./useThreadNavigationShortcuts";
@@ -162,7 +161,7 @@ function GeneralSectionHeader(props: {
   onNewChannel: () => void;
 }) {
   return (
-    <div className="group/general mx-1.5 flex h-7 items-center rounded-md hover:bg-sidebar-row-hover">
+    <div className="group/general mx-1.5 flex h-[26px] items-center rounded-md hover:bg-sidebar-row-hover">
       <button
         type="button"
         data-sidebar-row={props.rowKey}
@@ -179,7 +178,7 @@ function GeneralSectionHeader(props: {
         />
         <span
           className={cn(
-            "min-w-0 truncate text-10_5 font-bold tracking-label uppercase",
+            "min-w-0 truncate text-2xs font-semibold tracking-wide uppercase",
             props.containsActiveThread
               ? "text-sidebar-foreground"
               : "text-sidebar-muted-foreground",
@@ -248,7 +247,6 @@ export default function CabinetSidebar({ routeReveal }: { routeReveal: SidebarRo
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
-  const providerEntriesByEnvironment = useAtomValue(cabinetProviderEntriesAtom);
   const projects = useProjects();
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const { settleThread } = useThreadActions();
@@ -592,10 +590,7 @@ export default function CabinetSidebar({ routeReveal }: { routeReveal: SidebarRo
         key={threadKey}
         thread={thread}
         selected={routeRowThreadKey === threadKey}
-        providerEntry={
-          providerEntriesByEnvironment.get(thread.environmentId)?.get(thread.providerInstanceId) ??
-          null
-        }
+
         jumpLabel={jumpLabelByKey.get(threadKey) ?? null}
         parentKey={parentKey}
         renaming={renamingKey === threadKey}

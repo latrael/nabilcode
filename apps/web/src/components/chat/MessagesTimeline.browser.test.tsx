@@ -1317,7 +1317,7 @@ describe("MessagesTimeline citations", () => {
 });
 
 describe("MessagesTimeline automation prompts", () => {
-  it("folds an automation prompt into a bubble titled by its task", async () => {
+  it("folds an automation prompt under its task title", async () => {
     setup({ scheduledTasks: [{ id: TASK_ID, title: "Nightly triage" }] });
     await using screen = await renderTimeline([
       message(AUTOMATION_PROMPT, { scheduledTaskId: TASK_ID }),
@@ -1344,11 +1344,13 @@ describe("MessagesTimeline automation prompts", () => {
     expect(screen.button(/^Automation/).textContent).toContain("Triage the inbox");
   });
 
-  it("leaves ordinary user messages as full bubbles", async () => {
+  it("leaves ordinary user messages unfolded", async () => {
     setup();
     await using screen = await renderTimeline([message(AUTOMATION_PROMPT)]);
     expect(screen.buttons(/^Automation/)).toHaveLength(0);
     expect(screen.text()).toContain("Label every new issue and close duplicates.");
+    expect(collectThreadFindRanges(screen.container, "you")).toHaveLength(0);
+    expect(screen.container.querySelectorAll("[data-chat-day-divider]")).toHaveLength(1);
   });
 
   it("reveals a find match beyond the folded automation prompt's initial viewport", async () => {
@@ -1451,7 +1453,7 @@ describe("MessagesTimeline agent messages", () => {
     expect(screen.buttons("Open thread")).toHaveLength(0);
   });
 
-  it("leaves messages sent by T3 Code as full bubbles", async () => {
+  it("leaves messages sent by T3 Code unfolded", async () => {
     setup();
     await using screen = await renderTimeline([
       message(AGENT_MESSAGE, { createdBy: "agent", creationSource: "server" }),

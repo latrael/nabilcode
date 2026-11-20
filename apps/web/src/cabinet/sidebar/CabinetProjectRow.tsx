@@ -81,7 +81,7 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
   const canOpenTerminal =
     useEnvironmentsWithScope(group.memberProjects, AuthTerminalOperateScope).size > 0;
   return (
-    <div className="group/project mx-1.5 flex h-7 items-center rounded-md hover:bg-sidebar-row-hover">
+    <div className="group/project mx-1.5 flex h-[26px] items-center rounded-md hover:bg-sidebar-row-hover">
       <button
         type="button"
         data-sidebar-row={group.projectKey}
@@ -103,7 +103,7 @@ export const CabinetProjectRow = memo(function CabinetProjectRow(props: {
         />
         <span
           className={cn(
-            "min-w-0 truncate text-10_5 font-bold tracking-label uppercase",
+            "min-w-0 truncate text-2xs font-semibold tracking-wide uppercase",
             props.containsActiveThread
               ? "text-sidebar-foreground"
               : "text-sidebar-muted-foreground",

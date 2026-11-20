@@ -188,6 +188,17 @@ function formatNumericDate(date: Date, sameYear: boolean, timeZone: string | und
   }).format(date);
 }
 
+export function formatChatDay(isoDate: string, nowMs = Date.now(), timeZone?: string): string {
+  const date = parseTimestampDate(isoDate);
+  if (!date) return "";
+  const today = calendarDay(new Date(nowMs), timeZone);
+  const messageDay = calendarDay(date, timeZone);
+  const dayDiff = today.index - messageDay.index;
+  if (dayDiff === 0) return "Today";
+  if (dayDiff === 1) return "Yesterday";
+  return formatNumericDate(date, messageDay.year === today.year, timeZone);
+}
+
 export function formatDayAwareTimestamp(
   isoDate: string,
   timestampFormat: TimestampFormat,

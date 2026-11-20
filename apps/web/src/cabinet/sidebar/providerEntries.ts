@@ -9,7 +9,7 @@ import { environmentPresentations } from "~/state/presentation";
 
 // The fields thread rows show. Provider status pushes refresh `checkedAt`, status and auth on
 // every provider; leaving those out keeps each environment's map, and every row, stable.
-export type CabinetProviderEntry = Pick<
+type CabinetProviderEntry = Pick<
   ProviderInstanceEntry,
   | "instanceId"
   | "driverKind"

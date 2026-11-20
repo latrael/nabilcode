@@ -748,9 +748,23 @@ it("routes @gemini and @claude mentions in a #channel, shows @provider author he
   await vi.waitFor(() => {
     const authorHeader = document.querySelector('[data-provider-handle="@claude"]');
     expect(authorHeader).not.toBeNull();
-    expect(authorHeader?.textContent).toContain("@claude");
+    expect(authorHeader?.textContent).toContain("claude");
+    expect(authorHeader?.textContent).not.toContain("@claude");
+    expect(authorHeader?.querySelector("svg")).toBeNull();
+    expect(
+      authorHeader?.closest("[data-compact-message-row]")?.querySelector("time"),
+    ).not.toBeNull();
   });
 
+  const userMessage = page.getByRole("heading", { name: "You", exact: true });
+  await expect.element(userMessage).toBeInTheDocument();
+  expect(
+    userMessage.element().closest("[data-compact-message-row]")?.querySelector("time"),
+  ).not.toBeNull();
+  expect(document.querySelector("[data-user-message-bubble]")).toBeNull();
+  await expect
+    .element(page.getByRole("button", { name: "Slash command", exact: true }))
+    .toBeVisible();
   const cleanOutButton = page.getByRole("button", { name: "Clean out channel", exact: true });
   await expect.element(cleanOutButton).toBeVisible();
 

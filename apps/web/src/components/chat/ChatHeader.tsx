@@ -36,7 +36,6 @@ import { canShareWithGuestAtom } from "./guestShareAvailability";
 import { useAtomValue } from "@effect/atom-react";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 import { readEnvironmentScope, useEnvironmentScope } from "../../state/session";
-import { ProjectFavicon } from "../ProjectFavicon";
 import {
   WorkspaceBreadcrumb,
   WorkspaceBreadcrumbItem,
@@ -313,7 +312,7 @@ export const ChatHeader = memo(function ChatHeader({
     <div
       ref={breadcrumbContainerRef}
       className={cn(
-        "flex min-w-0 flex-1 items-center gap-2 sm:gap-3",
+        "flex h-11 min-w-0 flex-1 items-center gap-2 sm:gap-3",
         rightPanelOpen ? "pr-10" : "pr-24",
       )}
       onContextMenu={handleHeaderContextMenu}
@@ -322,36 +321,6 @@ export const ChatHeader = memo(function ChatHeader({
         ariaLabel="Thread breadcrumb"
         className="flex-1 overflow-clip [overflow-clip-margin:2px]"
       >
-        {activeProject ? (
-          <>
-            <WorkspaceBreadcrumbItem className="shrink">
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      aria-label={`New thread in ${activeProjectName}`}
-                      onClick={onNewThreadInProject}
-                      className="inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                    />
-                  }
-                >
-                  <ProjectFavicon project={activeProject} className="size-3.5" />
-                  <MiddleTruncate
-                    data-slot="workspace-breadcrumb-text"
-                    value={activeProjectName ?? ""}
-                    showTitle={false}
-                    variant="cap-aligned"
-                  />
-                </TooltipTrigger>
-                <TooltipPopup side="top">New thread in {activeProjectName}</TooltipPopup>
-              </Tooltip>
-            </WorkspaceBreadcrumbItem>
-            <WorkspaceBreadcrumbSeparator>
-              <WorkspaceBreadcrumbText>/</WorkspaceBreadcrumbText>
-            </WorkspaceBreadcrumbSeparator>
-          </>
-        ) : null}
         {parentThreadLink ? (
           <>
             <WorkspaceBreadcrumbItem>
@@ -386,7 +355,7 @@ export const ChatHeader = memo(function ChatHeader({
             </WorkspaceBreadcrumbSeparator>
           </>
         ) : null}
-        <WorkspaceBreadcrumbItem current className="min-w-10 flex-1">
+        <WorkspaceBreadcrumbItem current className="min-w-10 shrink">
           {renamingTitle !== null ? (
             <input
               autoFocus
@@ -422,8 +391,19 @@ export const ChatHeader = memo(function ChatHeader({
                   />
                 }
               >
-                <h2 className="min-w-0" dir={textDirection(activeThreadTitle)}>
-                  <WorkspaceBreadcrumbText>{displayChannelTitle}</WorkspaceBreadcrumbText>
+                <h2
+                  className="min-w-0 text-14_5 font-bold tracking-tight"
+                  dir={textDirection(activeThreadTitle)}
+                >
+                  <span
+                    data-slot="workspace-breadcrumb-text"
+                    className="block truncate text-14_5 font-bold tracking-tight"
+                  >
+                    <span aria-hidden className="mr-1.5 font-medium text-muted-foreground/70">
+                      #
+                    </span>
+                    {displayChannelTitle.replace(/^#\s*/, "")}
+                  </span>
                 </h2>
                 <ChevronDownIcon
                   aria-hidden
@@ -444,7 +424,15 @@ export const ChatHeader = memo(function ChatHeader({
                   />
                 }
               >
-                <WorkspaceBreadcrumbText>{displayChannelTitle}</WorkspaceBreadcrumbText>
+                <span
+                  data-slot="workspace-breadcrumb-text"
+                  className="block truncate text-14_5 font-bold tracking-tight"
+                >
+                  <span aria-hidden className="mr-1.5 font-medium text-muted-foreground/70">
+                    #
+                  </span>
+                  {displayChannelTitle.replace(/^#\s*/, "")}
+                </span>
               </TooltipTrigger>
               <TooltipPopup side="top">{displayChannelTitle}</TooltipPopup>
             </Tooltip>
@@ -460,6 +448,36 @@ export const ChatHeader = memo(function ChatHeader({
             </Tooltip>
           ) : null}
         </WorkspaceBreadcrumbItem>
+        {activeProject ? (
+          <WorkspaceBreadcrumbItem className="shrink">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={`New thread in ${activeProjectName}`}
+                    onClick={onNewThreadInProject}
+                    className="inline-flex min-w-0 max-w-full cursor-pointer items-center rounded-full bg-muted px-1.75 py-px text-2xs text-muted-foreground hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  />
+                }
+              >
+                <MiddleTruncate
+                  data-slot="workspace-breadcrumb-text"
+                  value={activeProjectName ?? ""}
+                  showTitle={false}
+                  variant="cap-aligned"
+                />
+              </TooltipTrigger>
+              <TooltipPopup side="top">New thread in {activeProjectName}</TooltipPopup>
+            </Tooltip>
+          </WorkspaceBreadcrumbItem>
+        ) : (
+          <WorkspaceBreadcrumbItem>
+            <span className="shrink-0 rounded-full bg-muted px-1.75 py-px text-2xs text-muted-foreground">
+              General
+            </span>
+          </WorkspaceBreadcrumbItem>
+        )}
       </WorkspaceBreadcrumb>
       {canShowCleanOut ? (
         <Tooltip>

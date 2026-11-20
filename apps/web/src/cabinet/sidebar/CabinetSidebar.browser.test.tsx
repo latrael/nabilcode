@@ -122,8 +122,10 @@ it("lists threads under their project, navigates on click, jumps by shortcut and
       .querySelector("[data-cabinet-status]")
       ?.getAttribute("data-cabinet-status");
   expect(dotOf(busy.title)).toBe("working");
-  expect(dotOf(idle.title)).toBe("idle");
-  expect(rows.filter({ hasText: busy.title }).element().textContent).toContain("working");
+  expect(dotOf(idle.title)).toBeUndefined();
+  await expect
+    .element(rows.filter({ hasText: busy.title }).getByRole("img", { name: "working" }))
+    .toBeVisible();
 
   await userEvent.click(rows.filter({ hasText: busy.title }).getByRole("button"));
   await vi.waitFor(() =>

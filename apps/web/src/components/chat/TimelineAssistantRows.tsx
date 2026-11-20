@@ -27,11 +27,15 @@ import { resolveAssistantMessageCopyState } from "./MessagesTimeline.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
 import { useUiStateStore } from "~/uiStateStore";
-import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
 import { readThreadTurnItems } from "../../state/entities";
 import { useV2ItemSupport } from "../../state/v2ItemSupport";
 import { TimelineRowCtx, TimelineRowActivityCtx, type TimelineRow } from "./timelineRowContext";
-import { AssistantAuthorHeader, MESSAGE_HEADING_LEVEL } from "./TimelineRowParts";
+import {
+  AssistantAuthorHeader,
+  CompactMessageRow,
+  MESSAGE_ACTIONS_CLASS,
+  MESSAGE_HEADING_LEVEL,
+} from "./TimelineRowParts";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { vcsEnvironment } from "../../state/vcs";
@@ -61,15 +65,16 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
 
   return (
     <>
-      <div className="relative min-w-0 px-1 py-0.5">
+      <CompactMessageRow createdAt={row.message.createdAt} timestampFormat={ctx.timestampFormat}>
         <AssistantAuthorHeader
           environmentId={ctx.activeThreadEnvironmentId}
           providerInstanceId={providerInstanceId}
           model={model}
-          createdAt={row.message.createdAt}
-          timestampFormat={ctx.timestampFormat}
         />
-        <div data-thread-find-text="true">
+        <div
+          className="contents [&>[data-assistant-citation-source]]:inline"
+          data-thread-find-text="true"
+        >
           <AssistantCitationSource
             messageId={row.message.id}
             {...(ctx.threadRef ? { threadRef: ctx.threadRef } : {})}
@@ -112,14 +117,14 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
         ) : null}
         {row.showAssistantMeta ? (
           <AssistantMessageMeta
-            className="mt-1.5"
+            className={MESSAGE_ACTIONS_CLASS}
             projectedItem={row.projectedItem}
             message={row.message}
             showCopyButton={row.showAssistantCopyButton}
             copyStreaming={row.assistantCopyStreaming}
           />
         ) : null}
-      </div>
+      </CompactMessageRow>
     </>
   );
 }
@@ -141,35 +146,34 @@ export function SentMessageTimelineRow({
   const model = latestRun?.modelSelection.model ?? thread?.modelSelection.model ?? null;
 
   return (
-    <div className="min-w-0 px-1 py-0.5">
+    <CompactMessageRow createdAt={row.createdAt} timestampFormat={ctx.timestampFormat}>
       <AssistantAuthorHeader
         environmentId={ctx.activeThreadEnvironmentId}
         providerInstanceId={providerInstanceId}
         model={model}
-        createdAt={row.createdAt}
-        timestampFormat={ctx.timestampFormat}
       />
-      {/* Sent messages have no message id; citations name their turn item instead. */}
-      <AssistantCitationSource
-        messageId={MessageId.make(row.id)}
-        {...(ctx.threadRef ? { threadRef: ctx.threadRef } : {})}
-        itemKey={row.id}
-        request={ctx.citationRequest}
-        listRef={ctx.listRef}
-      >
-        <ChatMarkdown
-          text={row.text}
-          cwd={ctx.markdownCwd}
-          threadRef={ctx.threadRef ?? undefined}
-          lineBreaks={shouldPreserveAssistantLineBreaks(row.text)}
-          skills={ctx.skills}
-          headingLevelOffset={MESSAGE_HEADING_LEVEL}
-          onUseArtifactTemplate={ctx.onUseArtifactTemplate}
-          onRunShellCommand={ctx.onRunShellCommand}
-          onImageExpand={ctx.onImageExpand}
-        />
-      </AssistantCitationSource>
-    </div>
+      <div className="contents [&>[data-assistant-citation-source]]:inline">
+        <AssistantCitationSource
+          messageId={MessageId.make(row.id)}
+          {...(ctx.threadRef ? { threadRef: ctx.threadRef } : {})}
+          itemKey={row.id}
+          request={ctx.citationRequest}
+          listRef={ctx.listRef}
+        >
+          <ChatMarkdown
+            text={row.text}
+            cwd={ctx.markdownCwd}
+            threadRef={ctx.threadRef ?? undefined}
+            lineBreaks={shouldPreserveAssistantLineBreaks(row.text)}
+            skills={ctx.skills}
+            headingLevelOffset={MESSAGE_HEADING_LEVEL}
+            onUseArtifactTemplate={ctx.onUseArtifactTemplate}
+            onRunShellCommand={ctx.onRunShellCommand}
+            onImageExpand={ctx.onImageExpand}
+          />
+        </AssistantCitationSource>
+      </div>
+    </CompactMessageRow>
   );
 }
 
@@ -254,15 +258,13 @@ function AssistantMessageMeta({
   copyStreaming: boolean;
   alwaysVisible?: boolean;
 }) {
-  const ctx = use(TimelineRowCtx);
-
   return (
     <div
       className={cn(
         "flex items-center gap-2 text-xs tabular-nums transition-opacity duration-200",
         alwaysVisible
           ? "opacity-100"
-          : "opacity-0 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover/assistant:opacity-100",
+          : "opacity-0 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover/assistant:opacity-100 group-hover/compact-message:opacity-100 group-focus-within/compact-message:opacity-100",
         className,
       )}
     >
@@ -280,16 +282,6 @@ function AssistantMessageMeta({
       {!message.streaming && projectedItem ? (
         <AssistantReplyButton message={message} itemId={projectedItem.sourceItemId} />
       ) : null}
-      {!message.streaming && (
-        <Tooltip>
-          <TooltipTrigger render={<p className="text-muted-foreground text-xs tabular-nums" />}>
-            {formatDayAwareTimestamp(message.updatedAt, ctx.timestampFormat)}
-          </TooltipTrigger>
-          <TooltipPopup>
-            {formatChatTimestampTooltip(message.updatedAt, ctx.timestampFormat)}
-          </TooltipPopup>
-        </Tooltip>
-      )}
     </div>
   );
 }

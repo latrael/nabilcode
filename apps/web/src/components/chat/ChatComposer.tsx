@@ -48,7 +48,6 @@ import {
   ProviderInstanceId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PRIMARY_LOCAL_ENVIRONMENT_ID,
-  PROVIDER_DISPLAY_NAMES,
 } from "@t3tools/contracts";
 import type { EnvironmentConnectionPresentation } from "@t3tools/client-runtime/connection";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
@@ -88,7 +87,7 @@ import {
   extendReplacementRangeForTrailingSpace,
   replaceTextRange,
 } from "../../composer-logic";
-import { composerPlaceholderForProvider } from "../../composerPlaceholder";
+import { composerPlaceholderForChannel } from "../../composerPlaceholder";
 import { deriveComposerSendState, getAntigravitySendBlockReason } from "../ChatView.logic";
 import { threadHasStarted } from "../../lib/chatThreadActions";
 import {
@@ -286,6 +285,7 @@ import {
   countPreparingComposerImages,
   usePreparingComposerImages,
 } from "./preparingComposerImages";
+import { ComposerControl } from "./ComposerControl";
 import { ComposerControlsBar } from "./ComposerControlsBar";
 import { composerCommandKeyHandler } from "./composerCommandKey";
 import { usePromptSuggestion } from "./usePromptSuggestion";
@@ -3531,7 +3531,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         if (isInsideRestingComposerControlScope(event.target)) return;
         composerMentionDragHandlers.onDrop(event);
       }}
-      className="mx-auto w-full min-w-0 max-w-(--chat-content-max-width)"
+      className="mx-auto w-full min-w-0 max-w-none"
       data-chat-composer-form="true"
       {...threadContextDropTargetProps()}
     >
@@ -3611,11 +3611,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   ) : showProviderUnavailable ? (
                     "Enable a provider in Settings"
                   ) : (
-                    composerPlaceholderForProvider(
-                      selectedProvider,
-                      PROVIDER_DISPLAY_NAMES,
-                      selectedProviderEntry?.snapshot.displayName,
-                    )
+                    composerPlaceholderForChannel(activeThread?.title)
                   )}
                 </button>
                 {collapsedComposerImagePreviews}
@@ -3677,11 +3673,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 };
               }}
               data-chat-composer-body="true"
-              className={cn(
-                "relative px-4 pb-2",
-                "pt-3.5 sm:pt-4",
-                isComposerCollapsedMobile && "hidden",
-              )}
+              className={cn("relative px-3 pt-2 pb-1", isComposerCollapsedMobile && "hidden")}
             >
               {isStashMenuOpen && !composerMenuOpen && (
                 <ComposerCommandMenuLayer anchor={composerMenuAnchor} canOverflowTop>
@@ -3775,7 +3767,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     buildContextClipboardFragment={buildContextClipboardFragmentStable}
                     importContextFragment={importContextFragmentStable}
                     skills={selectedProviderSkills}
-                    className={cn(showMobilePendingAnswerActions && "max-sm:pb-12")}
+                    className={cn(
+                      "min-h-[28px] leading-channel",
+                      showMobilePendingAnswerActions && "max-sm:pb-12",
+                    )}
                     onChange={onPromptChangeStable}
                     onCommandKeyDown={onComposerCommandKeyStable}
                     onPageScrollKeyDown={onPageScrollKeyDown}
@@ -3800,11 +3795,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                             : showProviderUnavailable
                               ? "Enable a provider in Settings to send a message"
                               : (offeredPromptSuggestion ??
-                                composerPlaceholderForProvider(
-                                  selectedProvider,
-                                  PROVIDER_DISPLAY_NAMES,
-                                  selectedProviderEntry?.snapshot.displayName,
-                                ))
+                                composerPlaceholderForChannel(activeThread?.title))
                     }
                     placeholderSuffix={
                       offeredPromptSuggestion !== null ? (
@@ -3867,7 +3858,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               <div
                 data-chat-composer-footer="true"
                 className={cn(
-                  "flex min-w-0 flex-nowrap items-center overflow-visible px-2 pb-2",
+                  "flex min-w-0 flex-nowrap items-center overflow-visible border-t border-border/60 px-2 py-1",
                   pendingUserInputs.length > 0 && "pt-2",
                   showMobilePendingAnswerActions &&
                     speechInput.state.phase === "idle" &&
@@ -3878,6 +3869,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   <div className="me-2">{composerAttachButton}</div>
                 ) : null}
                 {!dictationTakesFooter && !activePendingProgress ? composerMentionButton : null}
+                {!dictationTakesFooter && !activePendingProgress ? (
+                  <ComposerControl
+                    size="xs"
+                    aria-label="Slash command"
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() =>
+                      insertComposerTextAtEndStable("/", { ensureLeadingBoundary: true })
+                    }
+                  >
+                    /
+                  </ComposerControl>
+                ) : null}
                 <div
                   data-chat-composer-actions="right"
                   data-chat-composer-transition-actions="true"

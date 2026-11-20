@@ -141,6 +141,8 @@ import { useThreadFindPositionReader } from "./useThreadFindPositionReader";
 import { ThreadActivityAnnouncer } from "./ThreadActivityAnnouncer";
 import { useStableHandoffRuns, useIncrementalTimelineRows, useStableRows } from "./useTimelineRows";
 import { useClientSettings } from "../../hooks/useSettings";
+import { useNowMinute } from "~/hooks/useNowMinute";
+import { formatChatDay } from "../../timestampFormat";
 
 function timelineListStateFor(identity: string): {
   readonly identity: string;
@@ -755,6 +757,22 @@ const ConversationTimeline = memo(function ConversationTimeline({
     revealedMessageId,
   });
   const rows = useStableRows(rawRows, listIdentityKey);
+  const dayStarts = new Map<string, string>();
+  let previousDay: string | undefined;
+  for (const row of rows) {
+    const createdAt =
+      row.kind === "message"
+        ? row.message.createdAt
+        : row.kind === "sent-message"
+          ? row.createdAt
+          : null;
+    if (createdAt === null) continue;
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) continue;
+    const day = date.toDateString();
+    if (day !== previousDay) dayStarts.set(row.id, createdAt);
+    previousDay = day;
+  }
   const matchedApprovalRequestIds = new Set<string>();
   for (const row of pendingApprovalRequestIds.size > 0 ? rows : []) {
     const entries =
@@ -1355,9 +1373,12 @@ const ConversationTimeline = memo(function ConversationTimeline({
       >
         <div
           ref={observeLaneWidth}
-          className="chat-content-lane overflow-x-clip"
+          className="chat-content-lane max-w-none overflow-x-clip"
           data-timeline-root="true"
         >
+          {dayStarts.has(item.id) ? (
+            <TimelineDayDivider createdAt={dayStarts.get(item.id)!} />
+          ) : null}
           <AudioPreviewUnmountContext value={onAudioUnmount}>
             <TimelineRowContent row={item} />
           </AudioPreviewUnmountContext>
@@ -1365,7 +1386,12 @@ const ConversationTimeline = memo(function ConversationTimeline({
       </div>
     </TimelineRowCtx>
   );
-  const listExtraData = { identity: listIdentityKey, rowCount: rows.length, sharedState };
+  const listExtraData = {
+    identity: listIdentityKey,
+    rowCount: rows.length,
+    sharedState,
+    dayStarts,
+  };
   const timelineListFooter = (
     <TimelineListFooter
       composerInset={anchoredEndSpace ? 0 : contentInsetEndAdjustment}
@@ -1375,7 +1401,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       {unmatchedPendingApprovals.length > 0 ? (
         <TimelineRowCtx value={sharedState}>
           <div className="messages-timeline-row-frame">
-            <div className="chat-content-lane overflow-x-clip" data-timeline-root="true">
+            <div className="chat-content-lane max-w-none overflow-x-clip" data-timeline-root="true">
               <WorkLogBlock>
                 {unmatchedPendingApprovals.map((approval) => (
                   <TimelinePendingApprovalRow key={approval.requestId} approval={approval} />
@@ -1511,7 +1537,7 @@ function TimelineHistoryControl(props: MessagesTimelineHistoryControls) {
   }
   return (
     <div className="messages-timeline-row-frame">
-      <div className="chat-content-lane flex flex-col gap-1.5 pb-2">
+      <div className="chat-content-lane max-w-none flex flex-col gap-1.5 pb-2">
         {props.hasMoreHistory ? (
           <button
             type="button"
@@ -1601,6 +1627,20 @@ function getItemType(item: MessagesTimelineRow) {
     : `message:${item.message.id}`;
 }
 
+function TimelineDayDivider({ createdAt }: { createdAt: string }) {
+  const nowMinute = useNowMinute();
+  return (
+    <div
+      data-chat-day-divider=""
+      className="my-3 flex items-center gap-2.5 px-4 before:h-px before:flex-1 before:bg-border/60 after:h-px after:flex-1 after:bg-border/60"
+    >
+      <span className="rounded-full border border-border bg-background px-3 py-0.5 text-11_5 font-semibold">
+        {formatChatDay(createdAt, Date.parse(`${nowMinute}:00.000Z`))}
+      </span>
+    </div>
+  );
+}
+
 const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: TimelineRow }) {
   const isExpandedToolGroup = row.kind === "work" && row.isExpandedToolGroup;
   const isSubagentGroup = row.kind === "event" && row.projectedItem.item.type === "subagent";
@@ -1616,24 +1656,13 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
   return (
     <div
       className={cn(
-        isWorkLogRow || isSubagentGroup
-          ? undefined
-          : row.kind === "turn-fold" || row.kind === "working"
-            ? "pb-1.5"
-            : row.kind === "message" && row.groupedWithNext
-              ? "pb-1"
-              : (row.kind === "message" &&
-                    row.message.role === "assistant" &&
-                    !row.showAssistantMeta) ||
-                  row.kind === "worktree-setup" ||
-                  row.kind === "event" ||
-                  row.kind === "attempt-fold" ||
-                  row.kind === "html-render" ||
-                  row.kind === "sent-message" ||
-                  row.kind === "mcp-app" ||
-                  row.kind === "viewed-images"
-                ? "pb-2"
-                : "pb-4",
+        isWorkLogRow
+          ? "pl-20 pr-5"
+          : row.kind === "message" || row.kind === "sent-message"
+            ? ""
+            : isSubagentGroup
+              ? undefined
+              : "pb-1",
         (row.kind === "message" && row.message.role === "assistant") ||
           row.kind === "assistant-meta"
           ? "group/assistant"

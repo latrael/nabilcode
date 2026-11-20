@@ -1,14 +1,6 @@
-export const DEFAULT_COMPOSER_PLACEHOLDER = "Ask anything. @ files, $ skills, / commands";
+export const DEFAULT_COMPOSER_PLACEHOLDER = "Message #channel (tag @gemini, @claude, or @codex)";
 
-const AGENT_NAME_OVERRIDES: Record<string, string> = { claudeAgent: "Claude Code" };
-
-export function composerPlaceholderForProvider(
-  provider: string,
-  displayNames: Partial<Record<string, string>>,
-  instanceDisplayName?: string,
-): string {
-  const agent = AGENT_NAME_OVERRIDES[provider] ?? instanceDisplayName ?? displayNames[provider];
-  return agent
-    ? `Message ${agent}. Type @ to mention Cabinet notes or PDFs`
-    : DEFAULT_COMPOSER_PLACEHOLDER;
+export function composerPlaceholderForChannel(title: string | undefined): string {
+  const channel = title?.replace(/^#+\s*/, "").trim() || "new-channel";
+  return `Message #${channel} (tag @gemini, @claude, or @codex)`;
 }

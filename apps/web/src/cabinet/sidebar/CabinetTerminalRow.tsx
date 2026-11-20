@@ -39,7 +39,7 @@ export const CabinetTerminalRow = memo(function CabinetTerminalRow(props: {
   const statusText =
     status === "exited" ? gt("Exited") : status === "stopped" ? gt("Not running") : null;
   const rowClass = cn(
-    "mx-1.5 flex w-[calc(100%-0.75rem)] min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70",
+    "mx-1.5 flex w-[calc(100%-0.75rem)] min-w-0 h-7 items-center gap-2 rounded-md px-2 py-0 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70",
     selected ? "bg-sidebar-row-selected" : "hover:bg-sidebar-row-hover",
   );
   const body = (
