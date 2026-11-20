@@ -126,11 +126,15 @@ const MODEL_IDS: Record<number, string> = {
   1417: "gemini-4-argon",
   1418: "gemini-4-argon",
   1419: "gemini-4-argon",
+  1532: "gemini-4-neon",
 };
 
 // Effort and routing variants share the base model's price.
 export const antigravityRateModel = (model: string) => {
-  const base = model.replace(/-(?:extra-low|low|medium|high|tiered|control|thinking|agent)$/, "");
+  const base = model.replace(
+    /(?:-(?:extra-low|xhigh|low|medium|high|tiered|control|thinking|agent|trial|n))+$/,
+    "",
+  );
   return /^gemini-3-flash-(?:agent(?:-[ab])?|[ab])$/.test(model)
     ? "gemini-3.5-flash"
     : model === "gemini-3.7-flash-safety-le"
@@ -173,11 +177,61 @@ function rememberModel(models: Map<number, string | null>, id: number, model: st
   models.set(id, previous === undefined || previous === model ? model : null);
 }
 
+function packedVarints(bytes: Uint8Array): number[] {
+  let offset = 0;
+  const values: number[] = [];
+  while (offset < bytes.length) {
+    let value = 0n;
+    let done = false;
+    for (let shift = 0n; shift < 70n; shift += 7n) {
+      const byte = bytes[offset++];
+      if (byte === undefined || (shift === 63n && byte > 1)) {
+        throw new Error("Invalid Antigravity protobuf varint");
+      }
+      value |= BigInt(byte & 127) << shift;
+      if (byte < 128) {
+        if (value <= BigInt(Number.MAX_SAFE_INTEGER)) values.push(Number(value));
+        done = true;
+        break;
+      }
+    }
+    if (!done) throw new Error("Invalid Antigravity protobuf varint");
+  }
+  return values;
+}
+
+function repeatedNumbersAt(value: Fields, key: number): number[] {
+  const result: number[] = [];
+  for (const entry of value.get(key) ?? []) {
+    if (typeof entry === "number") result.push(entry);
+    else if (entry instanceof Uint8Array) result.push(...packedVarints(entry));
+  }
+  return result;
+}
+
+function hasUsageIdentity(usage: Fields): boolean {
+  return ([11, 12, 7] as const).some((key) => textAt(usage, key).length > 0);
+}
+
+function sameUsageCounts(left: Fields, right: Fields): boolean {
+  return (
+    numberAt(left, 2) === numberAt(right, 2) &&
+    numberAt(left, 3) === numberAt(right, 3) &&
+    numberAt(left, 4) === numberAt(right, 4) &&
+    numberAt(left, 5) === numberAt(right, 5) &&
+    numberAt(left, 9) === numberAt(right, 9) &&
+    numberAt(left, 10) === numberAt(right, 10)
+  );
+}
+
 interface Metadata {
   model: string;
   modelId: number;
   timestampMs: number | null;
   usages: Fields[];
+  hasPrimary: boolean;
+  stepIndices: readonly number[];
+  generationIdx: number | undefined;
 }
 
 function metadata(bytes: Uint8Array, step: boolean): Metadata {
@@ -191,12 +245,36 @@ function metadata(bytes: Uint8Array, step: boolean): Metadata {
   // Copy the usage bytes: subarrays kept in usages would hold each row's whole blob alive.
   const primaryUsage = usage === undefined ? undefined : fields(usage.slice());
   const usages = primaryUsage === undefined ? [] : [primaryUsage];
+  const primaryUnkeyed = primaryUsage !== undefined && !hasUsageIdentity(primaryUsage);
+  let skippedPrimaryDuplicateAttempt = false;
   for (const retry of data.get(step ? 28 : 17) ?? []) {
     if (!(retry instanceof Uint8Array)) throw new Error("Invalid retry metadata");
-    const retryUsage = bytesAt(fields(retry), 2);
-    if (retryUsage !== undefined) usages.push(fields(retryUsage.slice()));
+    const retryFields = fields(retry);
+    const retryUsage = bytesAt(retryFields, 2);
+    if (retryUsage === undefined) continue;
+    const parsedRetryUsage = fields(retryUsage.slice());
+    // gen_metadata.f17 includes the succeeded attempt alongside f4; skip that unkeyed duplicate once.
+    if (
+      primaryUnkeyed &&
+      !skippedPrimaryDuplicateAttempt &&
+      primaryUsage !== undefined &&
+      bytesAt(retryFields, 3) === undefined &&
+      !hasUsageIdentity(parsedRetryUsage) &&
+      numberAt(parsedRetryUsage, 1) === numberAt(primaryUsage, 1) &&
+      sameUsageCounts(parsedRetryUsage, primaryUsage)
+    ) {
+      skippedPrimaryDuplicateAttempt = true;
+      continue;
+    }
+    usages.push(parsedRetryUsage);
   }
   const names = [textAt(model, step ? 12 : 19), textAt(model, step ? 8 : 21)].map(modelName);
+  const stepSourceInfo = step ? bytesAt(data, 20) : undefined;
+  const parsedStepSourceInfo = stepSourceInfo === undefined ? undefined : fields(stepSourceInfo);
+  const generationIdx =
+    parsedStepSourceInfo !== undefined && bytesAt(parsedStepSourceInfo, 1) !== undefined
+      ? numberAt(parsedStepSourceInfo, 3)
+      : undefined;
   return {
     model:
       names.find(isConcreteModel) ?? names.find((name) => name && !/^model[_-]/.test(name)) ?? "",
@@ -206,6 +284,9 @@ function metadata(bytes: Uint8Array, step: boolean): Metadata {
       ? (timestamp(nested(data, 8)) ?? timestamp(nested(data, 1)))
       : timestamp(nested(nested(data, 9), 4)),
     usages,
+    hasPrimary: primaryUsage !== undefined,
+    stepIndices: step ? [] : repeatedNumbersAt(root, 2),
+    generationIdx,
   };
 }
 
@@ -340,14 +421,27 @@ function usageCandidates(
 ): UsageCandidate[] {
   const records: UsageCandidate[] = [];
   const generationModels = new Map(generations.map(({ idx, entry }) => [idx, entry]));
+  const stepToGenerationIdx = new Map<number, number>();
+  for (const { idx, entry } of generations) {
+    for (const stepIdx of entry.stepIndices) {
+      stepToGenerationIdx.set(stepIdx, idx);
+    }
+  }
+  const hasExplicitLinks =
+    stepToGenerationIdx.size > 0 || steps.some(({ entry }) => entry.generationIdx !== undefined);
   for (const [source, entries] of [
     ["step", steps],
     ["generation", generations],
   ] as const) {
     for (const [index, { idx, entry }] of entries.entries()) {
+      const explicitGenIdx =
+        source === "step" ? (stepToGenerationIdx.get(idx) ?? entry.generationIdx) : undefined;
+      const generation =
+        source === "step"
+          ? generationModels.get(explicitGenIdx ?? (hasExplicitLinks ? -1 : idx))
+          : undefined;
       for (const [usageIndex, usage] of entry.usages.entries()) {
         const modelId = numberAt(usage, 1) || entry.modelId;
-        const generation = source === "step" ? generationModels.get(idx) : undefined;
         // A retry can use a different model than its enclosing generation or step.
         const matches = (metadata: Metadata) => modelId === 0 || metadata.modelId === modelId;
         const model =
@@ -372,10 +466,26 @@ function usageCandidates(
           0
         )
           continue;
-        const keys = ([11, 12, 7] as const).flatMap((key) => {
+        const idKeys = ([11, 12, 7] as const).flatMap((key) => {
           const id = textAt(usage, key);
           return id ? [`antigravity:${key}:${id}`] : [];
         });
+        // Link a step's primary usage to its owning gen_metadata primary usage when response IDs are absent.
+        const linkedPrimaryKey =
+          idKeys.length === 0 && usageIndex === 0 && entry.hasPrimary
+            ? source === "generation"
+              ? hasExplicitLinks
+                ? `antigravity:linked:${sessionId}:${idx}:primary`
+                : undefined
+              : explicitGenIdx !== undefined &&
+                  generation?.hasPrimary === true &&
+                  generation.usages[0] !== undefined &&
+                  !hasUsageIdentity(generation.usages[0]) &&
+                  sameUsageCounts(usage, generation.usages[0])
+                ? `antigravity:linked:${sessionId}:${explicitGenIdx}:primary`
+                : undefined
+            : undefined;
+        const keys = linkedPrimaryKey === undefined ? idKeys : [...idKeys, linkedPrimaryKey];
         const record: UsageRecord = {
           provider: "antigravity",
           sessionId,
@@ -504,9 +614,13 @@ export const readAntigravityUsage = Effect.fn("readAntigravityUsage")(function* 
     const fingerprint = `${part}/${wal._tag === "Some" ? wal.value.part : "-"}`;
     const cached = cache?.get(canonical);
     if (cached?.fingerprint === fingerprint) return cached.data;
-    const data = yield* readDatabase(path, pathService.basename(path, ".db"), stat.mtimeMs).pipe(
-      Effect.provide(NodeSqliteClient.layer({ filename: path, readonly: true })),
-    );
+    const fallbackTimestamp =
+      wal._tag === "Some" ? Math.max(stat.mtimeMs, wal.value.stat.mtimeMs) : stat.mtimeMs;
+    const data = yield* readDatabase(
+      path,
+      pathService.basename(path, ".db"),
+      fallbackTimestamp,
+    ).pipe(Effect.provide(NodeSqliteClient.layer({ filename: path, readonly: true })));
     cache?.set(canonical, { fingerprint, data });
     return data;
   });

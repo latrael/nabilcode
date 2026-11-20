@@ -47,9 +47,13 @@ const make = Effect.gen(function* () {
       .map((value) => value.trim())
       .filter(Boolean);
     const defaults = [
-      ...["antigravity", "antigravity-cli", "antigravity-ide", "antigravity-backup"].map((name) =>
-        path.join(home, ".gemini", name),
-      ),
+      ...[
+        "antigravity",
+        "antigravity-acp",
+        "antigravity-cli",
+        "antigravity-ide",
+        "antigravity-backup",
+      ].map((name) => path.join(home, ".gemini", name)),
       path.join(home, ".config", "antigravity"),
     ];
     const canonical = new Set<string>();
@@ -66,8 +70,15 @@ const make = Effect.gen(function* () {
     instances,
     windowStartMs,
   }) {
-    const roots: Array<string> = [];
-    for (const instance of instances) roots.push(...(yield* dataRoots(instance.environment)));
+    const roots: Array<{ readonly dir: string; readonly requireConversationsSubdir: boolean }> = [];
+    for (const instance of instances) {
+      for (const dir of yield* dataRoots(instance.environment)) {
+        roots.push({
+          dir,
+          requireConversationsSubdir: path.basename(dir) === "antigravity-acp",
+        });
+      }
+    }
     for (const { instanceId } of instances.filter((instance) => instance.configured)) {
       const directories = yield* resolveAntigravityInstanceDirectories(
         host.paths.stateDir,
@@ -84,17 +95,43 @@ const make = Effect.gen(function* () {
             }),
         ),
       );
-      roots.push(path.join(directories.profile, "antigravity-acp"));
+      roots.push({
+        dir: path.join(directories.profile, "antigravity-acp"),
+        requireConversationsSubdir: true,
+      });
+    }
+    // Include managed profiles on disk even when the instance is unconfigured or removed.
+    const managedProfilesRoot = path.join(host.paths.stateDir, "providers", "antigravity");
+    const managedEntries = yield* fileSystem
+      .readDirectory(managedProfilesRoot)
+      .pipe(Effect.catchCause(() => Effect.succeed([] as Array<string>)));
+    for (const entry of managedEntries.toSorted((a, b) => a.localeCompare(b))) {
+      const conversationsDir = path.join(
+        managedProfilesRoot,
+        entry,
+        "antigravity-acp",
+        "conversations",
+      );
+      if (
+        yield* fileSystem
+          .exists(conversationsDir)
+          .pipe(Effect.catchCause(() => Effect.succeed(false)))
+      ) {
+        roots.push({
+          dir: path.join(managedProfilesRoot, entry, "antigravity-acp"),
+          requireConversationsSubdir: true,
+        });
+      }
     }
     const conversationDirs = new Set<string>();
-    for (const root of roots) {
+    for (const { dir: root, requireConversationsSubdir } of roots) {
       const resolvedRoot = yield* fileSystem.realPath(root).pipe(Effect.orElseSucceed(() => root));
       const nested = path.join(resolvedRoot, "conversations");
-      const dir = (yield* fileSystem
-        .exists(nested)
-        .pipe(Effect.catchCause(() => Effect.succeed(false))))
-        ? nested
-        : resolvedRoot;
+      const dir =
+        requireConversationsSubdir ||
+        (yield* fileSystem.exists(nested).pipe(Effect.catchCause(() => Effect.succeed(false))))
+          ? nested
+          : resolvedRoot;
       conversationDirs.add(yield* fileSystem.realPath(dir).pipe(Effect.orElseSucceed(() => dir)));
     }
     const result = yield* readAntigravityUsage([...conversationDirs], windowStartMs, cache).pipe(

@@ -379,6 +379,10 @@ describe("readAntigravityUsage", () => {
           for (const [idx, name] of [
             "gemini-4-argon-high",
             "gemini-4-argon",
+            "gemini-4-argon-trial",
+            "gemini-4-hydrogen-tiered-high",
+            "gemini-4-neon-xhigh",
+            "gemini-3.8-flash-n",
             "gemini-3.7-flash-safety-le",
             "gemini-3-flash-agent",
             "gemini-3-flash",
@@ -401,6 +405,10 @@ describe("readAntigravityUsage", () => {
         [
           ["gemini-4-argon-high", "gemini-4-argon"],
           ["gemini-4-argon", undefined],
+          ["gemini-4-argon-trial", "gemini-4-argon"],
+          ["gemini-4-hydrogen-tiered-high", "gemini-4-hydrogen"],
+          ["gemini-4-neon-xhigh", "gemini-4-neon"],
+          ["gemini-3.8-flash-n", "gemini-3.8-flash"],
           ["gemini-3.7-flash-safety-le", "gemini-3.7-flash"],
           ["gemini-3-flash-agent", "gemini-3.5-flash"],
           ["gemini-3-flash", "gemini-3-flash-preview"],
@@ -665,5 +673,61 @@ describe("readAntigravityUsage", () => {
         ],
       );
     }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "deduplicates unkeyed step, generation, and matching attempt records via step_indices and resolves step models",
+    () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const dir = yield* tempDir;
+        const stamp = protoNumber(1, 1780000000);
+        const usage = [
+          ...protoNumber(2, 13306),
+          ...protoNumber(3, 298),
+          ...protoNumber(9, 220),
+          ...protoNumber(10, 78),
+        ];
+        const failedRetry = [...protoNumber(2, 500), ...protoNumber(3, 20)];
+        // gen_metadata[0] maps to steps [1, 2] via root field 2 (packed varints [1, 2]),
+        // records primary usage in f4, the same successful attempt in f17, and a failed retry with f3 error.
+        const generation = [
+          ...protoBytes(1, [
+            ...protoNumber(3, 326),
+            ...protoBytes(4, usage),
+            ...protoBytes(9, protoBytes(4, stamp)),
+            ...protoBytes(17, protoBytes(2, usage)),
+            ...protoBytes(17, [...protoBytes(2, failedRetry), ...protoText(3, "request failed")]),
+            ...protoText(19, "gemini-3.8-flash-n"),
+            ...protoText(21, "gemini-3.8-flash-high"),
+          ]),
+          ...protoBytes(2, [1, 2]),
+        ];
+        // step 1 carries the same unkeyed usage without embedded model metadata.
+        const step = [...protoBytes(9, usage), ...protoBytes(8, stamp)];
+        yield* seedDatabase(path.join(dir, "unkeyed-acp.db"), (db) =>
+          Effect.gen(function* () {
+            yield* createTables(db);
+            yield* db.run("INSERT INTO gen_metadata VALUES (?, ?)", [
+              0,
+              new Uint8Array(generation),
+            ]);
+            yield* db.run("INSERT INTO steps VALUES (?, ?)", [1, new Uint8Array(step)]);
+          }),
+        );
+        const result = yield* readAntigravityUsage(dir, 0);
+        assert.deepStrictEqual(result.errors, []);
+        const read = records(result);
+        // One merged record for the succeeded generation + one for the failed retry (not 3x!).
+        assert.strictEqual(read.length, 2);
+        const primary = read.find((record) => record.totals.uncachedInputTokens === 13306);
+        assert.isDefined(primary);
+        assert.strictEqual(primary?.model, "gemini-3.8-flash-n");
+        assert.strictEqual(primary?.rateModel, "gemini-3.8-flash");
+        assert.strictEqual(primary?.totals.outputTokens, 298);
+        const retry = read.find((record) => record.totals.uncachedInputTokens === 500);
+        assert.isDefined(retry);
+        assert.strictEqual(retry?.totals.outputTokens, 20);
+      }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

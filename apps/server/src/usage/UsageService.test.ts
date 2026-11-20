@@ -1088,6 +1088,99 @@ describe("UsageService", () => {
     }),
   );
 
+  it.effect(
+    "discovers Antigravity ACP history in ~/.gemini/antigravity-acp and managed profiles including child sessions",
+    () =>
+      Effect.gen(function* () {
+        const { home } = yield* setup;
+        const prefix = "usage-service-antigravity-acp-test";
+        const stateDir = NodePath.join(home, prefix, "userdata");
+        const defaultAcpConversations = NodePath.join(
+          home,
+          ".gemini",
+          "antigravity-acp",
+          "conversations",
+        );
+        const managedProfileAcp = NodePath.join(
+          stateDir,
+          "providers",
+          "antigravity",
+          "orphaned-profile-hash",
+          "antigravity-acp",
+        );
+        const managedConversations = NodePath.join(managedProfileAcp, "conversations");
+        const configuredProfileAcp = NodePath.join(
+          stateDir,
+          "providers",
+          "antigravity",
+          "empty-configured-profile",
+          "antigravity-acp",
+        );
+        const writeStepDb = async (filePath: string, outputTokens: number) => {
+          const db = new NodeSqlite.DatabaseSync(filePath);
+          try {
+            db.exec("CREATE TABLE steps (idx INTEGER, metadata BLOB)");
+            const metadata = new Uint8Array([
+              0x4a,
+              4,
+              0x10,
+              100,
+              0x18,
+              outputTokens,
+              ...Buffer.from("420608a087b7d306", "hex"),
+            ]);
+            db.prepare("INSERT INTO steps VALUES (?, ?)").run(0, metadata);
+          } finally {
+            db.close();
+          }
+        };
+        yield* Effect.promise(async () => {
+          await NodeFSP.mkdir(defaultAcpConversations, { recursive: true });
+          await NodeFSP.mkdir(managedConversations, { recursive: true });
+          await NodeFSP.mkdir(configuredProfileAcp, { recursive: true });
+          // Summary DB beside conversations/ must not be treated as a broken conversation DB.
+          const summaryDb = new NodeSqlite.DatabaseSync(
+            NodePath.join(configuredProfileAcp, "conversation_summaries.db"),
+          );
+          try {
+            summaryDb.exec("CREATE TABLE summaries (id TEXT)");
+          } finally {
+            summaryDb.close();
+          }
+          await writeStepDb(NodePath.join(defaultAcpConversations, "default-acp-turn.db"), 13);
+          await writeStepDb(NodePath.join(managedConversations, "parent-session.db"), 17);
+          await writeStepDb(NodePath.join(managedConversations, "child-session.db"), 19);
+        });
+        const service = yield* UsageService.make.pipe(
+          Effect.provide(
+            layerService({
+              prefix,
+              home,
+              environment: { ANTIGRAVITY_DATA_DIR: undefined },
+              settings: { providerInstances: {} },
+            }),
+          ),
+        );
+        const summary = yield* service.readSummary(WINDOW);
+        const agSources = summary.sources.filter(
+          (source) => source.fingerprint.provider === "antigravity",
+        );
+        assert.isFalse(
+          agSources.some((source) => source.status === "partial"),
+          `unexpected partial source: ${JSON.stringify(agSources)}`,
+        );
+        const totalOutput = summary.buckets
+          .filter((bucket) => bucket.provider === "antigravity")
+          .reduce((sum, bucket) => sum + bucket.totals.outputTokens, 0);
+        assert.strictEqual(totalOutput, 13 + 17 + 19);
+        const distinctSessions = agSources.reduce(
+          (sum, source) => sum + source.distinctSessions,
+          0,
+        );
+        assert.strictEqual(distinctSessions, 3);
+      }),
+  );
+
   it.effect("reads configured and disabled accounts once across shared and aliased homes", () =>
     Effect.gen(function* () {
       const { transcript, settings, home } = yield* setup;
