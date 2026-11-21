@@ -22,6 +22,10 @@ import type * as EffectAcpSchema from "effect-acp/compat";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import {
+  ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
+  ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE,
+} from "./antigravityUsageLimits.ts";
 import * as ProviderHostLive from "./ProviderHostLive.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
@@ -715,6 +719,26 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
         yield* harness.provider.snapshot.refresh;
         expect((yield* unsupported)?.usageLimits?.windows).toEqual([]);
       }),
+  );
+
+  it.effect("surfaces unreadable quota credentials once the account is authenticated", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        probeUsage: Effect.succeed({
+          checkedAt: "2026-10-09T12:00:00.000Z",
+          windows: [],
+          unavailable: { reason: "unsupported", message: ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE },
+        }),
+      });
+      yield* harness.initialize;
+      const unreadable = yield* harness.nextPublish(
+        (snapshot) => snapshot.usageLimits?.unavailable?.reason === "probeFailed",
+      );
+      yield* harness.provider.onSessionStarted(started, "/workspace");
+      expect((yield* unreadable)?.usageLimits?.unavailable?.message).toBe(
+        ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
+      );
+    }),
   );
 
   it.effect("a quota read finishing after sign-out cannot restore account limits", () =>

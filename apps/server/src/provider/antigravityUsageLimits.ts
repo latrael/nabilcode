@@ -19,6 +19,11 @@ export function antigravityUserAgent(platform: NodeJS.Platform, architecture: No
   return `antigravity/hub/2.24.0 (aidev_client; os_type=${platform}; arch=${architecture}; cl=963137146)`;
 }
 
+/** The native agy CLI keeps its Google sign-in in the OS keychain, so there is no token file to read. */
+export const ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE = "Sign in with Google to see Antigravity limits.";
+export const ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE =
+  "Antigravity limits are unavailable: the agy CLI keeps its Google sign-in in the OS keychain, which T3 Code does not read.";
+
 const DAILY_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com";
 const PROD_ENDPOINT = "https://cloudcode-pa.googleapis.com";
 // The ACP runtime meters consumer tiers on the daily host and GCP-terms tiers on prod.
@@ -241,7 +246,7 @@ export const makeAntigravityUsageProbe = Effect.fn("makeAntigravityUsageProbe")(
       return makeUnavailableUsageLimits({
         checkedAt,
         reason: "unsupported",
-        message: "Sign in with Google to see Antigravity limits.",
+        message: ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE,
       });
     }
     const token = yield* fs.readFileString(tokenPath).pipe(Effect.flatMap(decodeTokenFile));

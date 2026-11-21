@@ -35,6 +35,10 @@ import {
   isCommandMissingCause,
   type ServerProviderDraft,
 } from "@t3tools/provider-core/server/snapshotProbe";
+import {
+  ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
+  ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE,
+} from "./antigravityUsageLimits.ts";
 import { resolveUsageLimitsAfterProbe } from "@t3tools/provider-core/server/usageLimits";
 
 import { antigravityThinkingConfig } from "./acp/AntigravityAcpSupport.ts";
@@ -246,7 +250,18 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
               ...state.draft,
               usageLimits: resolveUsageLimitsAfterProbe({
                 published: state.draft.usageLimits,
-                probed,
+                probed:
+                  state.draft.auth.status === "authenticated" &&
+                  probed.unavailable?.reason === "unsupported" &&
+                  probed.unavailable.message === ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE
+                    ? {
+                        ...probed,
+                        unavailable: {
+                          reason: "probeFailed",
+                          message: ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
+                        },
+                      }
+                    : probed,
               }),
             },
           })),
