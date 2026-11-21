@@ -869,8 +869,15 @@ export function useComposerSend(input: ComposerSendInput) {
               : {}),
           })
         : null;
+    // An @mention wins; otherwise the channel keeps talking to its last agent, if it has one.
+    const addressedSelection =
+      promptProviderRouting?.switchedByMention === true
+        ? promptProviderRouting.modelSelection
+        : multipleModelSelections === null
+          ? sendCtx.lastAgentSelection
+          : null;
     const postAsNote = shouldPostComposerNote({
-      mentionsModel: promptProviderRouting?.switchedByMention === true,
+      mentionsModel: addressedSelection !== null,
       multipleModels: multipleModelSelections !== null,
       messageText: messageTextForSend,
       phase,
@@ -905,8 +912,8 @@ export function useComposerSend(input: ComposerSendInput) {
       // A note or a message to another model never resumes the thread's own cold session.
       resumeCompactionTokens:
         postAsNote ||
-        (promptProviderRouting?.switchedByMention === true &&
-          promptProviderRouting.modelSelection.instanceId !== ctxSelectedModelSelection.instanceId)
+        (addressedSelection !== null &&
+          addressedSelection.instanceId !== ctxSelectedModelSelection.instanceId)
           ? null
           : resumeCompactionTokens,
       keepFullHistory,
@@ -939,10 +946,10 @@ export function useComposerSend(input: ComposerSendInput) {
     const outgoingMessageContext = buildOutgoingMessageContext(
       composerAttachmentsSnapshot.map((attachment) => attachment.id),
     );
-    const switchedByMention = promptProviderRouting?.switchedByMention === true;
+    const switchedByMention = addressedSelection !== null;
     const effectiveModelSelection: ModelSelection = (() => {
-      if (!switchedByMention) return ctxSelectedModelSelection;
-      const routed = promptProviderRouting.modelSelection;
+      if (addressedSelection === null) return ctxSelectedModelSelection;
+      const routed = addressedSelection;
       const draftStore = useComposerDraftStore.getState();
       const targetOptions = resolveMentionTargetOptions({
         model: routed.model,

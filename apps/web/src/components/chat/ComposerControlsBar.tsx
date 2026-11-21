@@ -2,7 +2,7 @@ import type { ChatComposerProps } from "./ChatComposer";
 import type { PromptUltrathink } from "./TraitsPicker";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 import { type AppModelOption } from "../../modelSelection";
-import { CircleAlertIcon } from "lucide-react";
+import { CircleAlertIcon, StickyNoteIcon } from "lucide-react";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerControl } from "./ComposerControl";
 import {
@@ -104,6 +104,11 @@ export function ComposerControlsBar(props: {
   modelPickerVisible: boolean;
   /** A new-worktree draft has text but no @mention, so there is nothing to run in it yet. */
   worktreeNeedsMention: boolean;
+  /** The channel posts notes instead of talking to its last agent. */
+  noteMode: boolean;
+  /** Only a channel that has talked to an agent has something to switch away from. */
+  noteToggleVisible: boolean;
+  onToggleNoteMode: () => void;
 }) {
   const {
     environmentId,
@@ -152,6 +157,9 @@ export function ComposerControlsBar(props: {
     channelName,
     modelPickerVisible,
     worktreeNeedsMention,
+    noteMode,
+    noteToggleVisible,
+    onToggleNoteMode,
   } = props;
   const accessMatchesDefault = compatibleRuntimeMode === defaultRuntimeMode;
   const {
@@ -274,9 +282,17 @@ export function ComposerControlsBar(props: {
   // Without an @mention nothing is addressed, so the bar names the channel instead of a model.
   const routingStatus = (() => {
     if (!routingTarget) {
-      return worktreeNeedsMention ? (
+      if (worktreeNeedsMention) {
+        return (
+          <span className="truncate text-2xs text-muted-foreground">
+            @ a model to start work in a new worktree
+          </span>
+        );
+      }
+      return noteMode ? (
         <span className="truncate text-2xs text-muted-foreground">
-          @ a model to start work in a new worktree
+          Note to self in <strong className="font-semibold">#{channelName}</strong>
+          {" · "}@ a model to run an agent
         </span>
       ) : (
         <span className="truncate text-2xs text-muted-foreground">
@@ -332,6 +348,19 @@ export function ComposerControlsBar(props: {
       {routingStatus}
     </div>
   );
+  const noteToggle = noteToggleVisible ? (
+    <ComposerControl
+      type="button"
+      size={controlSize}
+      aria-pressed={noteMode}
+      aria-label={noteMode ? "Stop posting notes" : "Post a note instead"}
+      data-composer-note-toggle="true"
+      onClick={onToggleNoteMode}
+    >
+      <StickyNoteIcon data-composer-control-icon />
+      <span data-composer-control-label>Note</span>
+    </ComposerControl>
+  ) : null;
   return showProviderUnavailable ? (
     <ComposerControl
       type="button"
@@ -350,6 +379,7 @@ export function ComposerControlsBar(props: {
   ) : (
     <>
       {modelPickerVisible ? composerModelPicker : null}
+      {noteToggle}
       {routingTargetBadge}
       {routingTarget ? (
         <ComposerMentionEffort

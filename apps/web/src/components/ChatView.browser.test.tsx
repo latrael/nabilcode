@@ -431,7 +431,7 @@ it("a rejected send leaves the timeline when a new draft was typed meanwhile", a
   const thread = threadWithHistory("rejected-send", 1);
   using _environment = installFakeEnvironment([thread], {
     acceptCommands: true,
-    holdCommand: (command) => command.type === "message.post",
+    holdCommand: (command) => command.type === "message.dispatch",
   });
   __setClientSettingsForTests({
     ...DEFAULT_CLIENT_SETTINGS,
@@ -451,7 +451,7 @@ it("a rejected send leaves the timeline when a new draft was typed meanwhile", a
   await userEvent.click(editor);
   await userEvent.keyboard("Failed prompt{Enter}");
   await vi.waitFor(() =>
-    expect(dispatchedCommands().map((command) => command.type)).toContain("message.post"),
+    expect(dispatchedCommands().map((command) => command.type)).toContain("message.dispatch"),
   );
   await expect.element(page.getByText("Failed prompt")).toBeVisible();
   await userEvent.keyboard("Next draft");
@@ -768,12 +768,19 @@ it("routes @gemini and @claude mentions in a #channel, shows @provider author he
   const cleanOutButton = page.getByRole("button", { name: "Clean out channel", exact: true });
   await expect.element(cleanOutButton).toBeVisible();
 
+  // A channel that has talked to an agent keeps talking to it until Note is on.
+  await vi.waitFor(() => {
+    const status = document.querySelector('[data-composer-routing-target="true"]');
+    expect(status?.textContent).toContain("Replying to");
+  });
+  await page.getByRole("button", { name: "Post a note instead", exact: true }).click();
+
   const editor = page.getByTestId("composer-editor");
   await userEvent.click(editor);
   await userEvent.keyboard("remember to review the diff");
   await vi.waitFor(() => {
     const status = document.querySelector('[data-composer-routing-target="false"]');
-    expect(status?.textContent).toContain("Posting to");
+    expect(status?.textContent).toContain("Note to self");
     expect(document.querySelector('[data-composer-routing-target="true"]')).toBeNull();
     expect(document.querySelector("[data-chat-provider-model-picker]")).toBeNull();
   });

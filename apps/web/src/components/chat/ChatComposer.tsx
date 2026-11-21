@@ -226,6 +226,7 @@ import {
   getComposerReasoningStep,
   resolveMentionTargetOptions,
 } from "./composerProviderState";
+import { resolveLastAgentSelection, useComposerNoteModeStore } from "./composerNoteMode";
 import { readPromptUltrathink } from "./TraitsPicker";
 import { useApplyThreadModelPick } from "./useApplyThreadModelPick";
 import {
@@ -361,6 +362,8 @@ export interface ChatComposerHandle {
     routableProviderInstanceEntries: ReadonlyArray<ProviderInstanceEntry>;
     modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<AppModelOption>>;
     lastUsedModelByInstance: ReadonlyMap<ProviderInstanceId, string>;
+    /** Where a message without an @mention goes; null posts it as a note. */
+    lastAgentSelection: ModelSelection | null;
     shownPendingApprovalIds: ReadonlyArray<RuntimeRequestId>;
   };
   validateProviderInput: (providerInput: string) => boolean;
@@ -1017,29 +1020,47 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           lastUsedModelByInstance,
         })
       : null;
-  const mentionTargetEntry = promptProviderRouting?.switchedByMention
-    ? providerInstanceEntries.find(
-        (entry) => entry.instanceId === promptProviderRouting.modelSelection.instanceId,
-      )
+  const noteThreadKey = scopedThreadKey(routeThreadRef);
+  const noteMode = useComposerNoteModeStore(
+    (state) => state.noteThreadKeys[noteThreadKey] === true,
+  );
+  const toggleNoteMode = useComposerNoteModeStore((state) => state.toggle);
+  const lastAgentSelection =
+    multipleModelSelections === null
+      ? resolveLastAgentSelection({
+          runs: activeThreadRuns,
+          noteMode,
+          isRoutable: (selection) =>
+            routableProviderInstanceEntries.some(
+              (entry) => entry.instanceId === selection.instanceId,
+            ),
+        })
+      : null;
+  const mentionSelection = promptProviderRouting?.switchedByMention
+    ? promptProviderRouting.modelSelection
+    : null;
+  // An @mention wins; otherwise the channel keeps talking to its last agent.
+  const addressedSelection = mentionSelection ?? lastAgentSelection;
+  const addressedEntry = addressedSelection
+    ? providerInstanceEntries.find((entry) => entry.instanceId === addressedSelection.instanceId)
     : undefined;
   const mentionTarget =
-    promptProviderRouting?.switchedByMention && mentionTargetEntry
+    addressedSelection && addressedEntry
       ? {
-          instanceId: promptProviderRouting.modelSelection.instanceId,
-          model: promptProviderRouting.modelSelection.model,
-          matchedHandle: promptProviderRouting.matchedHandle,
-          matchedTargetLabel: promptProviderRouting.matchedTargetLabel,
-          driverKind: mentionTargetEntry.driverKind,
-          models: mentionTargetEntry.models,
-          options: resolveMentionTargetOptions({
-            model: promptProviderRouting.modelSelection.model,
-            draftSelection:
-              composerDraft.modelSelectionByProvider[
-                promptProviderRouting.modelSelection.instanceId
-              ],
-            stickyOptionsByModel:
-              stickyOptionsByModelByProvider[promptProviderRouting.modelSelection.instanceId],
-          }),
+          instanceId: addressedSelection.instanceId,
+          model: addressedSelection.model,
+          matchedHandle: mentionSelection ? (promptProviderRouting?.matchedHandle ?? null) : null,
+          matchedTargetLabel: mentionSelection
+            ? (promptProviderRouting?.matchedTargetLabel ?? null)
+            : null,
+          driverKind: addressedEntry.driverKind,
+          models: addressedEntry.models,
+          options:
+            resolveMentionTargetOptions({
+              model: addressedSelection.model,
+              draftSelection: composerDraft.modelSelectionByProvider[addressedSelection.instanceId],
+              stickyOptionsByModel: stickyOptionsByModelByProvider[addressedSelection.instanceId],
+            }) ?? (mentionSelection ? undefined : addressedSelection.options),
         }
       : null;
   // No model is picked in the composer, so starting a new worktree waits for an @mention.
@@ -2659,6 +2680,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       routingTarget={mentionTarget}
       modelPickerVisible={multipleModelSelections !== null}
       worktreeNeedsMention={worktreeNeedsMention}
+      noteMode={noteMode}
+      noteToggleVisible={multipleModelSelections === null && activeThreadRuns.length > 0}
+      onToggleNoteMode={() => toggleNoteMode(noteThreadKey)}
     />
   );
   // An open question owns the space above the composer. Only a machine problem,
@@ -3391,6 +3415,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         routableProviderInstanceEntries,
         modelOptionsByInstance,
         lastUsedModelByInstance,
+        lastAgentSelection,
       }),
       setMultipleModelSelections,
       validateProviderInput: (providerInput: string) => {
@@ -3458,6 +3483,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       routableProviderInstanceEntries,
       modelOptionsByInstance,
       lastUsedModelByInstance,
+      lastAgentSelection,
       compactThreadContextStable,
     ],
   );
