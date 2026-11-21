@@ -19,8 +19,8 @@ export function antigravityUserAgent(platform: NodeJS.Platform, architecture: No
   return `antigravity/hub/2.24.0 (aidev_client; os_type=${platform}; arch=${architecture}; cl=963137146)`;
 }
 
-/** The native agy CLI keeps its Google sign-in in the OS keychain, so there is no token file to read. */
 export const ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE = "Sign in with Google to see Antigravity limits.";
+// The native agy CLI keeps its Google sign-in in the OS keychain, so there is no token file to read.
 export const ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE =
   "Antigravity limits are unavailable: the agy CLI keeps its Google sign-in in the OS keychain, which T3 Code does not read.";
 
