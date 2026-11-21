@@ -2,7 +2,7 @@ import { SourceControlProviderKind } from "@t3tools/contracts";
 import { assert, describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import {
-  DEFAULT_SERVER_SETTINGS,
+  DEFAULT_SERVER_SETTINGS as BASE_SERVER_SETTINGS,
   ProjectId,
   EventId,
   ProviderInstanceId,
@@ -50,6 +50,12 @@ import * as ThreadSettlementService from "./ThreadSettlementService.ts";
 
 const NOW_MS = Date.parse("2026-06-10T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1_000;
+// Auto-settle is opt-in by default; these tests exercise it enabled.
+const DEFAULT_SERVER_SETTINGS = {
+  ...BASE_SERVER_SETTINGS,
+  sidebarAutoSettleOnMerge: true,
+  sidebarAutoSettleAfterDays: 7,
+};
 
 function at(offsetMs: number): DateTime.Utc {
   return DateTime.makeUnsafe(NOW_MS + offsetMs);
@@ -173,6 +179,20 @@ describe("isAutoSettlementCandidate", () => {
       pendingGuestMessageCount: 1,
     });
     expect(ThreadSettlementService.isSnoozed(snoozed, NOW_MS)).toBe(false);
+  });
+
+  it("never settles a thread whose latest completion the user has not visited", () => {
+    const finished = shell({
+      latestRunCompletedAt: at(-60 * 1_000),
+      lastVisitedAt: at(-120 * 1_000),
+    });
+    expect(ThreadSettlementService.isAutoSettlementCandidate(finished, NOW_MS)).toBe(false);
+    expect(
+      ThreadSettlementService.isAutoSettlementCandidate(
+        { ...finished, lastVisitedAt: at(-30 * 1_000) },
+        NOW_MS,
+      ),
+    ).toBe(true);
   });
 
   it("keeps snoozed threads parked until a fresh failure or timer wake", () => {
@@ -390,6 +410,14 @@ describe("resolveAutoSettlementAt", () => {
         pullRequest: { state: "closed", closedAt: DateTime.formatIso(at(-1)) },
         autoSettleOnMerge: false,
       }),
+    ).toBeNull();
+    expect(
+      ThreadSettlementService.resolveAutoSettlementAt({
+        ...input,
+        thread: shell(),
+        pullRequest: { state: "closed", closedAt: DateTime.formatIso(at(-1)) },
+        autoSettleOnMerge: true,
+      }),
     ).toEqual(shell().createdAt);
   });
 
@@ -598,7 +626,13 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
   const snapshotReadCount = yield* Ref.make(0);
   const snapshotReads = yield* Queue.unbounded<number>();
   const candidateReads = yield* Ref.make<ReadonlyArray<string | undefined>>([]);
-  const settings = yield* Ref.make(options.settings ?? DEFAULT_SERVER_SETTINGS);
+  const settings = yield* Ref.make(
+    options.settings ?? {
+      ...DEFAULT_SERVER_SETTINGS,
+      sidebarAutoSettleOnMerge: true,
+      sidebarAutoSettleAfterDays: 7,
+    },
+  );
   const settingsReadCount = yield* Ref.make(0);
   const settingsChanges = yield* PubSub.unbounded<ContractServerSettings>();
   const mergedPullRequests = yield* PubSub.unbounded<PullRequestService.PullRequestMergeEvent>();

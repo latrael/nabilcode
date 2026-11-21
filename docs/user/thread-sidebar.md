@@ -186,9 +186,12 @@ settle every thread in that section between it and the one you release on.
 The **Un-settle** and **Wake** buttons work the same way in their sections.
 Press `Escape` while dragging to cancel.
 
-By default, environments settle inactive threads after seven days and settle
-threads whose pull request merged. A closed pull request can also settle an idle
-thread. An empty thread's inactivity counts from when it was created.
+Threads stay in place until you settle them: when a run finishes or its pull
+request merges or closes, the channel header offers a one-click **Settle**. You can
+opt in to automatic settling in **Settings → Threads**, which settles inactive
+threads after a number of days and threads whose pull request merged or closed.
+Automatic settling never settles a thread whose latest result you have not opened.
+An empty thread's inactivity counts from when it was created.
 Work in progress, pending questions or approvals, and background work the agent
 is waiting on prevent automatic settlement. An open pull request does not prevent inactivity
 settlement unless you turn on **Keep threads with a PR** in **Settings → Threads**,

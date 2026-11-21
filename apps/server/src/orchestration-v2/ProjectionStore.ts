@@ -224,6 +224,7 @@ export type ProjectionSettlementCandidate = Pick<
   | "latestRunRequestedAt"
   | "latestRunStartedAt"
   | "latestRunCompletedAt"
+  | "lastVisitedAt"
   | "latestUserMessageAt"
   | "status"
   | "activityRunStartedAt"

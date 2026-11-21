@@ -13,7 +13,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { ChevronDownIcon, EraserIcon } from "lucide-react";
+import { CheckCircle2Icon, ChevronDownIcon, EraserIcon } from "lucide-react";
 import {
   memo,
   useEffect,
@@ -48,6 +48,9 @@ import { textDirection } from "~/textDirection";
 import { useClientSettings } from "../../hooks/useSettings";
 import { ThreadHeaderChips } from "../../cabinet/board/cards/ThreadHeaderChips";
 import { GuestShareIndicator } from "./GuestShareControls";
+import { settleSuggestionLabel } from "./settleSuggestion.logic";
+import { useThreadActions } from "../../hooks/useThreadActions";
+import { settleAndAdvance } from "../../settleAndAdvance";
 
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
@@ -134,6 +137,34 @@ export const ChatHeader = memo(function ChatHeader({
       false);
   const canShowCleanOut = isServerThread && canOperateThread && hasChannelHistory;
   const displayChannelTitle = formatChannelTitle(activeThreadTitle);
+  const { settleThread } = useThreadActions();
+  const settleLabel =
+    isServerThread && canOperateThread && threadShell
+      ? settleSuggestionLabel({
+          settledOverride: threadShell.settledOverride,
+          archivedAt: threadShell.archivedAt,
+          runActive: hasActiveRun,
+          needsAttention:
+            threadShell.hasPendingApprovals ||
+            threadShell.hasPendingUserInput ||
+            threadShell.pendingSubagentRequest != null,
+          latestRunStatus: threadShell.latestRun?.status ?? null,
+          pullRequests: threadShell.pullRequests,
+        })
+      : null;
+  const handleSettle = () => {
+    if (settleAndAdvance(activeThreadRef)) return;
+    void settleThread(activeThreadRef).then((result) => {
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add({
+          type: "error",
+          title: "Failed to settle thread",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+      }
+    });
+  };
   const handleCleanOut = () => {
     if (
       cleaningOut ||
@@ -479,6 +510,18 @@ export const ChatHeader = memo(function ChatHeader({
           </WorkspaceBreadcrumbItem>
         )}
       </WorkspaceBreadcrumb>
+      {settleLabel !== null ? (
+        <Button
+          type="button"
+          size="xs"
+          variant="ghost-muted"
+          aria-label="Settle thread"
+          onClick={handleSettle}
+        >
+          <CheckCircle2Icon aria-hidden />
+          <span>{settleLabel}</span>
+        </Button>
+      ) : null}
       {canShowCleanOut ? (
         <Tooltip>
           <TooltipTrigger

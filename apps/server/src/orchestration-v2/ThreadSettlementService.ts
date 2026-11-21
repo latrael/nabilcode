@@ -143,9 +143,7 @@ function pullRequestSettles(
   pullRequest: SettlementPullRequest,
   autoSettleOnMerge: boolean,
 ): boolean {
-  if (pullRequest.state !== "closed" && (pullRequest.state !== "merged" || !autoSettleOnMerge)) {
-    return false;
-  }
+  if (pullRequest.state === "open" || !autoSettleOnMerge) return false;
   const terminalAt = pullRequest.state === "merged" ? pullRequest.mergedAt : pullRequest.closedAt;
   if (terminalAt == null) return false;
   const userAnchorMs = latestMillis([
@@ -158,6 +156,18 @@ function pullRequestSettles(
   return pullRequestAtMs >= userAnchorMs;
 }
 
+/** Mirrors the sidebar's unread dot: the latest run finished after the user last visited. */
+function hasUnseenCompletion(
+  thread: Pick<
+    ProjectionStore.ProjectionSettlementCandidate,
+    "latestRunCompletedAt" | "lastVisitedAt"
+  >,
+): boolean {
+  const completedAtMs = toMillis(thread.latestRunCompletedAt);
+  if (completedAtMs === null || thread.lastVisitedAt == null) return false;
+  return completedAtMs > DateTime.toEpochMillis(thread.lastVisitedAt);
+}
+
 export function isAutoSettlementCandidate(
   thread: Omit<ProjectionStore.ProjectionSettlementCandidate, "latestUserAuthoredMessageAt">,
   nowMs: number,
@@ -168,6 +178,7 @@ export function isAutoSettlementCandidate(
   // A guest is waiting on the owner; settling would hide the Request.
   if ((thread.pendingGuestMessageCount ?? 0) > 0) return false;
   if (thread.activityRunStatus != null) return false;
+  if (hasUnseenCompletion(thread)) return false;
   const pendingTasks = thread.pendingBackgroundTasks ?? [];
   if (backgroundWorkHoldsCompletion(pendingTasks)) return false;
   // Settling ends a watch, which would silently drop a reviewer's later comments.

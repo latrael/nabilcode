@@ -525,4 +525,9 @@ describe("server model preferences", () => {
     expect(encodeServerSettings(decodeServerSettings(input))).toMatchObject(input);
     expect(decodeServerSettingsPatch(input)).toEqual(input);
   });
+
+  it("leaves auto-settle opt-in", () => {
+    expect(DEFAULT_SERVER_SETTINGS.sidebarAutoSettleOnMerge).toBe(false);
+    expect(DEFAULT_SERVER_SETTINGS.sidebarAutoSettleAfterDays).toBeNull();
+  });
 });

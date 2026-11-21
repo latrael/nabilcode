@@ -1887,7 +1887,7 @@ export function ThreadsSettingsPanel() {
             serverScoped
             settingKeys={["sidebarAutoSettleOnMerge"]}
             {...searchableSetting("auto-settle-merged-threads")}
-            description="Settle a thread when its pull request merges. Closed pull requests still settle automatically."
+            description="Settle a thread when its pull request merges or closes. Off by default; threads you have not read yet are never settled."
             resetAction={
               settings.sidebarAutoSettleOnMerge !==
               DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge ? (
@@ -1917,7 +1917,7 @@ export function ThreadsSettingsPanel() {
             serverScoped
             settingKeys={["sidebarAutoSettleAfterDays"]}
             {...searchableSetting("auto-settle-inactive-threads")}
-            description="Sidebar threads with no activity for this long settle automatically."
+            description="Off by default. Sidebar threads with no activity for this long settle automatically, unless you have not read their latest result."
             resetAction={
               settings.sidebarAutoSettleAfterDays !==
               DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays ? (
@@ -1966,7 +1966,7 @@ export function ThreadsSettingsPanel() {
               serverScoped
               settingKeys={["sidebarAutoSettleKeepPullRequests"]}
               title="Keep threads with a PR"
-              description="Inactivity does not settle threads with a pull request. Merge and close still do."
+              description="Inactivity does not settle threads with a pull request. Merge and close still do when enabled."
               control={
                 <ScopedSwitch
                   settingKeys={["sidebarAutoSettleKeepPullRequests"]}
