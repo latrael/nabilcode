@@ -75,8 +75,10 @@ export const layer: Layer.Layer<TurnItemPositionStoreV2, never, SqlClient.SqlCli
           const current = existing[0]?.ordinal;
           if (current !== undefined) {
             // A steer that missed its turn starts the next run; it moves into that run's range.
+            // A run-less item, such as a note, never moves once placed.
             if (
               keepExisting ||
+              runId === null ||
               runOrdinal === null ||
               (current >= lowerBound && current <= upperBound)
             ) {
@@ -140,7 +142,26 @@ export const layer: Layer.Layer<TurnItemPositionStoreV2, never, SqlClient.SqlCli
     return TurnItemPositionStoreV2.of({
       allocate,
       // Per-event normalization shares the enclosing orchestration span.
-      normalize: Effect.fnUntraced(function* (item, runOrdinal) {
+      normalize: Effect.fnUntraced(function* (item, suppliedRunOrdinal) {
+        // A note belongs to no run but lands after the latest one, in posting order.
+        const runOrdinal =
+          suppliedRunOrdinal ??
+          (item.type === "user_message" && item.inputIntent === "note"
+            ? ((yield* sql<{ readonly ordinal: number | null }>`
+                SELECT MAX(ordinal) AS ordinal
+                FROM orchestration_v2_projection_runs
+                WHERE thread_id = ${item.threadId}
+              `.pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new TurnItemPositionStoreError({
+                      threadId: item.threadId,
+                      turnItemId: item.id,
+                      cause,
+                    }),
+                ),
+              ))[0]?.ordinal ?? undefined)
+            : undefined);
         return yield* allocate({
           threadId: item.threadId,
           turnItemId: item.id,

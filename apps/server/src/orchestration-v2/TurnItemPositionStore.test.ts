@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { RunId, ThreadId, TurnItemId } from "@t3tools/contracts";
+import { type OrchestrationV2TurnItem, RunId, ThreadId, TurnItemId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -75,5 +75,43 @@ it.effect("places a run-start item ahead of the run's items, then appends once t
     assert.isAbove(recovery, 1_999_999);
     assert.equal(yield* allocate("item:retry-recovery", "run_start"), message + 1);
     assert.equal(yield* allocate("item:reply"), message + 2);
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect("places a note after the latest run, and keeps it there", () =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const positions = yield* TurnItemPositionStore.TurnItemPositionStoreV2;
+    const threadId = ThreadId.make("thread:note-order");
+    const reply = yield* positions.allocate({
+      threadId,
+      turnItemId: TurnItemId.make("item:reply"),
+      runId: RunId.make("run:1"),
+      runOrdinal: 1,
+    });
+    yield* sql`
+      INSERT INTO orchestration_v2_projection_runs
+        (run_id, thread_id, ordinal, provider, status, requested_at, payload_json)
+      VALUES ('run:1', ${threadId}, 1, 'codex', 'completed', '2026-01-01T00:00:00.000Z', '{}')
+    `;
+    const note = {
+      id: TurnItemId.make("item:note"),
+      threadId,
+      runId: null,
+      type: "user_message",
+      inputIntent: "note",
+      status: "completed",
+      ordinal: 0,
+    } as unknown as OrchestrationV2TurnItem;
+    const placed = yield* positions.normalize(note);
+    assert.isAbove(placed.ordinal, reply);
+    assert.isBelow(placed.ordinal, 2_000_000);
+
+    yield* sql`
+      INSERT INTO orchestration_v2_projection_runs
+        (run_id, thread_id, ordinal, provider, status, requested_at, payload_json)
+      VALUES ('run:2', ${threadId}, 2, 'codex', 'completed', '2026-01-01T00:00:00.000Z', '{}')
+    `;
+    assert.equal((yield* positions.normalize(placed)).ordinal, placed.ordinal);
   }).pipe(Effect.provide(layerTest)),
 );
