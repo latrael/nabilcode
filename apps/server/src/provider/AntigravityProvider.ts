@@ -35,10 +35,6 @@ import {
   isCommandMissingCause,
   type ServerProviderDraft,
 } from "@t3tools/provider-core/server/snapshotProbe";
-import {
-  ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
-  ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE,
-} from "./antigravityUsageLimits.ts";
 import { resolveUsageLimitsAfterProbe } from "@t3tools/provider-core/server/usageLimits";
 
 import { antigravityThinkingConfig } from "./acp/AntigravityAcpSupport.ts";
@@ -167,7 +163,9 @@ interface AntigravityProviderOptions {
     EffectAcpErrors.AcpError | ProviderSetupError
   >;
   readonly supportsTextGeneration: Effect.Effect<boolean>;
-  readonly probeUsage?: Effect.Effect<ServerProviderUsageLimits>;
+  readonly probeUsage?: (state: {
+    readonly authenticated: boolean;
+  }) => Effect.Effect<ServerProviderUsageLimits>;
   readonly clearUsage?: Effect.Effect<void>;
   readonly maintenanceCapabilities?: ProviderMaintenanceCapabilities;
   readonly auth?: { readonly type: string; readonly label: string };
@@ -240,9 +238,14 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
   const scope = yield* Effect.scope;
   const refreshUsage = Effect.fn("AntigravityProvider.refreshUsage")(function* () {
     if (!options.probeUsage || (yield* PublishingUsage)) return;
+    const probeUsage = options.probeUsage;
     yield* FiberHandle.run(
       usageRead,
-      options.probeUsage.pipe(
+      SubscriptionRef.get(metadata).pipe(
+        // Only an authenticated instance may trigger the keychain prompt.
+        Effect.flatMap((state) =>
+          probeUsage({ authenticated: state.draft.auth.status === "authenticated" }),
+        ),
         Effect.flatMap((probed) =>
           SubscriptionRef.update(metadata, (state) => ({
             ...state,
@@ -250,18 +253,7 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
               ...state.draft,
               usageLimits: resolveUsageLimitsAfterProbe({
                 published: state.draft.usageLimits,
-                probed:
-                  state.draft.auth.status === "authenticated" &&
-                  probed.unavailable?.reason === "unsupported" &&
-                  probed.unavailable.message === ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE
-                    ? {
-                        ...probed,
-                        unavailable: {
-                          reason: "probeFailed",
-                          message: ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
-                        },
-                      }
-                    : probed,
+                probed,
               }),
             },
           })),

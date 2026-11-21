@@ -7,7 +7,11 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import {
@@ -19,10 +23,30 @@ export function antigravityUserAgent(platform: NodeJS.Platform, architecture: No
   return `antigravity/hub/2.24.0 (aidev_client; os_type=${platform}; arch=${architecture}; cl=963137146)`;
 }
 
-export const ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE = "Sign in with Google to see Antigravity limits.";
-// The native agy CLI keeps its Google sign-in in the OS keychain, so there is no token file to read.
+const ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE = "Sign in with Google to see Antigravity limits.";
 export const ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE =
-  "Antigravity limits are unavailable: the agy CLI keeps its Google sign-in in the OS keychain, which T3 Code does not read.";
+  "Antigravity limits are unavailable: T3 Code could not read the agy sign-in from the OS keychain (access was denied or no sign-in was found). Allow keychain access and refresh provider status.";
+
+// The native agy CLI stores its Google token via go-keyring, shared by every instance (not per --gemini-dir).
+const KEYRING_SERVICE = "gemini";
+const KEYRING_ACCOUNT = "antigravity";
+export const ANTIGRAVITY_LIMITS_EXPIRED_MESSAGE =
+  "Antigravity limits are unavailable: the agy sign-in has expired and T3 Code cannot refresh it. Limits will appear once Antigravity refreshes its sign-in.";
+// agy embeds its installed-app OAuth clients; read them from the installed binary instead of vendoring them.
+const CLIENT_ID_PATTERN = /\d{6,}-[a-z0-9]{32}\.apps\.googleusercontent\.com/g;
+const CLIENT_SECRET_PATTERN = /GOCSPX-[A-Za-z0-9_-]{28}/g;
+
+type OAuthClient = { readonly clientId: string; readonly clientSecret: string };
+
+/** Every client id x secret pair found in an agy binary; Go strings are packed, so patterns use fixed lengths. */
+export function extractAntigravityOAuthClients(binary: Uint8Array): ReadonlyArray<OAuthClient> {
+  const text = Buffer.from(binary.buffer, binary.byteOffset, binary.byteLength).toString("latin1");
+  const ids = new Set(text.match(CLIENT_ID_PATTERN) ?? []);
+  const secrets = new Set(text.match(CLIENT_SECRET_PATTERN) ?? []);
+  return [...ids].flatMap((clientId) =>
+    [...secrets].map((clientSecret) => ({ clientId, clientSecret })),
+  );
+}
 
 const DAILY_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com";
 const PROD_ENDPOINT = "https://cloudcode-pa.googleapis.com";
@@ -41,6 +65,17 @@ const TokenFile = Schema.Struct({
   client_id: Schema.NonEmptyString,
   client_secret: Schema.NonEmptyString,
   refresh_token: Schema.NonEmptyString,
+  project_id: Schema.optional(Schema.String),
+});
+const StoredToken = Schema.Struct({
+  access_token: Schema.optional(Schema.String),
+  refresh_token: Schema.optional(Schema.String),
+  expiry: Schema.optional(Schema.String),
+});
+// agy nests the oauth2 token under `token`; accept a bare token too.
+const KeyringPayload = Schema.Struct({
+  ...StoredToken.fields,
+  token: Schema.optional(StoredToken),
   project_id: Schema.optional(Schema.String),
 });
 const TokenResponse = Schema.Struct({
@@ -83,6 +118,7 @@ const Models = Schema.Struct({
 });
 
 const decodeTokenFile = Schema.decodeEffect(Schema.fromJsonString(TokenFile));
+const decodeKeyringPayload = Schema.decodeEffect(Schema.fromJsonString(KeyringPayload));
 const decodeTokenResponse = Schema.decodeUnknownEffect(TokenResponse);
 const decodeUserInfo = Schema.decodeUnknownEffect(UserInfo);
 const decodeSummary = Schema.decodeUnknownEffect(Summary);
@@ -127,6 +163,19 @@ function summaryResetTime(
     Math.abs(Date.parse(bucket.resetTime ?? "") - requestedAt - windowDurationMins * 60_000) <=
       60_000;
   return untouched ? undefined : bucket.resetTime;
+}
+
+/** Undoes go-keyring's `go-keyring-base64:`/`go-keyring-encoded:` prefixes and macOS `security` hex output. */
+export function decodeKeyringSecret(raw: string): string {
+  const value = raw.trim();
+  if (value.startsWith("go-keyring-base64:")) {
+    return Buffer.from(value.slice("go-keyring-base64:".length), "base64").toString("utf8");
+  }
+  if (value.startsWith("go-keyring-encoded:")) {
+    return Buffer.from(value.slice("go-keyring-encoded:".length), "hex").toString("utf8");
+  }
+  if (/^(?:[0-9a-f]{2})+$/i.test(value)) return Buffer.from(value, "hex").toString("utf8");
+  return value;
 }
 
 const sha256 = Effect.fnUntraced(function* (text: string) {
@@ -215,16 +264,26 @@ function modelWindows(models: typeof Models.Type) {
 export const makeAntigravityUsageProbe = Effect.fn("makeAntigravityUsageProbe")(function* (input: {
   readonly profileDirectory: string;
   readonly authMethod: AntigravitySettings["authMethod"];
+  /** Resolves the installed agy binary the way the driver does; none disables refresh. */
+  readonly resolveBinaryPath?: Effect.Effect<Option.Option<string>>;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const client = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk);
   const crypto = yield* Digest.Digest;
   const platform = yield* HostProcess.Platform;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const architecture = yield* HostProcess.Architecture;
   const tokenPath = path.join(input.profileDirectory, "antigravity-acp", "acp_token.json");
   let cached:
-    | { fingerprint: string; account: string; accessToken: string; expiresAt: number }
+    | {
+        source: "file" | "keyring";
+        fingerprint: string;
+        account: string;
+        accessToken: string;
+        expiresAt: number;
+        projectId?: string;
+      }
     | undefined;
   let generation = 0;
 
@@ -235,13 +294,124 @@ export const makeAntigravityUsageProbe = Effect.fn("makeAntigravityUsageProbe")(
       Effect.flatMap((response) => response.json),
       Effect.timeout("10 seconds"),
     );
-  const read = Effect.gen(function* () {
+  let clientCache:
+    | { key: string; candidates: ReadonlyArray<OAuthClient>; working?: OAuthClient }
+    | undefined;
+  // One scan per agy binary version, keyed by path, size and mtime.
+  const loadClientCache = Effect.gen(function* () {
+    const binaryPath = yield* input.resolveBinaryPath ?? Effect.succeed(Option.none<string>());
+    if (Option.isNone(binaryPath)) return undefined;
+    const stat = yield* fs.stat(binaryPath.value);
+    const mtime = Option.getOrUndefined(stat.mtime)?.getTime() ?? 0;
+    const key = `${binaryPath.value}\0${stat.size}\0${mtime}`;
+    if (clientCache?.key !== key) {
+      const candidates = extractAntigravityOAuthClients(yield* fs.readFile(binaryPath.value));
+      clientCache = { key, candidates };
+    }
+    return clientCache;
+  }).pipe(Effect.orElseSucceed(() => undefined));
+  const refreshWithClients = Effect.fn("AntigravityUsageProbe.refreshWithClients")(function* (
+    refreshToken: string,
+  ) {
+    const entry = yield* loadClientCache;
+    if (!entry || entry.candidates.length === 0) {
+      return yield* Effect.fail("no refresh client" as const);
+    }
+    // Try the pair that worked last, then the rest once.
+    const ordered = [
+      ...(entry.working ? [entry.working] : []),
+      ...entry.candidates.filter((client) => client !== entry.working),
+    ];
+    for (const client of ordered) {
+      const refreshed = yield* refreshAccessToken(client, refreshToken).pipe(Effect.option);
+      if (Option.isSome(refreshed)) {
+        entry.working = client;
+        return refreshed.value;
+      }
+    }
+    return yield* Effect.fail("refresh failed" as const);
+  });
+  const refreshAccessToken = (
+    client: { clientId: string; clientSecret: string },
+    refreshToken: string,
+  ) =>
+    request(
+      HttpClientRequest.post("https://oauth2.googleapis.com/token").pipe(
+        HttpClientRequest.bodyUrlParams({
+          client_id: client.clientId,
+          client_secret: client.clientSecret,
+          refresh_token: refreshToken,
+          grant_type: "refresh_token",
+        }),
+      ),
+    ).pipe(
+      Effect.flatMap(decodeTokenResponse),
+      Effect.map((refreshed) => ({
+        accessToken: refreshed.access_token,
+        expiresInMs: refreshed.expires_in * 1000,
+      })),
+    );
+  // Read-only: never write the keychain. Windows is unsupported, so it reports the unreadable notice.
+  const readKeyringSecret = Effect.gen(function* () {
+    const command =
+      platform === "darwin"
+        ? ChildProcess.make(
+            "/usr/bin/security",
+            ["find-generic-password", "-s", KEYRING_SERVICE, "-a", KEYRING_ACCOUNT, "-w"],
+            { stdin: "ignore", stderr: "ignore" },
+          )
+        : platform === "linux"
+          ? ChildProcess.make(
+              "secret-tool",
+              ["lookup", "service", KEYRING_SERVICE, "username", KEYRING_ACCOUNT],
+              { stdin: "ignore", stderr: "ignore" },
+            )
+          : undefined;
+    if (!command) return yield* Effect.fail("unsupported platform");
+    const child = yield* spawner.spawn(command);
+    const [stdout, exitCode] = yield* Effect.all(
+      [child.stdout.pipe(Stream.decodeText(), Stream.mkString), child.exitCode],
+      { concurrency: "unbounded" },
+    );
+    if (exitCode !== 0 || stdout.trim() === "") return yield* Effect.fail("no keyring entry");
+    return decodeKeyringSecret(stdout);
+  }).pipe(Effect.scoped, Effect.timeout("25 seconds"));
+  const readKeyringCredential = readKeyringSecret.pipe(
+    Effect.flatMap(decodeKeyringPayload),
+    Effect.flatMap((payload) => {
+      const stored = payload.token ?? payload;
+      const refreshToken = stored.refresh_token || undefined;
+      const accessToken = stored.access_token || undefined;
+      if (!refreshToken && !accessToken) return Effect.fail("empty keyring token");
+      return sha256(`keyring\0${refreshToken ?? accessToken}`).pipe(
+        Effect.map((fingerprint) => ({
+          fingerprint,
+          projectId: payload.project_id || undefined,
+          mint: Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            const expiresAt = stored.expiry ? Date.parse(stored.expiry) : Number.NaN;
+            // agy refreshes its own token, so a stored access token is usually still fresh.
+            if (accessToken && expiresAt > now + 60_000) {
+              return { accessToken, expiresInMs: expiresAt - now };
+            }
+            if (!refreshToken) return yield* Effect.fail("no refresh client" as const);
+            return yield* refreshWithClients(refreshToken);
+          }),
+        })),
+      );
+    }),
+    Effect.option,
+  );
+  const read = Effect.fn("AntigravityUsageProbe.read")(function* (authenticated: boolean) {
     const startedGeneration = generation;
     const checkedAt = DateTime.formatIso(yield* DateTime.now);
     if (input.authMethod !== "oauth-personal" && input.authMethod !== "oauth-business") {
       return makeUnavailableUsageLimits({ checkedAt, reason: "unsupported" });
     }
-    if (!(yield* fs.exists(tokenPath))) {
+    const now = yield* Clock.currentTimeMillis;
+    const hasTokenFile = yield* fs.exists(tokenPath);
+    // The keychain is read only for an authenticated instance, so signed-out users never see its prompt.
+    if (!hasTokenFile && !authenticated) {
       cached = undefined;
       return makeUnavailableUsageLimits({
         checkedAt,
@@ -249,47 +419,84 @@ export const makeAntigravityUsageProbe = Effect.fn("makeAntigravityUsageProbe")(
         message: ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE,
       });
     }
-    const token = yield* fs.readFileString(tokenPath).pipe(Effect.flatMap(decodeTokenFile));
-    const fingerprint = yield* sha256(
-      `${token.client_id}\0${token.refresh_token}\0${token.project_id ?? ""}`,
-    );
-    const now = yield* Clock.currentTimeMillis;
-    let accessToken: string;
-    let account: string;
-    if (cached?.fingerprint !== fingerprint || cached.expiresAt <= now + 60_000) {
-      cached = undefined;
-      const refreshed = yield* request(
-        HttpClientRequest.post("https://oauth2.googleapis.com/token").pipe(
-          HttpClientRequest.bodyUrlParams({
-            client_id: token.client_id,
-            client_secret: token.client_secret,
-            refresh_token: token.refresh_token,
-            grant_type: "refresh_token",
-          }),
-        ),
-      ).pipe(Effect.flatMap(decodeTokenResponse));
-      accessToken = refreshed.access_token;
-      // Use Google account IDs to merge accounts across environments; refresh tokens differ per machine.
-      account = yield* request(
-        HttpClientRequest.get("https://www.googleapis.com/oauth2/v2/userinfo").pipe(
-          HttpClientRequest.setHeaders({ Authorization: `Bearer ${accessToken}` }),
-        ),
-      ).pipe(
-        Effect.flatMap(antigravityAccountFingerprint),
-        Effect.orElseSucceed(() => fingerprint),
-      );
-      if (generation === startedGeneration) {
-        cached = {
-          fingerprint,
-          account,
-          accessToken,
-          expiresAt: now + refreshed.expires_in * 1000,
-        };
-      }
+    let session: { accessToken: string; account: string; projectId?: string | undefined };
+    if (!hasTokenFile && cached?.source === "keyring" && cached.expiresAt > now + 60_000) {
+      session = cached;
     } else {
-      accessToken = cached.accessToken;
-      account = cached.account;
+      let credential: {
+        fingerprint: string;
+        projectId?: string | undefined;
+        mint: Effect.Effect<
+          { accessToken: string; expiresInMs: number },
+          "refresh failed" | "no refresh client"
+        >;
+      };
+      if (hasTokenFile) {
+        const token = yield* fs.readFileString(tokenPath).pipe(Effect.flatMap(decodeTokenFile));
+        credential = {
+          fingerprint: yield* sha256(
+            `${token.client_id}\0${token.refresh_token}\0${token.project_id ?? ""}`,
+          ),
+          projectId: token.project_id,
+          mint: refreshAccessToken(
+            { clientId: token.client_id, clientSecret: token.client_secret },
+            token.refresh_token,
+          ).pipe(Effect.mapError(() => "refresh failed" as const)),
+        };
+      } else {
+        cached = undefined;
+        const keyring = yield* readKeyringCredential;
+        if (Option.isNone(keyring)) {
+          return makeUnavailableUsageLimits({
+            checkedAt,
+            reason: "probeFailed",
+            message: ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
+          });
+        }
+        credential = keyring.value;
+      }
+      if (
+        hasTokenFile &&
+        cached?.source === "file" &&
+        cached.fingerprint === credential.fingerprint &&
+        cached.expiresAt > now + 60_000
+      ) {
+        session = cached;
+      } else {
+        cached = undefined;
+        const attempt = yield* Effect.result(credential.mint);
+        if (Result.isFailure(attempt)) {
+          if (attempt.failure !== "no refresh client") return yield* Effect.fail(attempt.failure);
+          return makeUnavailableUsageLimits({
+            checkedAt,
+            reason: "probeFailed",
+            message: ANTIGRAVITY_LIMITS_EXPIRED_MESSAGE,
+          });
+        }
+        const minted = attempt.success;
+        // Use Google account IDs to merge accounts across environments; refresh tokens differ per machine.
+        const account = yield* request(
+          HttpClientRequest.get("https://www.googleapis.com/oauth2/v2/userinfo").pipe(
+            HttpClientRequest.setHeaders({ Authorization: `Bearer ${minted.accessToken}` }),
+          ),
+        ).pipe(
+          Effect.flatMap(antigravityAccountFingerprint),
+          Effect.orElseSucceed(() => credential.fingerprint),
+        );
+        session = { accessToken: minted.accessToken, account, projectId: credential.projectId };
+        if (generation === startedGeneration) {
+          cached = {
+            source: hasTokenFile ? "file" : "keyring",
+            fingerprint: credential.fingerprint,
+            account,
+            accessToken: minted.accessToken,
+            expiresAt: now + minted.expiresInMs,
+            ...(credential.projectId ? { projectId: credential.projectId } : {}),
+          };
+        }
+      }
     }
+    const { accessToken, account } = session;
     const endpoints = ENDPOINTS[input.authMethod];
     // Merge endpoints because quota groups differ; the metered host's reading of a bucket wins.
     const fetchWindows = Effect.fn("AntigravityUsageProbe.fetchWindows")(function* <E>(
@@ -312,7 +519,7 @@ export const makeAntigravityUsageProbe = Effect.fn("makeAntigravityUsageProbe")(
                   "User-Agent": antigravityUserAgent(platform, architecture),
                 }),
                 HttpClientRequest.bodyJsonUnsafe(
-                  token.project_id ? { project: token.project_id } : {},
+                  session.projectId ? { project: session.projectId } : {},
                 ),
               ),
             ).pipe(
@@ -343,19 +550,20 @@ export const makeAntigravityUsageProbe = Effect.fn("makeAntigravityUsageProbe")(
     }
     return { ...makeUsageLimits({ checkedAt, windows }), credentialFingerprint: account };
   });
-  const probe = read.pipe(
-    Effect.provideService(Digest.Digest, crypto),
-    Effect.timeout("30 seconds"),
-    Effect.catch(() =>
-      Effect.gen(function* () {
-        return makeUnavailableUsageLimits({
-          checkedAt: DateTime.formatIso(yield* DateTime.now),
-          reason: "probeFailed",
-          message: "Could not read Antigravity limits. Refresh provider status to retry.",
-        });
-      }),
-    ),
-  );
+  const probe = (state: { readonly authenticated: boolean }) =>
+    read(state.authenticated).pipe(
+      Effect.provideService(Digest.Digest, crypto),
+      Effect.timeout("30 seconds"),
+      Effect.catch(() =>
+        Effect.gen(function* () {
+          return makeUnavailableUsageLimits({
+            checkedAt: DateTime.formatIso(yield* DateTime.now),
+            reason: "probeFailed",
+            message: "Could not read Antigravity limits. Refresh provider status to retry.",
+          });
+        }),
+      ),
+    );
   return {
     probe,
     clear: Effect.sync(() => {

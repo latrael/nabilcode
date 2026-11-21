@@ -3,14 +3,27 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Layer from "effect/Layer";
 import { describe, expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Scope from "effect/Scope";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import { ChildProcessSpawner } from "effect/process";
 import * as TestClock from "effect/testing/TestClock";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 
-import { makeAntigravityUsageProbe } from "./antigravityUsageLimits.ts";
+import {
+  ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
+  ANTIGRAVITY_LIMITS_EXPIRED_MESSAGE,
+  decodeKeyringSecret,
+  extractAntigravityOAuthClients,
+  makeAntigravityUsageProbe,
+} from "./antigravityUsageLimits.ts";
 
 const summary = {
   groups: [
@@ -65,6 +78,14 @@ const fixture = Effect.fn("AntigravityUsageTest.fixture")(function* (
     userId?: string;
     userInfoAt?: number;
     missingToken?: boolean;
+    authenticated?: boolean;
+    platform?: NodeJS.Platform;
+    /** What the stubbed keychain command prints; undefined makes the entry missing. */
+    keyringOutput?: string;
+    /** Fake agy binary contents; the probe scans it for OAuth clients. */
+    binary?: Uint8Array;
+    /** Client pairs the token endpoint accepts; others answer 400. */
+    tokenClients?: ReadonlyArray<{ clientId: string; clientSecret: string }>;
     authMethod?: "oauth-personal" | "oauth-business" | "gemini-api-key";
   } = {},
 ) {
@@ -85,6 +106,31 @@ const fixture = Effect.fn("AntigravityUsageTest.fixture")(function* (
     );
   if (!options.missingToken) yield* writeToken(options.refreshToken ?? "refresh-a");
   const requests: Array<{ url: string; body: string }> = [];
+  const keyringCommands: Array<{ command: string; args: ReadonlyArray<string> }> = [];
+  const spawner = ChildProcessSpawner.make((command) => {
+    const { command: file, args } = command as unknown as {
+      command: string;
+      args: ReadonlyArray<string>;
+    };
+    keyringCommands.push({ command: file, args });
+    return Effect.succeed(
+      ChildProcessSpawner.makeHandle({
+        pid: ChildProcessSpawner.ProcessId(1),
+        exitCode: Effect.succeed(
+          ChildProcessSpawner.ExitCode(options.keyringOutput === undefined ? 44 : 0),
+        ),
+        isRunning: Effect.succeed(false),
+        kill: () => Effect.void,
+        unref: Effect.succeed(Effect.void),
+        stdin: Sink.drain,
+        stdout: Stream.encodeText(Stream.make(options.keyringOutput ?? "")),
+        stderr: Stream.empty,
+        all: Stream.empty,
+        getInputFd: () => Sink.drain,
+        getOutputFd: () => Stream.empty,
+      }),
+    );
+  });
   const http = HttpClient.make((request, url, _signal, fiber) =>
     Effect.sync(() => {
       const init = Context.getOrUndefined(fiber.context, FetchHttpClient.RequestInit);
@@ -93,16 +139,26 @@ const fixture = Effect.fn("AntigravityUsageTest.fixture")(function* (
         request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
       requests.push({ url: request.url, body });
       if (request.url.endsWith("/token")) {
-        expect(new URLSearchParams(body).get("grant_type")).toBe("refresh_token");
+        const params = new URLSearchParams(body);
+        expect(params.get("grant_type")).toBe("refresh_token");
+        const clientRejected =
+          options.tokenClients &&
+          !options.tokenClients.some(
+            (client) =>
+              client.clientId === params.get("client_id") &&
+              client.clientSecret === params.get("client_secret"),
+          );
         return HttpClientResponse.fromWeb(
           request,
           Response.json(
             { access_token: "access-token", expires_in: 3600 },
-            { status: options.tokenStatus ?? 200 },
+            { status: clientRejected ? 400 : (options.tokenStatus ?? 200) },
           ),
         );
       }
-      expect(request.headers.authorization).toBe("Bearer access-token");
+      expect(["Bearer access-token", "Bearer stored-access"]).toContain(
+        request.headers.authorization,
+      );
       if (request.url.endsWith("/userinfo")) {
         return HttpClientResponse.fromWeb(
           request,
@@ -129,11 +185,28 @@ const fixture = Effect.fn("AntigravityUsageTest.fixture")(function* (
       ),
     ),
   );
+  const binaryPath = path.join(profileDirectory, "fake-agy");
+  if (options.binary) yield* fs.writeFile(binaryPath, options.binary);
   const usage = yield* makeAntigravityUsageProbe({
     profileDirectory,
     authMethod: options.authMethod ?? "oauth-personal",
-  }).pipe(Effect.provideService(HttpClient.HttpClient, http));
-  return { ...usage, requests, writeToken, tokenPath };
+    resolveBinaryPath: Effect.succeed(options.binary ? Option.some(binaryPath) : Option.none()),
+  }).pipe(
+    Effect.provideService(HttpClient.HttpClient, http),
+    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    Effect.provideService(HostProcess.Platform, options.platform ?? "darwin"),
+  );
+  const authenticated = options.authenticated ?? !options.missingToken;
+  return {
+    ...usage,
+    probe: usage.probe({ authenticated }),
+    probeAs: usage.probe,
+    requests,
+    keyringCommands,
+    binaryPath,
+    writeToken,
+    tokenPath,
+  };
 });
 
 describe("Antigravity subscription limits", () => {
@@ -561,14 +634,14 @@ describe("Antigravity subscription limits", () => {
 
   it.effect("re-reads changed credentials and clears cached access after sign-out", () =>
     Effect.gen(function* () {
-      const { probe, clear, requests, writeToken, tokenPath } = yield* fixture();
+      const { probe, probeAs, clear, requests, writeToken, tokenPath } = yield* fixture();
       const first = yield* probe;
       yield* writeToken("refresh-b");
       const second = yield* probe;
       expect(second.credentialFingerprint).not.toBe(first.credentialFingerprint);
       expect(requests.filter((request) => request.url.endsWith("/token"))).toHaveLength(2);
       yield* (yield* FileSystem.FileSystem).remove(tokenPath);
-      expect((yield* probe).unavailable?.reason).toBe("unsupported");
+      expect((yield* probeAs({ authenticated: false })).unavailable?.reason).toBe("unsupported");
       yield* writeToken("refresh-b");
       yield* probe;
       expect(requests.filter((request) => request.url.endsWith("/token"))).toHaveLength(3);
@@ -663,4 +736,236 @@ describe("Antigravity subscription limits", () => {
       }
     }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );
+
+  describe("agy keychain sign-in", () => {
+    const keyringToken = (overrides: Record<string, unknown> = {}) =>
+      JSON.stringify({
+        token: {
+          access_token: "stored-access",
+          token_type: "Bearer",
+          refresh_token: "stored-refresh",
+          expiry: "2026-10-09T13:00:00Z",
+        },
+        auth_method: "consumer",
+        project_id: "project-id",
+        ...overrides,
+      });
+    const keyringFixture = (options: Parameters<typeof fixture>[0] = {}) =>
+      fixture({ missingToken: true, authenticated: true, ...options });
+    const tokenRequests = (requests: ReadonlyArray<{ url: string; body: string }>) =>
+      requests.filter((request) => request.url.endsWith("/token"));
+    const run = <A, E>(
+      effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope | Digest.Digest>,
+    ) =>
+      effect.pipe(
+        Effect.scoped,
+        Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+      );
+    const at = (iso: string) => TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe(iso)));
+
+    it("decodes go-keyring prefixes, macOS hex output and raw JSON", () => {
+      const json = '{"token":{"access_token":"a"}}';
+      expect(decodeKeyringSecret(json)).toBe(json);
+      expect(decodeKeyringSecret(`${json}\n`)).toBe(json);
+      expect(decodeKeyringSecret(`go-keyring-base64:${Buffer.from(json).toString("base64")}`)).toBe(
+        json,
+      );
+      expect(decodeKeyringSecret(`go-keyring-encoded:${Buffer.from(json).toString("hex")}`)).toBe(
+        json,
+      );
+      expect(decodeKeyringSecret(Buffer.from(json).toString("hex"))).toBe(json);
+    });
+
+    it.effect("reads quota with the stored access token and caches it between probes", () =>
+      run(
+        Effect.gen(function* () {
+          yield* at("2026-10-09T12:00:00Z");
+          const { probe, requests, keyringCommands } = yield* keyringFixture({
+            keyringOutput: `go-keyring-base64:${Buffer.from(keyringToken()).toString("base64")}\n`,
+          });
+          const first = yield* probe;
+          expect(first.windows).toHaveLength(4);
+          expect(first.unavailable).toBeUndefined();
+          yield* probe;
+          expect(keyringCommands).toEqual([
+            {
+              command: "/usr/bin/security",
+              args: ["find-generic-password", "-s", "gemini", "-a", "antigravity", "-w"],
+            },
+          ]);
+          expect(tokenRequests(requests)).toHaveLength(0);
+          expect(requests.filter((request) => request.url.endsWith("/userinfo"))).toHaveLength(1);
+        }),
+      ),
+    );
+
+    // Obviously fake values shaped like agy's embedded clients; Go packs strings with no separators.
+    const fakeClient = (n: number) => ({
+      clientId: `${"9".repeat(10)}${n}-${"x".repeat(31)}${n}.apps.googleusercontent.com`,
+      clientSecret: `GOCSPX-${"y".repeat(27)}${n}`,
+    });
+    const fakeBinary = (...clients: ReadonlyArray<ReturnType<typeof fakeClient>>) =>
+      new TextEncoder().encode(
+        `\u0000junk${clients.map((c) => c.clientId).join("noise")}more${clients
+          .map((c) => c.clientSecret)
+          .join("https://")}tail\u0000`,
+      );
+    const [client1, client2] = [fakeClient(1), fakeClient(2)] as const;
+    const refreshTokens = (requests: ReadonlyArray<{ url: string; body: string }>) =>
+      tokenRequests(requests).map((request) => {
+        const params = new URLSearchParams(request.body);
+        return `${params.get("client_id")}|${params.get("client_secret")}`;
+      });
+
+    it("extracts every client id and secret pair from a packed binary", () => {
+      expect(extractAntigravityOAuthClients(fakeBinary(client1, client2))).toEqual([
+        client1,
+        { clientId: client1.clientId, clientSecret: client2.clientSecret },
+        { clientId: client2.clientId, clientSecret: client1.clientSecret },
+        client2,
+      ]);
+      expect(extractAntigravityOAuthClients(new TextEncoder().encode("nothing here"))).toEqual([]);
+    });
+
+    it.effect("refreshes an expired keychain token with the pair found in the binary", () =>
+      run(
+        Effect.gen(function* () {
+          yield* at("2026-10-09T14:00:00Z");
+          const { probe, probeAs, requests } = yield* keyringFixture({
+            keyringOutput: keyringToken(),
+            binary: fakeBinary(client1, client2),
+            tokenClients: [client2],
+          });
+          expect((yield* probe).windows).toHaveLength(4);
+          // All id x secret combinations are tried until one refreshes.
+          expect(refreshTokens(requests)).toHaveLength(4);
+          expect(refreshTokens(requests).at(-1)).toBe(
+            `${client2.clientId}|${client2.clientSecret}`,
+          );
+          yield* at("2026-10-09T16:00:00Z");
+          yield* probeAs({ authenticated: true });
+          // The pair that worked goes first on the next refresh.
+          expect(refreshTokens(requests)).toHaveLength(5);
+          expect(refreshTokens(requests).at(-1)).toBe(
+            `${client2.clientId}|${client2.clientSecret}`,
+          );
+        }),
+      ),
+    );
+
+    it.effect("scans the binary again only when its size or mtime changes", () =>
+      run(
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          yield* at("2026-10-09T14:00:00Z");
+          const { probe, requests, binaryPath } = yield* keyringFixture({
+            keyringOutput: keyringToken(),
+            binary: fakeBinary(client1),
+            tokenClients: [client1],
+          });
+          // Whole seconds avoid float rounding when restoring the mtime.
+          const mtime = DateTime.toDateUtc(DateTime.makeUnsafe("2026-01-01T00:00:00Z"));
+          const later = DateTime.toDateUtc(DateTime.makeUnsafe("2026-01-01T00:01:00Z"));
+          yield* fs.utimes(binaryPath, mtime, mtime);
+          expect((yield* probe).windows).toHaveLength(4);
+          // Same size and mtime, different clients: the cached scan is reused, so client1 still works.
+          yield* fs.writeFile(binaryPath, fakeBinary(fakeClient(3)));
+          yield* fs.utimes(binaryPath, mtime, mtime);
+          yield* at("2026-10-09T16:00:00Z");
+          expect((yield* probe).windows).toHaveLength(4);
+          expect(refreshTokens(requests).at(-1)).toBe(
+            `${client1.clientId}|${client1.clientSecret}`,
+          );
+          // A new mtime (an agy upgrade) triggers a rescan.
+          yield* fs.writeFile(binaryPath, fakeBinary(client2));
+          yield* fs.utimes(binaryPath, mtime, later);
+          yield* at("2026-10-09T18:00:00Z");
+          const limits = yield* probe;
+          expect(refreshTokens(requests).at(-1)).toBe(
+            `${client2.clientId}|${client2.clientSecret}`,
+          );
+          expect(limits.unavailable?.reason).toBe("probeFailed");
+        }),
+      ),
+    );
+
+    it.effect("falls back to the stored token when no client can be extracted", () =>
+      run(
+        Effect.gen(function* () {
+          yield* at("2026-10-09T14:00:00Z");
+          for (const binary of [undefined, new TextEncoder().encode("no clients in here")]) {
+            const { probe, requests } = yield* keyringFixture({
+              keyringOutput: keyringToken(),
+              ...(binary ? { binary } : {}),
+            });
+            expect((yield* probe).unavailable).toMatchObject({
+              reason: "probeFailed",
+              message: ANTIGRAVITY_LIMITS_EXPIRED_MESSAGE,
+            });
+            expect(requests).toEqual([]);
+          }
+          // A still-valid stored token needs no client at all.
+          yield* at("2026-10-09T12:00:00Z");
+          const fresh = yield* keyringFixture({ keyringOutput: keyringToken() });
+          expect((yield* fresh.probe).windows).toHaveLength(4);
+        }),
+      ),
+    );
+
+    it.effect("uses secret-tool on Linux", () =>
+      run(
+        Effect.gen(function* () {
+          yield* at("2026-10-09T12:00:00Z");
+          const { probe, keyringCommands } = yield* keyringFixture({
+            platform: "linux",
+            keyringOutput: keyringToken(),
+          });
+          expect((yield* probe).windows).toHaveLength(4);
+          expect(keyringCommands).toEqual([
+            {
+              command: "secret-tool",
+              args: ["lookup", "service", "gemini", "username", "antigravity"],
+            },
+          ]);
+        }),
+      ),
+    );
+
+    it.effect("reports an actionable notice when the keychain cannot be read", () =>
+      run(
+        Effect.gen(function* () {
+          for (const options of [
+            {},
+            { keyringOutput: "not json" },
+            { keyringOutput: JSON.stringify({ token: {} }) },
+            { platform: "win32" as const, keyringOutput: keyringToken() },
+          ]) {
+            const { probe, requests } = yield* keyringFixture(options);
+            expect((yield* probe).unavailable).toMatchObject({
+              reason: "probeFailed",
+              message: ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
+            });
+            expect(requests).toEqual([]);
+          }
+        }),
+      ),
+    );
+
+    it.effect("skips the keychain for a signed-out instance and prefers the token file", () =>
+      run(
+        Effect.gen(function* () {
+          const signedOut = yield* keyringFixture({
+            authenticated: false,
+            keyringOutput: keyringToken(),
+          });
+          expect((yield* signedOut.probe).unavailable?.reason).toBe("unsupported");
+          expect(signedOut.keyringCommands).toEqual([]);
+          const legacy = yield* fixture({ keyringOutput: keyringToken() });
+          expect((yield* legacy.probe).windows).toHaveLength(4);
+          expect(legacy.keyringCommands).toEqual([]);
+          expect(tokenRequests(legacy.requests)).toHaveLength(1);
+        }),
+      ),
+    );
+  });
 });

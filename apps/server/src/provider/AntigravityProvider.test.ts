@@ -22,10 +22,7 @@ import type * as EffectAcpSchema from "effect-acp/compat";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import {
-  ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
-  ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE,
-} from "./antigravityUsageLimits.ts";
+import { ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE } from "./antigravityUsageLimits.ts";
 import * as ProviderHostLive from "./ProviderHostLive.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
@@ -138,7 +135,9 @@ const makeHarness = Effect.fn("makeAntigravityProviderHarness")(function* (
     readonly auth?: { readonly type: string; readonly label: string };
     readonly enabled?: boolean;
     readonly safe?: boolean;
-    readonly probeUsage?: Effect.Effect<ServerProviderUsageLimits>;
+    readonly probeUsage?: (state: {
+      readonly authenticated: boolean;
+    }) => Effect.Effect<ServerProviderUsageLimits>;
   } = {},
 ) {
   const initialProbe = yield* Deferred.make<EffectAcpSchema.InitializeResponse, ProbeError>();
@@ -682,7 +681,7 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
           ],
         };
         const usage = yield* Ref.make(limits);
-        const harness = yield* makeHarness({ probeUsage: Ref.get(usage) });
+        const harness = yield* makeHarness({ probeUsage: () => Ref.get(usage) });
         const published = yield* harness.nextPublish((snapshot) => !!snapshot.usageLimits);
         yield* harness.initialize;
         expect((yield* published)?.usageLimits).toEqual(limits);
@@ -721,14 +720,21 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
       }),
   );
 
-  it.effect("surfaces unreadable quota credentials once the account is authenticated", () =>
+  it.effect("lets the quota probe read the keychain only once the account is authenticated", () =>
     Effect.gen(function* () {
+      const states = yield* Ref.make<ReadonlyArray<boolean>>([]);
       const harness = yield* makeHarness({
-        probeUsage: Effect.succeed({
-          checkedAt: "2026-10-09T12:00:00.000Z",
-          windows: [],
-          unavailable: { reason: "unsupported", message: ANTIGRAVITY_SIGN_IN_LIMITS_MESSAGE },
-        }),
+        probeUsage: ({ authenticated }) =>
+          Ref.update(states, (seen) => [...seen, authenticated]).pipe(
+            Effect.as({
+              checkedAt: "2026-10-09T12:00:00.000Z",
+              windows: [],
+              unavailable: {
+                reason: "probeFailed" as const,
+                message: ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
+              },
+            }),
+          ),
       });
       yield* harness.initialize;
       const unreadable = yield* harness.nextPublish(
@@ -738,6 +744,7 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
       expect((yield* unreadable)?.usageLimits?.unavailable?.message).toBe(
         ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
       );
+      expect(yield* Ref.get(states)).toEqual([true]);
     }),
   );
 
@@ -748,7 +755,7 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
       const usage = yield* Ref.make<Effect.Effect<ServerProviderUsageLimits>>(
         Effect.succeed({ checkedAt: "2026-10-09T12:00:00.000Z", windows: [] }),
       );
-      const harness = yield* makeHarness({ probeUsage: Ref.get(usage).pipe(Effect.flatten) });
+      const harness = yield* makeHarness({ probeUsage: () => Ref.get(usage).pipe(Effect.flatten) });
       yield* harness.initialize;
       yield* Ref.set(harness.probe, Effect.succeed(initializeResult));
       yield* Ref.set(
@@ -773,10 +780,11 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
       const readStarted = yield* Deferred.make<void>();
       const readResult = yield* Deferred.make<ServerProviderUsageLimits>();
       const harness = yield* makeHarness({
-        probeUsage: Ref.update(reads, (count) => count + 1).pipe(
-          Effect.andThen(Deferred.succeed(readStarted, undefined)),
-          Effect.andThen(Deferred.await(readResult)),
-        ),
+        probeUsage: () =>
+          Ref.update(reads, (count) => count + 1).pipe(
+            Effect.andThen(Deferred.succeed(readStarted, undefined)),
+            Effect.andThen(Deferred.await(readResult)),
+          ),
       });
       const published = yield* harness.nextPublish((snapshot) => !!snapshot.usageLimits);
       yield* harness.initialize;
@@ -806,7 +814,7 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
       const usage = yield* Ref.make<Effect.Effect<ServerProviderUsageLimits>>(
         Deferred.succeed(oldReadStarted, undefined).pipe(Effect.andThen(Effect.never)),
       );
-      const harness = yield* makeHarness({ probeUsage: Ref.get(usage).pipe(Effect.flatten) });
+      const harness = yield* makeHarness({ probeUsage: () => Ref.get(usage).pipe(Effect.flatten) });
       const published = yield* harness.nextPublish((snapshot) => !!snapshot.usageLimits);
       yield* harness.initialize;
       yield* Deferred.await(oldReadStarted);
