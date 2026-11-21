@@ -1328,6 +1328,7 @@ describe("shouldPostComposerNote", () => {
     freshContext: false,
     answersApproval: false,
     targetsAgentOutput: false,
+    createsWorktree: false,
   };
 
   it.each([
@@ -1343,6 +1344,7 @@ describe("shouldPostComposerNote", () => {
     ["the first message of a fresh session", { freshContext: true }, false],
     ["an approval redirect", { answersApproval: true }, false],
     ["a reply to an agent response", { targetsAgentOutput: true }, false],
+    ["the first message of a new-worktree draft", { createsWorktree: true }, false],
   ])("%s", (_name, override, note) => {
     expect(shouldPostComposerNote({ ...plain, ...override })).toBe(note);
   });

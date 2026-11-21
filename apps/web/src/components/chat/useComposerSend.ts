@@ -879,6 +879,7 @@ export function useComposerSend(input: ComposerSendInput) {
       answersApproval:
         approvalFeedbackTarget !== undefined || (sendCtx.shownPendingApprovalIds.length ?? 0) > 0,
       targetsAgentOutput: replyTo !== null || directAnnotation !== undefined,
+      createsWorktree: sendEnvMode === "worktree" && !activeThread.worktreePath,
     });
     if (!postAsNote && !sendCtx.providerAvailable) {
       notifyDirectAnnotationAttached();

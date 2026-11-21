@@ -1402,6 +1402,8 @@ export function shouldPostComposerNote(input: {
   readonly answersApproval: boolean;
   /** The draft replies to, or annotates, something an agent said or built. */
   readonly targetsAgentOutput: boolean;
+  /** The send would create the thread's worktree, which a note would skip. */
+  readonly createsWorktree: boolean;
 }): boolean {
   return !(
     input.mentionsModel ||
@@ -1413,7 +1415,8 @@ export function shouldPostComposerNote(input: {
     input.submissionIntent !== "foreground" ||
     input.freshContext ||
     input.answersApproval ||
-    input.targetsAgentOutput
+    input.targetsAgentOutput ||
+    input.createsWorktree
   );
 }
 
