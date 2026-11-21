@@ -402,7 +402,7 @@ export const makeAntigravityUsageProbe = Effect.fn("makeAntigravityUsageProbe")(
     }),
     Effect.option,
   );
-  const read = Effect.fn("AntigravityUsageProbe.read")(function* (authenticated: boolean) {
+  const read = Effect.fn("AntigravityUsageProbe.read")(function* (signedOut: boolean) {
     const startedGeneration = generation;
     const checkedAt = DateTime.formatIso(yield* DateTime.now);
     if (input.authMethod !== "oauth-personal" && input.authMethod !== "oauth-business") {
@@ -410,8 +410,8 @@ export const makeAntigravityUsageProbe = Effect.fn("makeAntigravityUsageProbe")(
     }
     const now = yield* Clock.currentTimeMillis;
     const hasTokenFile = yield* fs.exists(tokenPath);
-    // The keychain is read only for an authenticated instance, so signed-out users never see its prompt.
-    if (!hasTokenFile && !authenticated) {
+    // A signed-out instance never reads the keychain, so it never sees the access prompt.
+    if (!hasTokenFile && signedOut) {
       cached = undefined;
       return makeUnavailableUsageLimits({
         checkedAt,
@@ -550,8 +550,8 @@ export const makeAntigravityUsageProbe = Effect.fn("makeAntigravityUsageProbe")(
     }
     return { ...makeUsageLimits({ checkedAt, windows }), credentialFingerprint: account };
   });
-  const probe = (state: { readonly authenticated: boolean }) =>
-    read(state.authenticated).pipe(
+  const probe = (state: { readonly signedOut: boolean }) =>
+    read(state.signedOut).pipe(
       Effect.provideService(Digest.Digest, crypto),
       Effect.timeout("30 seconds"),
       Effect.catch(() =>

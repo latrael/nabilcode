@@ -22,7 +22,6 @@ import type * as EffectAcpSchema from "effect-acp/compat";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import { ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE } from "./antigravityUsageLimits.ts";
 import * as ProviderHostLive from "./ProviderHostLive.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
@@ -136,7 +135,7 @@ const makeHarness = Effect.fn("makeAntigravityProviderHarness")(function* (
     readonly enabled?: boolean;
     readonly safe?: boolean;
     readonly probeUsage?: (state: {
-      readonly authenticated: boolean;
+      readonly signedOut: boolean;
     }) => Effect.Effect<ServerProviderUsageLimits>;
   } = {},
 ) {
@@ -720,31 +719,32 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
       }),
   );
 
-  it.effect("lets the quota probe read the keychain only once the account is authenticated", () =>
+  it.effect("reads limits at startup, before any session confirms the sign-in", () =>
     Effect.gen(function* () {
       const states = yield* Ref.make<ReadonlyArray<boolean>>([]);
       const harness = yield* makeHarness({
-        probeUsage: ({ authenticated }) =>
-          Ref.update(states, (seen) => [...seen, authenticated]).pipe(
+        probeUsage: ({ signedOut }) =>
+          Ref.update(states, (seen) => [...seen, signedOut]).pipe(
             Effect.as({
               checkedAt: "2026-10-09T12:00:00.000Z",
-              windows: [],
-              unavailable: {
-                reason: "probeFailed" as const,
-                message: ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
-              },
-            }),
+              windows: [
+                {
+                  id: "gemini-5h",
+                  kind: "session",
+                  label: "Gemini · 5-hour",
+                  usedPercent: 40,
+                  windowDurationMins: 300,
+                },
+              ],
+            } satisfies ServerProviderUsageLimits),
           ),
       });
+      const limits = yield* harness.nextPublish(
+        (snapshot) => (snapshot.usageLimits?.windows.length ?? 0) > 0,
+      );
       yield* harness.initialize;
-      const unreadable = yield* harness.nextPublish(
-        (snapshot) => snapshot.usageLimits?.unavailable?.reason === "probeFailed",
-      );
-      yield* harness.provider.onSessionStarted(started, "/workspace");
-      expect((yield* unreadable)?.usageLimits?.unavailable?.message).toBe(
-        ANTIGRAVITY_CREDENTIALS_UNREADABLE_MESSAGE,
-      );
-      expect(yield* Ref.get(states)).toEqual([true]);
+      expect((yield* limits)?.auth.status).toBe("unknown");
+      expect(yield* Ref.get(states)).toEqual([false]);
     }),
   );
 

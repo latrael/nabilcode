@@ -78,7 +78,7 @@ const fixture = Effect.fn("AntigravityUsageTest.fixture")(function* (
     userId?: string;
     userInfoAt?: number;
     missingToken?: boolean;
-    authenticated?: boolean;
+    signedOut?: boolean;
     platform?: NodeJS.Platform;
     /** What the stubbed keychain command prints; undefined makes the entry missing. */
     keyringOutput?: string;
@@ -196,10 +196,10 @@ const fixture = Effect.fn("AntigravityUsageTest.fixture")(function* (
     Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
     Effect.provideService(HostProcess.Platform, options.platform ?? "darwin"),
   );
-  const authenticated = options.authenticated ?? !options.missingToken;
+  const signedOut = options.signedOut ?? options.missingToken === true;
   return {
     ...usage,
-    probe: usage.probe({ authenticated }),
+    probe: usage.probe({ signedOut }),
     probeAs: usage.probe,
     requests,
     keyringCommands,
@@ -641,7 +641,7 @@ describe("Antigravity subscription limits", () => {
       expect(second.credentialFingerprint).not.toBe(first.credentialFingerprint);
       expect(requests.filter((request) => request.url.endsWith("/token"))).toHaveLength(2);
       yield* (yield* FileSystem.FileSystem).remove(tokenPath);
-      expect((yield* probeAs({ authenticated: false })).unavailable?.reason).toBe("unsupported");
+      expect((yield* probeAs({ signedOut: true })).unavailable?.reason).toBe("unsupported");
       yield* writeToken("refresh-b");
       yield* probe;
       expect(requests.filter((request) => request.url.endsWith("/token"))).toHaveLength(3);
@@ -751,7 +751,7 @@ describe("Antigravity subscription limits", () => {
         ...overrides,
       });
     const keyringFixture = (options: Parameters<typeof fixture>[0] = {}) =>
-      fixture({ missingToken: true, authenticated: true, ...options });
+      fixture({ missingToken: true, signedOut: false, ...options });
     const tokenRequests = (requests: ReadonlyArray<{ url: string; body: string }>) =>
       requests.filter((request) => request.url.endsWith("/token"));
     const run = <A, E>(
@@ -843,7 +843,7 @@ describe("Antigravity subscription limits", () => {
             `${client2.clientId}|${client2.clientSecret}`,
           );
           yield* at("2026-10-09T16:00:00Z");
-          yield* probeAs({ authenticated: true });
+          yield* probeAs({ signedOut: false });
           // The pair that worked goes first on the next refresh.
           expect(refreshTokens(requests)).toHaveLength(5);
           expect(refreshTokens(requests).at(-1)).toBe(
@@ -955,7 +955,7 @@ describe("Antigravity subscription limits", () => {
       run(
         Effect.gen(function* () {
           const signedOut = yield* keyringFixture({
-            authenticated: false,
+            signedOut: true,
             keyringOutput: keyringToken(),
           });
           expect((yield* signedOut.probe).unavailable?.reason).toBe("unsupported");

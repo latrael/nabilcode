@@ -164,7 +164,7 @@ interface AntigravityProviderOptions {
   >;
   readonly supportsTextGeneration: Effect.Effect<boolean>;
   readonly probeUsage?: (state: {
-    readonly authenticated: boolean;
+    readonly signedOut: boolean;
   }) => Effect.Effect<ServerProviderUsageLimits>;
   readonly clearUsage?: Effect.Effect<void>;
   readonly maintenanceCapabilities?: ProviderMaintenanceCapabilities;
@@ -242,9 +242,9 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
     yield* FiberHandle.run(
       usageRead,
       SubscriptionRef.get(metadata).pipe(
-        // Only an authenticated instance may trigger the keychain prompt.
+        // Auth stays "unknown" until a session starts; only a known sign-out skips the keychain.
         Effect.flatMap((state) =>
-          probeUsage({ authenticated: state.draft.auth.status === "authenticated" }),
+          probeUsage({ signedOut: state.draft.auth.status === "unauthenticated" }),
         ),
         Effect.flatMap((probed) =>
           SubscriptionRef.update(metadata, (state) => ({
