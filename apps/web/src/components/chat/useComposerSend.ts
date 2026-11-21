@@ -902,7 +902,13 @@ export function useComposerSend(input: ComposerSendInput) {
       worktreePath: activeThread.worktreePath,
       activeThreadBranch,
       isScratchProject: activeProjectIsScratch,
-      resumeCompactionTokens: postAsNote ? null : resumeCompactionTokens,
+      // A note or a message to another model never resumes the thread's own cold session.
+      resumeCompactionTokens:
+        postAsNote ||
+        (promptProviderRouting?.switchedByMention === true &&
+          promptProviderRouting.modelSelection.instanceId !== ctxSelectedModelSelection.instanceId)
+          ? null
+          : resumeCompactionTokens,
       keepFullHistory,
       phase,
       dispatchMode,

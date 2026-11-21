@@ -3650,6 +3650,9 @@ export default function ChatView(props: ChatViewProps) {
                                 routeKind={routeKind}
                                 routeThreadRef={routeThreadRef}
                                 draftId={draftId}
+                                createsWorktree={
+                                  sendEnvMode === "worktree" && activeWorktreePath === null
+                                }
                                 activeThreadId={activeThreadId}
                                 activeThread={activeThread}
                                 activeThreadRuns={serverProjection?.runs ?? EMPTY_RUNS}

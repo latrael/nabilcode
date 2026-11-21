@@ -100,8 +100,10 @@ export function ComposerControlsBar(props: {
     /** The target model's own draft or remembered options, never the selected model's. */
     readonly options: ReadonlyArray<ProviderOptionSelection> | undefined;
   } | null;
-  /** False while an idle channel posts notes: no model is chosen until an @mention. */
+  /** Only a multi-model draft picks models here; everything else addresses one by @mention. */
   modelPickerVisible: boolean;
+  /** A new-worktree draft has text but no @mention, so there is nothing to run in it yet. */
+  worktreeNeedsMention: boolean;
 }) {
   const {
     environmentId,
@@ -149,6 +151,7 @@ export function ComposerControlsBar(props: {
     routingTarget,
     channelName,
     modelPickerVisible,
+    worktreeNeedsMention,
   } = props;
   const accessMatchesDefault = compatibleRuntimeMode === defaultRuntimeMode;
   const {
@@ -159,8 +162,9 @@ export function ComposerControlsBar(props: {
     overflowShowsPermissions,
     pickerOwnsModeShortcut,
   } = resolveComposerControlsOwnership({
-    // Permissions live in the model picker's footer, so without the picker the chip shows.
-    matchesDefault: (accessMatchesDefault || props.permissionsShownInStrip) && modelPickerVisible,
+    // Default permissions live in the picker's footer, so without the picker the chip shows,
+    // unless the strip under the composer already does.
+    matchesDefault: props.permissionsShownInStrip || (accessMatchesDefault && modelPickerVisible),
     collapsed: composerControlsCollapsed,
     measuredHiddenBlockCount,
   });
@@ -270,7 +274,11 @@ export function ComposerControlsBar(props: {
   // Without an @mention nothing is addressed, so the bar names the channel instead of a model.
   const routingStatus = (() => {
     if (!routingTarget) {
-      return (
+      return worktreeNeedsMention ? (
+        <span className="truncate text-2xs text-muted-foreground">
+          @ a model to start work in a new worktree
+        </span>
+      ) : (
         <span className="truncate text-2xs text-muted-foreground">
           Posting to <strong className="font-semibold">#{channelName}</strong>
           {" · "}@ a model to run an agent

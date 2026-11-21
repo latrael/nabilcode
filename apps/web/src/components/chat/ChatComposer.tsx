@@ -88,11 +88,7 @@ import {
   replaceTextRange,
 } from "../../composer-logic";
 import { channelNameForTitle, composerPlaceholderForChannel } from "../../composerPlaceholder";
-import {
-  deriveComposerSendState,
-  getAntigravitySendBlockReason,
-  shouldShowComposerModelPicker,
-} from "../ChatView.logic";
+import { deriveComposerSendState, getAntigravitySendBlockReason } from "../ChatView.logic";
 import { threadHasStarted } from "../../lib/chatThreadActions";
 import {
   dataTransferHasComposerMention,
@@ -380,6 +376,8 @@ export interface ChatComposerProps {
   supportsQuestionAttachments: boolean;
   maxFileAttachmentBytes: number | null;
   routeKind: "server" | "draft";
+  /** The next send would create the thread's worktree, which needs a model to run in it. */
+  createsWorktree: boolean;
   routeThreadRef: ScopedThreadRef;
   draftId: DraftId | null;
   multipleModelSelections: ReadonlyArray<ModelSelection> | null;
@@ -960,7 +958,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     selectedProviderEntry?.snapshot,
     selectedModel,
   );
-  const sendDisabledReason =
+  const baseSendDisabledReason =
     externalSendDisabledReason ??
     (multipleModelSelections?.length === 0 ? "Select at least one model." : null) ??
     (activePendingProgress
@@ -968,7 +966,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       : (attachmentBlockReason ??
         runtimeModeCeilingDenial ??
         (multipleModelSelections === null ? providerSendBlockReason : null)));
-  const isSendDisabled = sendDisabledReason !== null;
   const selectedProviderStatus = selectedProviderEntry?.snapshot ?? null;
   const selectedProviderSkills = selectedProviderStatus
     ? resolveProviderSkillsForCwd(selectedProviderStatus, gitCwd)
@@ -1044,6 +1041,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               stickyOptionsByModelByProvider[promptProviderRouting.modelSelection.instanceId],
           }),
         }
+      : null;
+  // No model is picked in the composer, so starting a new worktree waits for an @mention.
+  const worktreeNeedsMention =
+    props.createsWorktree &&
+    multipleModelSelections === null &&
+    mentionTarget === null &&
+    prompt.trim().length > 0;
+  const sendDisabledReason =
+    baseSendDisabledReason ??
+    (worktreeNeedsMention ? "@ a model to start work in a new worktree" : null);
+  const isSendDisabled = sendDisabledReason !== null;
+  // Compaction resumes the thread's own cold session, so only a message to that model offers it.
+  const resumeCompactionTokens =
+    mentionTarget !== null && mentionTarget.instanceId === selectedInstanceId
+      ? props.resumeCompactionTokens
       : null;
 
   const selectedModelForPickerWithCustomFallback = (() => {
@@ -1330,7 +1342,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     (!composerSendState.hasSendableContent && !showResumeAction);
   const collapsedComposerPrimaryActionLabel = showResumeAction
     ? "Resume thread"
-    : props.resumeCompactionTokens !== null && !props.keepFullHistory
+    : resumeCompactionTokens !== null && !props.keepFullHistory
       ? "Open composer to compact and send"
       : "Send message";
   const showMobilePendingAnswerActions =
@@ -2645,14 +2657,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       getModelDisabledReason={getModelDisabledReason}
       channelName={channelNameForTitle(activeThread?.title)}
       routingTarget={mentionTarget}
-      modelPickerVisible={shouldShowComposerModelPicker({
-        newThreadDraft: routeKind === "draft",
-        multipleModels: multipleModelSelections !== null,
-        messageText: prompt,
-        phase,
-        answersApproval: pendingApprovals.length > 0,
-        targetsAgentOutput: composerDraft.replyTo != null,
-      })}
+      modelPickerVisible={multipleModelSelections !== null}
+      worktreeNeedsMention={worktreeNeedsMention}
     />
   );
   // An open question owns the space above the composer. Only a machine problem,
@@ -3668,7 +3674,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     onClick={(event) => {
                       event.stopPropagation();
                       if (showResumeAction) onResume();
-                      else if (props.resumeCompactionTokens !== null && !props.keepFullHistory)
+                      else if (resumeCompactionTokens !== null && !props.keepFullHistory)
                         expandMobileComposer();
                       else submitComposer();
                     }}
@@ -3980,7 +3986,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     onResume={onResume}
                     onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
                     onInterrupt={handleInterruptPrimaryActionStable}
-                    compactBeforeSendTokens={props.resumeCompactionTokens}
+                    compactBeforeSendTokens={resumeCompactionTokens}
                     hideCompactToggle={dictationTakesFooter}
                     keepFullHistory={props.keepFullHistory}
                     onToggleKeepFullHistory={props.onToggleKeepFullHistory}
