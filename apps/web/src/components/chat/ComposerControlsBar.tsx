@@ -16,6 +16,7 @@ import {
   type ModelSelection,
   type ProviderDriverKind,
   type ProviderInstanceId,
+  type ProviderOptionSelection,
   type RuntimeMode,
   type ServerProvider,
 } from "@t3tools/contracts";
@@ -26,6 +27,7 @@ import { useApplyThreadModelPick } from "./useApplyThreadModelPick";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import {
   ComposerEffortColumn,
+  ComposerMentionEffort,
   ComposerPickerFooter,
   describeComposerEffort,
 } from "./ComposerModelEffort";
@@ -93,7 +95,13 @@ export function ComposerControlsBar(props: {
     readonly model: string;
     readonly matchedHandle: string | null;
     readonly matchedTargetLabel: string | null;
+    readonly driverKind: ProviderDriverKind;
+    readonly models: ServerProvider["models"];
+    /** The target model's own draft or remembered options, never the selected model's. */
+    readonly options: ReadonlyArray<ProviderOptionSelection> | undefined;
   } | null;
+  /** False while an idle channel posts notes: no model is chosen until an @mention. */
+  modelPickerVisible: boolean;
 }) {
   const {
     environmentId,
@@ -140,6 +148,7 @@ export function ComposerControlsBar(props: {
     getModelDisabledReason,
     routingTarget,
     channelName,
+    modelPickerVisible,
   } = props;
   const accessMatchesDefault = compatibleRuntimeMode === defaultRuntimeMode;
   const {
@@ -150,7 +159,8 @@ export function ComposerControlsBar(props: {
     overflowShowsPermissions,
     pickerOwnsModeShortcut,
   } = resolveComposerControlsOwnership({
-    matchesDefault: accessMatchesDefault || props.permissionsShownInStrip,
+    // Permissions live in the model picker's footer, so without the picker the chip shows.
+    matchesDefault: (accessMatchesDefault || props.permissionsShownInStrip) && modelPickerVisible,
     collapsed: composerControlsCollapsed,
     measuredHiddenBlockCount,
   });
@@ -228,9 +238,11 @@ export function ComposerControlsBar(props: {
       )}
       triggerSuffix={effort.suffix}
       triggerDetail={effort.detail}
-      triggerShortcuts={
-        pickerOwnsModeShortcut ? "composer.effort composer.mode" : "composer.effort"
-      }
+      // An @mention's own effort control answers composer.effort.
+      triggerShortcuts={[
+        ...(routingTarget ? [] : ["composer.effort"]),
+        ...(pickerOwnsModeShortcut ? ["composer.mode"] : []),
+      ].join(" ")}
       effortColumn={<ComposerEffortColumn traits={traitsInput} />}
       footer={
         <ComposerPickerFooter
@@ -285,6 +297,25 @@ export function ComposerControlsBar(props: {
       </span>
     );
   })();
+  // No threadRef pick callback: a mention's effort never changes the thread's own model.
+  const mentionTraitsInput = routingTarget
+    ? resolveComposerTraitsInput({
+        provider: routingTarget.driverKind,
+        instanceId: routingTarget.instanceId,
+        ...(routeKind === "server" ? { threadRef: routeThreadRef } : {}),
+        ...(routeKind === "draft" && draftId ? { draftId } : {}),
+        model: routingTarget.model,
+        models: routingTarget.models,
+        modelOptions: routingTarget.options,
+        promptUltrathink,
+        onPromptEdit,
+      })
+    : null;
+  const mentionModelOption = routingTarget
+    ? modelOptionsByInstance
+        .get(routingTarget.instanceId)
+        ?.find((option) => option.slug === routingTarget.model)
+    : undefined;
   const routingTargetBadge = (
     <div
       data-composer-routing-target={routingTarget ? "true" : "false"}
@@ -310,8 +341,28 @@ export function ComposerControlsBar(props: {
     </ComposerControl>
   ) : (
     <>
-      {composerModelPicker}
+      {modelPickerVisible ? composerModelPicker : null}
       {routingTargetBadge}
+      {routingTarget ? (
+        <ComposerMentionEffort
+          // Another model gets its own popup state.
+          key={`${routingTarget.instanceId}:${routingTarget.model}`}
+          traits={mentionTraitsInput}
+          effortDisplay={props.effortDisplay}
+          size={controlSize}
+          modelLabel={
+            mentionModelOption ? getDisplayModelName(mentionModelOption) : routingTarget.model
+          }
+          footer={
+            <ComposerPickerFooter
+              traits={mentionTraitsInput}
+              runtimeMode={compatibleRuntimeMode}
+              runtimeModeOptions={compatibleRuntimeModeOptions}
+              onRuntimeModeChange={handleRuntimeModeChange}
+            />
+          }
+        />
+      ) : null}
 
       <>
         {restingBlockDefs.map((def, index) => {

@@ -107,6 +107,7 @@ import {
   referencedThreadContexts,
 } from "./composerSend.logic";
 import { resolvePromptProviderRouting } from "./composerModelMentions";
+import { getComposerProviderState, resolveMentionTargetOptions } from "./composerProviderState";
 import { useMultipleModelSend } from "./useMultipleModelSend";
 import { type ComposerDispatchMode } from "@t3tools/client-runtime/state/composer-dispatch";
 import {
@@ -936,20 +937,23 @@ export function useComposerSend(input: ComposerSendInput) {
     const effectiveModelSelection: ModelSelection = (() => {
       if (!switchedByMention) return ctxSelectedModelSelection;
       const routed = promptProviderRouting.modelSelection;
+      const draftStore = useComposerDraftStore.getState();
+      const targetOptions = resolveMentionTargetOptions({
+        model: routed.model,
+        draftSelection:
+          draftStore.getComposerDraft(composerDraftTarget)?.modelSelectionByProvider[
+            routed.instanceId
+          ],
+        stickyOptionsByModel: draftStore.stickyOptionsByModelByProvider[routed.instanceId],
+      });
+      if (targetOptions !== undefined) {
+        return createModelSelection(routed.instanceId, routed.model, [...targetOptions]);
+      }
       if (routed.options !== undefined) return routed;
-      if (
-        routed.instanceId === ctxSelectedModelSelection.instanceId &&
+      return routed.instanceId === ctxSelectedModelSelection.instanceId &&
         routed.model === ctxSelectedModelSelection.model &&
         ctxSelectedModelSelection.options !== undefined
-      ) {
-        return ctxSelectedModelSelection;
-      }
-      const rememberedOptions =
-        useComposerDraftStore.getState().stickyOptionsByModelByProvider[routed.instanceId]?.[
-          routed.model
-        ];
-      return rememberedOptions !== undefined && rememberedOptions.length > 0
-        ? createModelSelection(routed.instanceId, routed.model, [...rememberedOptions])
+        ? ctxSelectedModelSelection
         : routed;
     })();
     const routedProviderEntry = switchedByMention
@@ -961,9 +965,15 @@ export function useComposerSend(input: ComposerSendInput) {
     const effectiveModel = switchedByMention ? effectiveModelSelection.model : ctxSelectedModel;
     const effectiveProviderModels = routedProviderEntry?.models ?? ctxSelectedProviderModels;
     const effectivePromptEffort =
-      effectiveModelSelection.instanceId === ctxSelectedModelSelection.instanceId
+      effectiveModelSelection.instanceId === ctxSelectedModelSelection.instanceId &&
+      effectiveModelSelection.model === ctxSelectedModelSelection.model
         ? ctxSelectedPromptEffort
-        : null;
+        : getComposerProviderState({
+            provider: effectiveProvider,
+            model: effectiveModel,
+            models: effectiveProviderModels,
+            modelOptions: effectiveModelSelection.options,
+          }).promptEffort;
     const messageIdForSend = newMessageId();
     const messageCreatedAt = new Date().toISOString();
     const outgoingMessageText = postAsNote

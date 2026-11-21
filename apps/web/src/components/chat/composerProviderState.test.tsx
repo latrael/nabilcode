@@ -6,7 +6,11 @@ import {
   type ProviderOptionSelection,
   type ServerProviderModel,
 } from "@t3tools/contracts";
-import { getComposerProviderState, getComposerReasoningStep } from "./composerProviderState";
+import {
+  getComposerProviderState,
+  getComposerReasoningStep,
+  resolveMentionTargetOptions,
+} from "./composerProviderState";
 import { readPromptUltrathink } from "./TraitsPicker";
 
 const PROVIDER: ProviderDriverKind = ProviderDriverKind.make("codex");
@@ -364,5 +368,46 @@ describe("getComposerReasoningStep", () => {
         selections(["reasoningEffort", to]),
       );
     }
+  });
+});
+
+describe("resolveMentionTargetOptions", () => {
+  const instanceId = ProviderInstanceId.make("claudeAgent");
+  const high = [{ id: "effort", value: "high" }] satisfies ProviderOptionSelection[];
+  const low = [{ id: "effort", value: "low" }] satisfies ProviderOptionSelection[];
+
+  it.each([
+    {
+      label: "the draft holding the target model wins",
+      draft: { instanceId, model: "opus", options: high },
+      sticky: { opus: low },
+      expected: high,
+    },
+    {
+      label: "a draft holding another model never applies",
+      draft: { instanceId, model: "sonnet", options: high },
+      sticky: { opus: low },
+      expected: low,
+    },
+    {
+      label: "no draft falls back to the remembered options",
+      draft: undefined,
+      sticky: { opus: low },
+      expected: low,
+    },
+    {
+      label: "nothing chosen keeps the model defaults",
+      draft: { instanceId, model: "opus" },
+      sticky: { sonnet: low },
+      expected: undefined,
+    },
+  ])("$label", ({ draft, sticky, expected }) => {
+    expect(
+      resolveMentionTargetOptions({
+        model: "opus",
+        draftSelection: draft,
+        stickyOptionsByModel: sticky,
+      }),
+    ).toStrictEqual(expected);
   });
 });

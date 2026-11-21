@@ -183,3 +183,20 @@ export function resolveComposerTraitsInput(
   if (!persistence) return null;
   return { ...rest, ...persistence, modelOptions: selections };
 }
+
+/**
+ * The options an @-mentioned model sends with: its draft pick when the draft holds that model,
+ * else what was remembered for it. Other models' options never apply.
+ */
+export function resolveMentionTargetOptions(input: {
+  model: string;
+  draftSelection: ModelSelection | undefined;
+  stickyOptionsByModel: Partial<Record<string, ReadonlyArray<ProviderOptionSelection>>> | undefined;
+}): ReadonlyArray<ProviderOptionSelection> | undefined {
+  const { draftSelection } = input;
+  if (draftSelection?.model === input.model && draftSelection.options?.length) {
+    return draftSelection.options;
+  }
+  const remembered = input.stickyOptionsByModel?.[input.model];
+  return remembered?.length ? remembered : undefined;
+}

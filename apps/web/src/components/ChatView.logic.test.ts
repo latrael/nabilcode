@@ -13,6 +13,7 @@ import {
   mergeDirectPreviewAnnotation,
   planComposerTurn,
   shouldPostComposerNote,
+  shouldShowComposerModelPicker,
   deriveTimelineWorking,
   snapshotComposerSend,
   withMessageContext,
@@ -1347,6 +1348,29 @@ describe("shouldPostComposerNote", () => {
     ["the first message of a new-worktree draft", { createsWorktree: true }, false],
   ])("%s", (_name, override, note) => {
     expect(shouldPostComposerNote({ ...plain, ...override })).toBe(note);
+  });
+});
+
+describe("shouldShowComposerModelPicker", () => {
+  const idleChannel = {
+    newThreadDraft: false,
+    multipleModels: false,
+    messageText: "remember to check the logs",
+    phase: "ready" as const,
+    answersApproval: false,
+    targetsAgentOutput: false,
+  };
+
+  it.each([
+    ["an idle channel posting notes", {}, false],
+    ["a new-thread draft", { newThreadDraft: true }, true],
+    ["a multi-model draft", { multipleModels: true }, true],
+    ["a running agent", { phase: "running" as const }, true],
+    ["a slash command", { messageText: "/compact" }, true],
+    ["pending approvals", { answersApproval: true }, true],
+    ["a reply to an agent response", { targetsAgentOutput: true }, true],
+  ])("%s", (_name, override, shown) => {
+    expect(shouldShowComposerModelPicker({ ...idleChannel, ...override })).toBe(shown);
   });
 });
 

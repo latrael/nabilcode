@@ -775,6 +775,7 @@ it("routes @gemini and @claude mentions in a #channel, shows @provider author he
     const status = document.querySelector('[data-composer-routing-target="false"]');
     expect(status?.textContent).toContain("Posting to");
     expect(document.querySelector('[data-composer-routing-target="true"]')).toBeNull();
+    expect(document.querySelector("[data-chat-provider-model-picker]")).toBeNull();
   });
   await userEvent.keyboard("{Enter}");
   await vi.waitFor(() =>

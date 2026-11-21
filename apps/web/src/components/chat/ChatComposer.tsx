@@ -88,7 +88,11 @@ import {
   replaceTextRange,
 } from "../../composer-logic";
 import { channelNameForTitle, composerPlaceholderForChannel } from "../../composerPlaceholder";
-import { deriveComposerSendState, getAntigravitySendBlockReason } from "../ChatView.logic";
+import {
+  deriveComposerSendState,
+  getAntigravitySendBlockReason,
+  shouldShowComposerModelPicker,
+} from "../ChatView.logic";
 import { threadHasStarted } from "../../lib/chatThreadActions";
 import {
   dataTransferHasComposerMention,
@@ -221,7 +225,11 @@ import { ComposerFooterPrimaryActions } from "./ComposerFooterControls";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 import { resolveComposerMenuActiveItemId } from "./composerMenuHighlight";
 import { buildPullRequestReferenceContext } from "../pullRequest/pullRequestDetail.logic";
-import { getComposerPromptInjectionState, getComposerReasoningStep } from "./composerProviderState";
+import {
+  getComposerPromptInjectionState,
+  getComposerReasoningStep,
+  resolveMentionTargetOptions,
+} from "./composerProviderState";
 import { readPromptUltrathink } from "./TraitsPicker";
 import { useApplyThreadModelPick } from "./useApplyThreadModelPick";
 import {
@@ -810,6 +818,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             })
           : null
       : null);
+  const stickyOptionsByModelByProvider = useComposerDraftStore(
+    (store) => store.stickyOptionsByModelByProvider,
+  );
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
   const addComposerDraftImages = useComposerDraftStore((store) => store.addImages);
   const removeComposerDraftImage = useComposerDraftStore((store) => store.removeImage);
@@ -1008,6 +1019,31 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           currentChannelModelSelection: selectedModelSelection,
           lastUsedModelByInstance,
         })
+      : null;
+  const mentionTargetEntry = promptProviderRouting?.switchedByMention
+    ? providerInstanceEntries.find(
+        (entry) => entry.instanceId === promptProviderRouting.modelSelection.instanceId,
+      )
+    : undefined;
+  const mentionTarget =
+    promptProviderRouting?.switchedByMention && mentionTargetEntry
+      ? {
+          instanceId: promptProviderRouting.modelSelection.instanceId,
+          model: promptProviderRouting.modelSelection.model,
+          matchedHandle: promptProviderRouting.matchedHandle,
+          matchedTargetLabel: promptProviderRouting.matchedTargetLabel,
+          driverKind: mentionTargetEntry.driverKind,
+          models: mentionTargetEntry.models,
+          options: resolveMentionTargetOptions({
+            model: promptProviderRouting.modelSelection.model,
+            draftSelection:
+              composerDraft.modelSelectionByProvider[
+                promptProviderRouting.modelSelection.instanceId
+              ],
+            stickyOptionsByModel:
+              stickyOptionsByModelByProvider[promptProviderRouting.modelSelection.instanceId],
+          }),
+        }
       : null;
 
   const selectedModelForPickerWithCustomFallback = (() => {
@@ -2608,16 +2644,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       modelPickerIconClassName={composerProviderState.modelPickerIconClassName}
       getModelDisabledReason={getModelDisabledReason}
       channelName={channelNameForTitle(activeThread?.title)}
-      routingTarget={
-        promptProviderRouting?.switchedByMention
-          ? {
-              instanceId: promptProviderRouting.modelSelection.instanceId,
-              model: promptProviderRouting.modelSelection.model,
-              matchedHandle: promptProviderRouting.matchedHandle,
-              matchedTargetLabel: promptProviderRouting.matchedTargetLabel,
-            }
-          : null
-      }
+      routingTarget={mentionTarget}
+      modelPickerVisible={shouldShowComposerModelPicker({
+        newThreadDraft: routeKind === "draft",
+        multipleModels: multipleModelSelections !== null,
+        messageText: prompt,
+        phase,
+        answersApproval: pendingApprovals.length > 0,
+        targetsAgentOutput: composerDraft.replyTo != null,
+      })}
     />
   );
   // An open question owns the space above the composer. Only a machine problem,

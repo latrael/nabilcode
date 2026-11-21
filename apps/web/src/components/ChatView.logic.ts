@@ -1421,6 +1421,35 @@ export function shouldPostComposerNote(input: {
 }
 
 /**
+ * Without an @mention the model picker only matters when the message would run a turn. An idle
+ * channel posting notes has no model to choose; new-thread drafts keep the picker.
+ */
+export function shouldShowComposerModelPicker(input: {
+  readonly newThreadDraft: boolean;
+  readonly multipleModels: boolean;
+  readonly messageText: string;
+  readonly phase: SessionPhase;
+  readonly answersApproval: boolean;
+  readonly targetsAgentOutput: boolean;
+}): boolean {
+  return (
+    input.newThreadDraft ||
+    !shouldPostComposerNote({
+      mentionsModel: false,
+      multipleModels: input.multipleModels,
+      messageText: input.messageText,
+      phase: input.phase,
+      dispatchMode: "auto",
+      submissionIntent: "foreground",
+      freshContext: false,
+      answersApproval: input.answersApproval,
+      targetsAgentOutput: input.targetsAgentOutput,
+      createsWorktree: false,
+    })
+  );
+}
+
+/**
  * The attachment ids a message's context records bind to: the upload id the
  * server returned, or the local id on the data-URL path.
  */

@@ -21,10 +21,15 @@ import {
 } from "../ui/menu";
 import { Switch } from "../ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import type { ComposerControlSize } from "./ComposerControl";
+import { ComposerControl, type ComposerControlSize } from "./ComposerControl";
 import { ComposerPermissionsSection, type RuntimeModeOption } from "./ComposerFooterControls";
-import { composerFloatingLayerProps, focusCheckedPermission } from "./composerEventScope";
+import {
+  composerFloatingLayerProps,
+  focusCheckedPermission,
+  takeOpenTarget,
+} from "./composerEventScope";
 import { EffortGlyph, FastBolt, resolveEffortGlyph } from "./EffortGlyph";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { DockedPickerContext } from "./ProviderModelPicker";
 import {
   getTraitsSectionVisibility,
@@ -503,6 +508,73 @@ export function ComposerEffortColumn(props: { traits: TraitsSelectionInput | nul
         {props.traits ? <EffortLevels traits={props.traits} /> : <NoEffortRow />}
       </div>
     </>
+  );
+}
+
+/**
+ * The effort control for an @-mentioned model: a trigger showing its level and a popup with that
+ * model's levels, without the model list. composer.effort opens it while a mention is active.
+ */
+export function ComposerMentionEffort(props: {
+  traits: TraitsSelectionInput | null;
+  effortDisplay: EffortDisplay;
+  size: ComposerControlSize;
+  modelLabel: string;
+  footer: ReactNode;
+}) {
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const effort = describeComposerEffort(props.traits, props.effortDisplay, props.size);
+  if (!effort.suffix) return null;
+  return (
+    <Popover
+      onOpenChangeComplete={(open) => {
+        const target = takeOpenTarget(triggerRef.current);
+        if (!open || !target) return;
+        const column = popupRef.current?.querySelector<HTMLElement>("[data-model-picker-effort]");
+        (
+          column?.querySelector<HTMLElement>(
+            '[data-effort-level][aria-checked="true"]:not(:disabled)',
+          ) ?? column?.querySelector<HTMLElement>("[data-effort-row]:not(:disabled)")
+        )?.focus({ preventScroll: true });
+      }}
+    >
+      <PopoverTrigger
+        render={
+          <ComposerControl
+            ref={triggerRef}
+            size={props.size}
+            aria-label={[`Effort for ${props.modelLabel}`, effort.detail]
+              .filter(Boolean)
+              .join(", ")}
+            data-composer-mention-effort="true"
+            data-composer-shortcut="composer.effort"
+            className="group/model-trigger font-mono text-xs"
+          />
+        }
+      >
+        {effort.suffix}
+      </PopoverTrigger>
+      <PopoverPopup
+        {...composerFloatingLayerProps}
+        ref={popupRef}
+        align="start"
+        side="top"
+        collisionAvoidance={{ side: "shift", align: "shift" }}
+        className="before:hidden"
+        padding="none"
+        touchBackdrop
+      >
+        <DockedPickerContext value={{ modelLabel: props.modelLabel }}>
+          <div className="flex max-h-(--available-height) w-56 flex-col">
+            <div data-model-picker-effort className="flex min-h-0 flex-col bg-muted/40">
+              <ComposerEffortColumn traits={props.traits} />
+            </div>
+            {props.footer}
+          </div>
+        </DockedPickerContext>
+      </PopoverPopup>
+    </Popover>
   );
 }
 
