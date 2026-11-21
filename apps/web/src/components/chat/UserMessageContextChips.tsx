@@ -3,7 +3,7 @@ import { isSvgAttachment } from "@t3tools/shared/image";
 import { useRenderedAppearance } from "../../hooks/useTheme";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { ReadOnlySourcePreview } from "../files/AttachmentFilePreview";
-import { useRightPanelStore } from "~/rightPanelStore";
+import { openFileLink } from "~/cabinet/board/openFileLink";
 import { COMPOSER_CONTEXT_KINDS } from "@t3tools/contracts";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { use, type ReactNode } from "react";
@@ -80,8 +80,7 @@ function UserMessageMentionChip(props: {
             aria-label={`Preview ${props.record.path}`}
             data-markdown-copy={props.copyMarkdown}
             onClick={() => {
-              if (ctx.threadRef)
-                useRightPanelStore.getState().openFile(ctx.threadRef, props.record.path);
+              if (ctx.threadRef) openFileLink(ctx.threadRef, props.record.path);
             }}
           >
             <WorkspaceEntryIcon

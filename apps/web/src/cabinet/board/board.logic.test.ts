@@ -110,7 +110,7 @@ describe("swap and move", () => {
   });
 
   it("never docks the primary by moving a docked card onto it", () => {
-    const docked = open(applyPreset(DEFAULT_LAYOUT, "split"), "a.md", "b.md");
+    const docked = open(applyPreset(DEFAULT_LAYOUT, "bento"), "a.md", "b.md", "c.md");
     const dockedId = docked.cards.find((card) => !card.slot)!.id;
     expect(moveCardToSlot(docked, dockedId, 0)).toBe(docked);
   });
@@ -129,10 +129,13 @@ describe("openCard", () => {
     expect(slotOf(layout, "markdown:b.md")).toEqual(placementsForPreset("grid")[2]);
   });
 
-  it("bumps focus to bento when full", () => {
-    const layout = open(DEFAULT_LAYOUT, "a.md");
-    expect(layout.preset).toBe("bento");
-    expect(placedIds(layout)).toEqual(["primary", "markdown:a.md"]);
+  it("snaps focus to split for the first card, then split to bento for the second", () => {
+    const first = open(DEFAULT_LAYOUT, "a.md");
+    expect(first.preset).toBe("split");
+    expect(placedIds(first)).toEqual(["primary", "markdown:a.md"]);
+    const second = openCard(first, md("b.md"));
+    expect(second.preset).toBe("bento");
+    expect(placedIds(second)).toEqual(["primary", "markdown:a.md", "markdown:b.md"]);
   });
 
   it("replaces the oldest non-primary card, docking it", () => {
@@ -166,6 +169,18 @@ describe("closeCard", () => {
     const next = closeCard(layout, "markdown:b.md");
     expect(ids(next)).not.toContain("markdown:b.md");
     expect(slotOf(next, "markdown:a.md")).toEqual(slotOf(layout, "markdown:b.md"));
+  });
+
+  it("collapses to focus once only the primary card is left", () => {
+    const next = closeCard(open(DEFAULT_LAYOUT, "a.md"), "markdown:a.md");
+    expect(next.preset).toBe("focus");
+    expect(placedIds(next)).toEqual(["primary"]);
+    expect(slotOf(next, "primary")).toEqual(placementsForPreset("focus")[0]);
+  });
+
+  it("keeps the preset while another card remains", () => {
+    const next = closeCard(open(DEFAULT_LAYOUT, "a.md", "b.md"), "markdown:a.md");
+    expect(next.preset).toBe("bento");
   });
 
   it("ignores unknown ids", () => {

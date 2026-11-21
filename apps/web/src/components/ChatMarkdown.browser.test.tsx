@@ -555,7 +555,11 @@ describe("ChatMarkdown skill chips", () => {
     await expect.element(page.getByText("Reviews the current branch.")).toBeVisible();
     await userEvent.click(page.getByRole("button", { name: "View instructions" }));
 
-    expect(openFile).toHaveBeenCalledExactlyOnceWith(threadRef, "/skills/review/SKILL.md");
+    expect(openFile).toHaveBeenCalledExactlyOnceWith(
+      threadRef,
+      "/skills/review/SKILL.md",
+      undefined,
+    );
   });
 
   it("names a mentioned model as its provider does, without a thread", async () => {

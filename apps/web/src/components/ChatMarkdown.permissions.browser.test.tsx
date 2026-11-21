@@ -12,7 +12,7 @@ import { expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
 import { act, render } from "../../test/render";
-import { useRightPanelStore } from "../rightPanelStore";
+import { useBoardStore } from "../cabinet/board/boardStore";
 
 const state = vi.hoisted(() => ({
   allowed: true,
@@ -76,7 +76,7 @@ vi.mock(import("../state/server"), async (original) => {
 });
 vi.mock(import("../state/entities"), async (original) => ({
   ...(await original()),
-  readThreadShell: (() => ({ pullRequests: state.pullRequests })) as never,
+  readThreadShell: (() => ({ projectId, pullRequests: state.pullRequests })) as never,
   useProjects: (() => [{ id: projectId, environmentId: threadRef.environmentId }]) as never,
 }));
 vi.mock(import("../remoteOpen"), async (original) => ({
@@ -140,9 +140,9 @@ function setup() {
   state.openFile.mockReset();
   state.openExternal.mockReset().mockResolvedValue(undefined);
   state.copy.mockReset().mockResolvedValue(undefined);
-  const { openFile } = useRightPanelStore.getState();
-  useRightPanelStore.setState({ openFile: state.openFile });
-  stack.defer(() => useRightPanelStore.setState({ openFile }));
+  const { openFile } = useBoardStore.getState();
+  useBoardStore.setState({ openFile: state.openFile });
+  stack.defer(() => useBoardStore.setState({ openFile }));
   stack.use(vi.spyOn(navigator.clipboard, "writeText").mockImplementation(state.copy));
   stack.use(
     vi.spyOn(navigator.clipboard, "write").mockImplementation(async (items) => {
@@ -194,7 +194,10 @@ it("removes host actions after revocation while keeping file preview and copying
   expect(offeredActions()).toEqual(["copy-relative", "copy-full"]);
   await vi.waitFor(() => expect(state.copy).toHaveBeenCalledWith("/work/docs/readme.md"));
   await act(async () => screen.anchor().click());
-  expect(state.openFile).toHaveBeenCalledWith(threadRef, "docs/readme.md", undefined);
+  expect(state.openFile).toHaveBeenCalledWith(
+    `${threadRef.environmentId}:${projectId}`,
+    "docs/readme.md",
+  );
   expect(state.openEditor).not.toHaveBeenCalled();
 });
 

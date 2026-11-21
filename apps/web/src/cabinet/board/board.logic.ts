@@ -130,8 +130,8 @@ export const openCard = (
 
   let base = layout;
   let free = firstFreeIndex(base);
-  if (free < 0 && base.preset === "focus") {
-    base = applyPreset(base, "bento");
+  if (free < 0 && (base.preset === "focus" || base.preset === "split")) {
+    base = applyPreset(base, base.preset === "focus" ? "split" : "bento");
     free = firstFreeIndex(base);
   }
   const others = base.cards.filter((card) => card.id !== existing?.id);
@@ -157,6 +157,9 @@ export const closeCard = (layout: BoardLayout, cardId: string): BoardLayout => {
   const closing = layout.cards.find((card) => card.id === cardId);
   if (!closing || cardId === PRIMARY_CARD_ID) return layout;
   const remaining = layout.cards.filter((card) => card !== closing);
+  if (remaining.length === 1 && remaining[0]!.id === PRIMARY_CARD_ID) {
+    return applyPreset({ ...layout, cards: remaining }, "focus");
+  }
   const promoted = remaining.find((card) => card.slot === null);
   return tidy({
     ...layout,
