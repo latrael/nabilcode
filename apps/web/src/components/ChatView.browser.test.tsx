@@ -431,7 +431,7 @@ it("a rejected send leaves the timeline when a new draft was typed meanwhile", a
   const thread = threadWithHistory("rejected-send", 1);
   using _environment = installFakeEnvironment([thread], {
     acceptCommands: true,
-    holdCommand: (command) => command.type === "message.dispatch",
+    holdCommand: (command) => command.type === "message.post",
   });
   __setClientSettingsForTests({
     ...DEFAULT_CLIENT_SETTINGS,
@@ -451,7 +451,7 @@ it("a rejected send leaves the timeline when a new draft was typed meanwhile", a
   await userEvent.click(editor);
   await userEvent.keyboard("Failed prompt{Enter}");
   await vi.waitFor(() =>
-    expect(dispatchedCommands().map((command) => command.type)).toContain("message.dispatch"),
+    expect(dispatchedCommands().map((command) => command.type)).toContain("message.post"),
   );
   await expect.element(page.getByText("Failed prompt")).toBeVisible();
   await userEvent.keyboard("Next draft");
@@ -769,6 +769,25 @@ it("routes @gemini and @claude mentions in a #channel, shows @provider author he
   await expect.element(cleanOutButton).toBeVisible();
 
   const editor = page.getByTestId("composer-editor");
+  await userEvent.click(editor);
+  await userEvent.keyboard("remember to review the diff");
+  await vi.waitFor(() => {
+    const status = document.querySelector('[data-composer-routing-target="false"]');
+    expect(status?.textContent).toContain("Posting to");
+    expect(document.querySelector('[data-composer-routing-target="true"]')).toBeNull();
+  });
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() =>
+    expect(dispatchedCommands()).toContainEqual(
+      expect.objectContaining({
+        type: "message.post",
+        threadId: channel.id,
+        text: "remember to review the diff",
+      }),
+    ),
+  );
+  expect(dispatchedCommands().some((command) => command.type === "message.dispatch")).toBe(false);
+
   await userEvent.click(editor);
   await userEvent.keyboard("@gemini summarize the previous reply");
   await vi.waitFor(() => {

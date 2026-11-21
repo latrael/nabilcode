@@ -12,6 +12,7 @@ import {
   buildExpiredTerminalContextToastCopy,
   mergeDirectPreviewAnnotation,
   planComposerTurn,
+  shouldPostComposerNote,
   deriveTimelineWorking,
   snapshotComposerSend,
   withMessageContext,
@@ -1314,6 +1315,37 @@ describe("deriveTimelineWorking", () => {
       ).toBe(false);
     },
   );
+});
+
+describe("shouldPostComposerNote", () => {
+  const plain = {
+    mentionsModel: false,
+    multipleModels: false,
+    messageText: "remember to check the logs",
+    phase: "ready" as const,
+    dispatchMode: "auto" as const,
+    submissionIntent: "foreground" as const,
+    freshContext: false,
+    answersApproval: false,
+    targetsAgentOutput: false,
+  };
+
+  it.each([
+    ["a plain message", {}, true],
+    ["a plain message while disconnected", { phase: "disconnected" as const }, true],
+    ["an @mention", { mentionsModel: true }, false],
+    ["a multi-model draft", { multipleModels: true }, false],
+    ["a slash command", { messageText: "  /compact" }, false],
+    ["a message to a running agent", { phase: "running" as const }, false],
+    ["a message while connecting", { phase: "connecting" as const }, false],
+    ["an explicit queue", { dispatchMode: "queue" as const }, false],
+    ["a background start", { submissionIntent: "background" as const }, false],
+    ["the first message of a fresh session", { freshContext: true }, false],
+    ["an approval redirect", { answersApproval: true }, false],
+    ["a reply to an agent response", { targetsAgentOutput: true }, false],
+  ])("%s", (_name, override, note) => {
+    expect(shouldPostComposerNote({ ...plain, ...override })).toBe(note);
+  });
 });
 
 describe("planComposerTurn", () => {

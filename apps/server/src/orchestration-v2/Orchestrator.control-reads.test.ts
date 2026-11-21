@@ -3089,6 +3089,83 @@ it.effect(
     }).pipe(Effect.provide(layerTest)),
 );
 
+it.effect("message.post stores runless notes without a provider and clean-out clears them", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const outbox = yield* EffectOutbox.EffectOutboxV2;
+    const threadId = ThreadId.make("thread:notes-channel");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-notes-channel"),
+      threadId,
+      projectId: ProjectId.make("project:general"),
+      title: "#notes",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    const created = yield* projections.getThreadProjection(threadId);
+    const post = (id: string, text: string) =>
+      orchestrator.dispatch({
+        type: "message.post",
+        commandId: CommandId.make(`post-${id}`),
+        threadId,
+        messageId: MessageId.make(`message:${id}`),
+        text,
+        attachments: [],
+        createdBy: "user",
+        creationSource: "web",
+      });
+    yield* post("note-1", "remember to check the logs");
+    yield* post("note-2", "https://example.com/spec");
+
+    const posted = yield* projections.getThreadProjection(threadId);
+    assert.deepEqual(posted.runs, []);
+    assert.deepEqual(
+      posted.messages.map((message) => [message.role, message.runId, message.text]),
+      [
+        ["user", null, "remember to check the logs"],
+        ["user", null, "https://example.com/spec"],
+      ],
+    );
+    assert.deepEqual(
+      posted.turnItems.map((item) => [item.type, item.runId, item.ordinal]),
+      [
+        ["user_message", null, 1],
+        ["user_message", null, 2],
+      ],
+    );
+    assert.deepEqual(
+      posted.turnItems.map((item) => (item.type === "user_message" ? item.inputIntent : null)),
+      ["note", "note"],
+    );
+    assert.isTrue(
+      DateTime.toEpochMillis(posted.thread.updatedAt) >=
+        DateTime.toEpochMillis(created.thread.updatedAt),
+    );
+    assert.deepEqual(
+      (yield* outbox.listByCommandId(CommandId.make("post-note-1"))).map(
+        (effect) => effect.request,
+      ),
+      [],
+    );
+
+    yield* orchestrator.dispatch({
+      type: "thread.clean-out",
+      commandId: CommandId.make("clean-out-notes"),
+      threadId,
+    });
+    const cleaned = yield* projections.getThreadProjection(threadId);
+    assert.deepEqual(cleaned.messages, []);
+    assert.deepEqual(cleaned.turnItems, []);
+  }).pipe(Effect.provide(layerTest)),
+);
+
 it.effect(
   "message.dispatch with modelSelection switches sticky channel provider, hands off prior context, and keeps follow-up turns sticky",
   () => {

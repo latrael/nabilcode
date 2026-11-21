@@ -8,6 +8,7 @@ import {
   deriveComposerSendState,
   boundAttachmentIds,
   formatOutgoingPrompt,
+  shouldPostComposerNote,
   optimisticMessageAttachments,
   planComposerTurn,
   sendTitleFallbackLabels,
@@ -548,7 +549,7 @@ export function useComposerSend(input: ComposerSendInput) {
       onAdvanceActivePendingUserInput();
       return;
     }
-    if (!sendCtx?.providerAvailable) {
+    if (!sendCtx) {
       notifyDirectAnnotationAttached();
       return;
     }
@@ -855,6 +856,34 @@ export function useComposerSend(input: ComposerSendInput) {
       cabinetItems: composerCabinetItemsSnapshot,
       messageText: messageTextForSend,
     } = sendSnapshot;
+    const promptProviderRouting =
+      multipleModelSelections === null && sendCtx.modelOptionsByInstance
+        ? resolvePromptProviderRouting({
+            prompt: messageTextForSend,
+            instanceEntries: sendCtx.routableProviderInstanceEntries ?? providerInstanceEntries,
+            modelOptionsByInstance: sendCtx.modelOptionsByInstance,
+            currentChannelModelSelection: ctxSelectedModelSelection,
+            ...(sendCtx.lastUsedModelByInstance
+              ? { lastUsedModelByInstance: sendCtx.lastUsedModelByInstance }
+              : {}),
+          })
+        : null;
+    const postAsNote = shouldPostComposerNote({
+      mentionsModel: promptProviderRouting?.switchedByMention === true,
+      multipleModels: multipleModelSelections !== null,
+      messageText: messageTextForSend,
+      phase,
+      dispatchMode,
+      submissionIntent,
+      freshContext: freshArm !== undefined,
+      answersApproval:
+        approvalFeedbackTarget !== undefined || (sendCtx.shownPendingApprovalIds.length ?? 0) > 0,
+      targetsAgentOutput: replyTo !== null || directAnnotation !== undefined,
+    });
+    if (!postAsNote && !sendCtx.providerAvailable) {
+      notifyDirectAnnotationAttached();
+      return;
+    }
     const {
       missingWorktreeBaseBranch,
       baseBranchForWorktree,
@@ -866,11 +895,12 @@ export function useComposerSend(input: ComposerSendInput) {
       sendQueuesBehindSetup,
       isServerThread,
       activeMessageCount,
-      sendEnvMode,
+      // A note runs nothing, so it needs no worktree and no stale-session compaction.
+      sendEnvMode: postAsNote ? "local" : sendEnvMode,
       worktreePath: activeThread.worktreePath,
       activeThreadBranch,
       isScratchProject: activeProjectIsScratch,
-      resumeCompactionTokens,
+      resumeCompactionTokens: postAsNote ? null : resumeCompactionTokens,
       keepFullHistory,
       phase,
       dispatchMode,
@@ -901,18 +931,6 @@ export function useComposerSend(input: ComposerSendInput) {
     const outgoingMessageContext = buildOutgoingMessageContext(
       composerAttachmentsSnapshot.map((attachment) => attachment.id),
     );
-    const promptProviderRouting =
-      multipleModelSelections === null && sendCtx.modelOptionsByInstance
-        ? resolvePromptProviderRouting({
-            prompt: messageTextForSend,
-            instanceEntries: sendCtx.routableProviderInstanceEntries ?? providerInstanceEntries,
-            modelOptionsByInstance: sendCtx.modelOptionsByInstance,
-            currentChannelModelSelection: ctxSelectedModelSelection,
-            ...(sendCtx.lastUsedModelByInstance
-              ? { lastUsedModelByInstance: sendCtx.lastUsedModelByInstance }
-              : {}),
-          })
-        : null;
     const switchedByMention = promptProviderRouting?.switchedByMention === true;
     const effectiveModelSelection: ModelSelection = (() => {
       if (!switchedByMention) return ctxSelectedModelSelection;
@@ -947,14 +965,16 @@ export function useComposerSend(input: ComposerSendInput) {
         : null;
     const messageIdForSend = newMessageId();
     const messageCreatedAt = new Date().toISOString();
-    const outgoingMessageText = formatOutgoingPrompt({
-      provider: effectiveProvider,
-      model: effectiveModel,
-      models: effectiveProviderModels,
-      effort: effectivePromptEffort,
-      text: messageTextForSend || ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
-    });
-    if (composerRef.current?.validateProviderInput(outgoingMessageText) === false) {
+    const outgoingMessageText = postAsNote
+      ? messageTextForSend
+      : formatOutgoingPrompt({
+          provider: effectiveProvider,
+          model: effectiveModel,
+          models: effectiveProviderModels,
+          effort: effectivePromptEffort,
+          text: messageTextForSend || ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
+        });
+    if (!postAsNote && composerRef.current?.validateProviderInput(outgoingMessageText) === false) {
       return;
     }
 
@@ -1233,7 +1253,7 @@ export function useComposerSend(input: ComposerSendInput) {
     }
     if (sendQueuesBehindSetup) {
       setSetupQueueSendThreadKey(activeThreadKey);
-    } else {
+    } else if (!postAsNote) {
       beginLocalDispatch({
         preparingWorktree: multipleModelSelections !== null || Boolean(baseBranchForWorktree),
         submissionIntent:
@@ -1289,11 +1309,13 @@ export function useComposerSend(input: ComposerSendInput) {
       createdAt: messageCreatedAt,
       updatedAt: messageCreatedAt,
       streaming: false,
-      ...(shouldQueueBehindActiveRun
-        ? { inputIntent: "queued_turn" as const }
-        : phase === "running" && dispatchMode === "steer"
-          ? { inputIntent: "steer" as const }
-          : {}),
+      ...(postAsNote
+        ? { inputIntent: "note" as const }
+        : shouldQueueBehindActiveRun
+          ? { inputIntent: "queued_turn" as const }
+          : phase === "running" && dispatchMode === "steer"
+            ? { inputIntent: "steer" as const }
+            : {}),
     };
     // After leaving the thread during an upload, its previews were already released and the
     // message is never shown, so tracking them would keep them alive past the thread.
@@ -1350,7 +1372,7 @@ export function useComposerSend(input: ComposerSendInput) {
 
     let failure: AtomCommandResult<unknown, unknown> | null = null;
 
-    if (failure === null && isServerThread) {
+    if (failure === null && isServerThread && !postAsNote) {
       const settingsResult = await persistThreadSettingsForNextTurn({
         threadId: threadIdForSend,
         createdAt: messageCreatedAt,
@@ -1462,7 +1484,7 @@ export function useComposerSend(input: ComposerSendInput) {
           titleSeed: title,
           runtimeMode,
           interactionMode: DEFAULT_INTERACTION_MODE,
-          dispatchMode: turnDispatchMode,
+          dispatchMode: postAsNote ? "note" : turnDispatchMode,
           ...(freshArm === undefined ? {} : { freshContext: true }),
           ...(bootstrap ? { bootstrap } : {}),
           createdAt: messageCreatedAt,
@@ -1502,13 +1524,15 @@ export function useComposerSend(input: ComposerSendInput) {
             checkoutPullRequestUrl,
           );
         }
-        setKeepFullHistory(routeThreadKey, false);
-        if (freshArm !== undefined) disarmFreshSession(routeThreadKey, freshArm);
-        clearUsageLimitsFor(routeThreadKey);
+        if (!postAsNote) {
+          setKeepFullHistory(routeThreadKey, false);
+          if (freshArm !== undefined) disarmFreshSession(routeThreadKey, freshArm);
+          clearUsageLimitsFor(routeThreadKey);
+        }
         if (turnUsesAttachmentUploads) {
           releaseDraftAttachments(composerAttachmentsSnapshot);
         }
-        acknowledgeActiveThreadWoke();
+        if (!postAsNote) acknowledgeActiveThreadWoke();
         // A draft still on screen finalizes once its thread route takes over.
         if (sentDraftThreadRef) {
           if (backgroundDraftOpened || currentRouteThreadKeyRef.current !== routeThreadKey) {
@@ -1540,7 +1564,7 @@ export function useComposerSend(input: ComposerSendInput) {
         ) {
           handleNewThreadInActiveProject();
         }
-        void recordPromptSent(environmentId);
+        if (!postAsNote) void recordPromptSent(environmentId);
       }
     }
 

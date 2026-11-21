@@ -95,6 +95,7 @@ export function withCreationProvenance(
       return { ...rest, ...provenance };
     }
     case "message.dispatch":
+    case "message.post":
     case "thread.fork":
     case "thread.merge_back":
     case "delegated_task.request":

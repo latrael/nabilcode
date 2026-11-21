@@ -1,4 +1,3 @@
-import { getProviderHandle } from "@t3tools/client-runtime/composer-model-mentions";
 import type { ChatComposerProps } from "./ChatComposer";
 import type { PromptUltrathink } from "./TraitsPicker";
 import type { ProviderInstanceEntry } from "../../providerInstances";
@@ -88,6 +87,7 @@ export function ComposerControlsBar(props: {
   onModelPickerOpenChange: (open: boolean) => void;
   modelPickerIconClassName: string | undefined;
   getModelDisabledReason: ChatComposerProps["getModelDisabledReason"];
+  channelName: string;
   routingTarget?: {
     readonly instanceId: ProviderInstanceId;
     readonly model: string;
@@ -139,6 +139,7 @@ export function ComposerControlsBar(props: {
     modelPickerIconClassName,
     getModelDisabledReason,
     routingTarget,
+    channelName,
   } = props;
   const accessMatchesDefault = compatibleRuntimeMode === defaultRuntimeMode;
   const {
@@ -254,40 +255,44 @@ export function ComposerControlsBar(props: {
       onOpenProviderSetup={onOpenProviderSetup}
     />
   );
-  const routingTargetBadge = (() => {
-    const target = routingTarget ?? {
-      instanceId: selectedInstanceId,
-      model: selectedModel,
-      matchedHandle: getProviderHandle({
-        driverKind: selectedProvider,
-        instanceId: selectedInstanceId,
-        model: selectedModel,
-      }),
-      matchedTargetLabel: null,
-    };
+  // Without an @mention nothing is addressed, so the bar names the channel instead of a model.
+  const routingStatus = (() => {
+    if (!routingTarget) {
+      return (
+        <span className="truncate text-2xs text-muted-foreground">
+          Posting to <strong className="font-semibold">#{channelName}</strong>
+          {" · "}@ a model to run an agent
+        </span>
+      );
+    }
     const targetModelOption = modelOptionsByInstance
-      .get(target.instanceId)
-      ?.find((option) => option.slug === target.model);
-    const modelLabel = targetModelOption ? getDisplayModelName(targetModelOption) : target.model;
-    const handle = target.matchedHandle?.trim() || null;
+      .get(routingTarget.instanceId)
+      ?.find((option) => option.slug === routingTarget.model);
+    const modelLabel = targetModelOption
+      ? getDisplayModelName(targetModelOption)
+      : routingTarget.model;
+    const handle = routingTarget.matchedHandle?.trim() || null;
     const targetLabel =
-      target.matchedTargetLabel?.trim() ||
+      routingTarget.matchedTargetLabel?.trim() ||
       (handle === null
         ? modelLabel
         : handle.includes("·") || handle.toLowerCase().includes(modelLabel.toLowerCase())
           ? handle
           : `${handle} · ${modelLabel}`);
     return (
-      <div
-        data-composer-routing-target="true"
-        className="ms-1 flex min-w-0 max-w-56 shrink items-center"
-      >
-        <span className="truncate text-2xs text-muted-foreground">
-          Replying to <strong className="font-semibold">{targetLabel}</strong>
-        </span>
-      </div>
+      <span className="truncate text-2xs text-muted-foreground">
+        Replying to <strong className="font-semibold">{targetLabel}</strong>
+      </span>
     );
   })();
+  const routingTargetBadge = (
+    <div
+      data-composer-routing-target={routingTarget ? "true" : "false"}
+      className="ms-1 flex min-w-0 max-w-72 shrink items-center"
+    >
+      {routingStatus}
+    </div>
+  );
   return showProviderUnavailable ? (
     <ComposerControl
       type="button"

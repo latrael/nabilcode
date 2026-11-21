@@ -157,6 +157,7 @@ export const dispatchCommand = Effect.fn("ThreadMessageIntake.dispatchCommand")(
   }
   if (
     command.type !== "message.dispatch" &&
+    command.type !== "message.post" &&
     (command.type !== "queued-run.edit" || command.attachments === undefined)
   )
     return yield* threads.dispatch(command);

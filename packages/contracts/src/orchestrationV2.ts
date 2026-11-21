@@ -1583,6 +1583,8 @@ export const OrchestrationV2UserMessageInputIntent = Schema.Literals([
   "queued_turn",
   "steer",
   "promoted_queued_to_steer",
+  /** Posted to the thread without starting a run, until an @mention addresses a model. */
+  "note",
 ]);
 export type OrchestrationV2UserMessageInputIntent =
   typeof OrchestrationV2UserMessageInputIntent.Type;
@@ -3411,6 +3413,16 @@ export const OrchestrationV2Command = Schema.Union([
       Schema.Struct({ type: Schema.Literal("queue_after_active") }),
       Schema.Struct({ type: Schema.Literal("start_immediately") }),
     ]),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("message.post"),
+    ...OrchestrationV2CreationFields,
+    commandId: CommandId,
+    threadId: ThreadId,
+    messageId: MessageId,
+    text: Schema.String,
+    context: Schema.optional(OrchestrationMessageContext),
+    attachments: Schema.Array(ChatAttachment),
   }),
   Schema.Struct({
     type: Schema.Literal("prepared-run.release"),

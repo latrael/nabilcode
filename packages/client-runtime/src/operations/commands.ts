@@ -179,6 +179,35 @@ interface StartThreadBootstrap {
   readonly runSetupScript?: boolean;
 }
 
+function launchWorkspaceStrategy(
+  bootstrap: StartThreadBootstrap["createThread"],
+  prepareWorktree: StartThreadBootstrap["prepareWorktree"],
+) {
+  if (prepareWorktree !== undefined) {
+    return {
+      type: "worktree" as const,
+      baseRef: prepareWorktree.baseBranch,
+      ...(prepareWorktree.branch === undefined ? {} : { branch: prepareWorktree.branch }),
+      ...(prepareWorktree.startFromOrigin === undefined
+        ? {}
+        : { startFromOrigin: prepareWorktree.startFromOrigin }),
+    };
+  }
+  if (bootstrap?.worktreePath) {
+    return {
+      type: "existing_worktree" as const,
+      worktreePath: bootstrap.worktreePath,
+      ...(bootstrap.branch === null ? {} : { branch: bootstrap.branch }),
+    };
+  }
+  return {
+    type: "root" as const,
+    ...(bootstrap?.branch === null || bootstrap?.branch === undefined
+      ? {}
+      : { branch: bootstrap.branch }),
+  };
+}
+
 export interface StartThreadTurnInput extends ThreadCommandInput {
   readonly manualContinuationOfRunId?: RunId;
   readonly message: {
@@ -195,7 +224,8 @@ export interface StartThreadTurnInput extends ThreadCommandInput {
   readonly interactionMode: ProviderInteractionMode;
   readonly bootstrap?: StartThreadBootstrap;
   readonly sourceProposedPlan?: { readonly threadId: ThreadId; readonly planId: PlanId };
-  readonly dispatchMode?: "auto" | "queue" | "steer" | "restart" | "start";
+  /** `note` posts the message to the thread without starting a run. */
+  readonly dispatchMode?: "auto" | "queue" | "steer" | "restart" | "start" | "note";
   /** Start a new provider session; needs the server's `freshContext` capability. */
   readonly freshContext?: boolean;
   /** Defaults to true. Callers with their own retry queue opt out so a dead socket fails fast. */
@@ -766,32 +796,38 @@ export const startThreadTurn = Effect.fn("EnvironmentCommands.startThreadTurn")(
   );
   const bootstrap = input.bootstrap?.createThread;
   const prepareWorktree = input.bootstrap?.prepareWorktree;
+  if (input.dispatchMode === "note") {
+    // A note starts no run, so a new thread only needs to exist before the message lands in it.
+    if (bootstrap !== undefined) {
+      yield* request(ORCHESTRATION_V2_WS_METHODS.launchThread, {
+        commandId: CommandId.make(`${commandId}:thread`),
+        creationSource: input.creationSource ?? "web",
+        threadId: input.threadId,
+        projectId: bootstrap.projectId,
+        title: bootstrap.title,
+        modelSelection: input.modelSelection ?? bootstrap.modelSelection,
+        runtimeMode: input.runtimeMode,
+        interactionMode: input.interactionMode,
+        workspaceStrategy: launchWorkspaceStrategy(bootstrap, undefined),
+      });
+    }
+    return yield* dispatch({
+      type: "message.post",
+      commandId,
+      createdBy: "user",
+      creationSource: input.creationSource ?? "web",
+      threadId: input.threadId,
+      messageId: input.message.messageId,
+      text: input.message.text,
+      ...(context ? { context } : {}),
+      attachments,
+    });
+  }
   if (bootstrap !== undefined || prepareWorktree !== undefined) {
     const existingProjection =
       bootstrap === undefined ? yield* getProjection(input.threadId) : null;
     const thread = bootstrap ?? existingProjection!.thread;
-    const workspaceStrategy =
-      prepareWorktree !== undefined
-        ? {
-            type: "worktree" as const,
-            baseRef: prepareWorktree.baseBranch,
-            ...(prepareWorktree.branch === undefined ? {} : { branch: prepareWorktree.branch }),
-            ...(prepareWorktree.startFromOrigin === undefined
-              ? {}
-              : { startFromOrigin: prepareWorktree.startFromOrigin }),
-          }
-        : bootstrap?.worktreePath
-          ? {
-              type: "existing_worktree" as const,
-              worktreePath: bootstrap.worktreePath,
-              ...(bootstrap.branch === null ? {} : { branch: bootstrap.branch }),
-            }
-          : {
-              type: "root" as const,
-              ...(bootstrap?.branch === null || bootstrap?.branch === undefined
-                ? {}
-                : { branch: bootstrap.branch }),
-            };
+    const workspaceStrategy = launchWorkspaceStrategy(bootstrap, prepareWorktree);
     return yield* request(ORCHESTRATION_V2_WS_METHODS.launchThread, {
       commandId,
       creationSource: input.creationSource ?? "web",

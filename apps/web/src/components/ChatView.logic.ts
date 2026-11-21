@@ -1386,6 +1386,38 @@ export function planComposerTurn(input: {
 }
 
 /**
+ * A message that addresses no model is a note: it joins the channel and starts no run. Anything
+ * that talks to an agent that is already working, or runs a command, still goes out as a turn.
+ */
+export function shouldPostComposerNote(input: {
+  readonly mentionsModel: boolean;
+  readonly multipleModels: boolean;
+  readonly messageText: string;
+  readonly phase: SessionPhase;
+  readonly dispatchMode: ComposerDispatchMode;
+  readonly submissionIntent: ComposerSubmissionIntent;
+  /** The next message starts a new provider session, which only a turn can do. */
+  readonly freshContext: boolean;
+  /** Pending approvals the message would decline, or feedback it would deliver. */
+  readonly answersApproval: boolean;
+  /** The draft replies to, or annotates, something an agent said or built. */
+  readonly targetsAgentOutput: boolean;
+}): boolean {
+  return !(
+    input.mentionsModel ||
+    input.multipleModels ||
+    input.messageText.trimStart().startsWith("/") ||
+    input.phase === "running" ||
+    input.phase === "connecting" ||
+    input.dispatchMode !== "auto" ||
+    input.submissionIntent !== "foreground" ||
+    input.freshContext ||
+    input.answersApproval ||
+    input.targetsAgentOutput
+  );
+}
+
+/**
  * The attachment ids a message's context records bind to: the upload id the
  * server returned, or the local id on the data-URL path.
  */

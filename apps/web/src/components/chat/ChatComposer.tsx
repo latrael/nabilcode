@@ -87,7 +87,7 @@ import {
   extendReplacementRangeForTrailingSpace,
   replaceTextRange,
 } from "../../composer-logic";
-import { composerPlaceholderForChannel } from "../../composerPlaceholder";
+import { channelNameForTitle, composerPlaceholderForChannel } from "../../composerPlaceholder";
 import { deriveComposerSendState, getAntigravitySendBlockReason } from "../ChatView.logic";
 import { threadHasStarted } from "../../lib/chatThreadActions";
 import {
@@ -2607,6 +2607,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       onModelPickerOpenChange={setIsComposerModelPickerOpen}
       modelPickerIconClassName={composerProviderState.modelPickerIconClassName}
       getModelDisabledReason={getModelDisabledReason}
+      channelName={channelNameForTitle(activeThread?.title)}
       routingTarget={
         promptProviderRouting?.switchedByMention
           ? {
@@ -3608,8 +3609,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       contextRecords={composerContextRecords}
                       theme={resolvedTheme}
                     />
-                  ) : showProviderUnavailable ? (
-                    "Enable a provider in Settings"
                   ) : (
                     composerPlaceholderForChannel(activeThread?.title)
                   )}
@@ -3792,10 +3791,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                               : "Type your own answer, or leave this blank to use the selected option"
                           : projectSelectionRequired
                             ? "Choose a project above to start a thread"
-                            : showProviderUnavailable
-                              ? "Enable a provider in Settings to send a message"
-                              : (offeredPromptSuggestion ??
-                                composerPlaceholderForChannel(activeThread?.title))
+                            : (offeredPromptSuggestion ??
+                              composerPlaceholderForChannel(activeThread?.title))
                     }
                     placeholderSuffix={
                       offeredPromptSuggestion !== null ? (

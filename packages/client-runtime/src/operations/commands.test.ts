@@ -270,6 +270,58 @@ describe("V2 environment commands", () => {
     }).pipe(Effect.provide(layerTestRandom)),
   );
 
+  it.effect("posts a note to a new thread without launching a run", () =>
+    Effect.gen(function* () {
+      const commands: OrchestrationV2Command[] = [];
+      const launches: OrchestrationV2ThreadLaunchInput[] = [];
+      const supervisor = yield* makeSupervisor({ commands, projects: [], launches });
+
+      yield* startThreadTurn({
+        commandId: CommandId.make("note-first"),
+        threadId: v2ThreadId,
+        message: {
+          messageId: MessageId.make("message-note"),
+          role: "user",
+          text: "remember the migration",
+          attachments: [],
+        },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        dispatchMode: "note",
+        bootstrap: {
+          createThread: {
+            projectId: ProjectId.make("project-1"),
+            title: "remember the migration",
+            modelSelection: v2Projection.thread.modelSelection,
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            branch: null,
+            worktreePath: null,
+            createdAt: "2026-06-20T00:00:00.000Z",
+          },
+        },
+      }).pipe(Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor));
+
+      expect(launches).toHaveLength(1);
+      expect(launches[0]).toMatchObject({
+        commandId: "note-first:thread",
+        threadId: v2ThreadId,
+        title: "remember the migration",
+        workspaceStrategy: { type: "root" },
+      });
+      expect(launches[0]?.initialMessage).toBeUndefined();
+      expect(commands).toMatchObject([
+        {
+          type: "message.post",
+          commandId: "note-first",
+          threadId: v2ThreadId,
+          messageId: "message-note",
+          text: "remember the migration",
+        },
+      ]);
+    }).pipe(Effect.provide(layerTestRandom)),
+  );
+
   it.effect("uses server-resolved delivery intent without fetching the full projection", () =>
     Effect.gen(function* () {
       const commands: OrchestrationV2Command[] = [];

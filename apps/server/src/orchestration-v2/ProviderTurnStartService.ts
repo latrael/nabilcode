@@ -1039,6 +1039,38 @@ export const layer: Layer.Layer<
       const prepareRetryHandoff = Effect.fn("ProviderTurnStartService.prepareRetryHandoff")(
         function* (context: ReturnType<typeof handoffContextForThread>) {
           const { missedRunIds, coveredItemIds, missedRuns } = context;
+          // Notes belong to no run, so a native session that has not been handed them yet gets
+          // them here. A fresh-context run opts out of earlier conversation altogether.
+          const unseenNotes =
+            run.freshContext === true
+              ? []
+              : (yield* projectionStore.getThreadRecords(input.threadId, ["turnItems"], {
+                  turnItemRunIds: [null],
+                })).turnItems.filter(
+                  (item) =>
+                    item.type === "user_message" &&
+                    item.inputIntent === "note" &&
+                    !coveredItemIds.has(item.id),
+                );
+          const noteHandoff =
+            unseenNotes.length === 0
+              ? []
+              : [
+                  yield* contextHandoffService.prepareProviderHandoff({
+                    threadId: projection.thread.id,
+                    targetRunId: run.id,
+                    transferId: null,
+                    fromProviderThreadIds: [providerThread.id],
+                    toProviderThreadId: providerThread.id,
+                    fromProviderInstanceId: run.providerInstanceId,
+                    toProviderInstanceId: run.providerInstanceId,
+                    coveredRunOrdinals: { from: 1, to: Math.max(1, run.ordinal - 1) },
+                    strategy: "delta_since_target_last_seen",
+                    items: unseenNotes,
+                    runs: projection.runs,
+                    createdAt: yield* DateTime.now,
+                  }),
+                ];
           const missedItems =
             missedRunIds.size === 0
               ? []
@@ -1073,7 +1105,7 @@ export const layer: Layer.Layer<
                     createdAt: yield* DateTime.now,
                   }),
                 ];
-          return retryHandoff;
+          return [...retryHandoff, ...noteHandoff];
         },
       );
       const prepareRecoveryHandoff = Effect.fn("ProviderTurnStartService.prepareRecoveryHandoff")(

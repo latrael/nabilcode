@@ -657,6 +657,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.model-selection.set":
     case "provider-session.detach":
     case "message.dispatch":
+    case "message.post":
     case "notification.delivery.accept":
     case "prepared-run.release":
     case "prepared-run.progress":
@@ -5617,6 +5618,85 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         } satisfies PendingOrchestrationEffectV2,
       ]);
     }
+  });
+
+  // A note is a user message nobody addressed: it joins the thread without a run or provider, and
+  // the next run that reaches a provider carries it as context.
+  const dispatchMessagePost = Effect.fn("Orchestrator.dispatchMessagePost")(function* (
+    command: Extract<OrchestrationV2Command, { readonly type: "message.post" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+  ) {
+    const projection = yield* loadProjectionForCommand(command, []);
+    if (projection.thread.deletedAt !== null || projection.thread.archivedAt !== null) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Thread ${command.threadId} is not open for messages.`,
+      });
+    }
+    const now = yield* DateTime.now;
+    const providerInstanceId = projection.thread.providerInstanceId;
+    const message: OrchestrationV2ConversationMessage = {
+      createdBy: command.createdBy,
+      creationSource: command.creationSource,
+      id: command.messageId,
+      threadId: command.threadId,
+      runId: null,
+      nodeId: null,
+      role: "user",
+      text: command.text,
+      attachments: command.attachments,
+      ...(command.context ? { context: command.context } : {}),
+      streaming: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const turnItem: OrchestrationV2TurnItem = {
+      createdBy: command.createdBy,
+      creationSource: command.creationSource,
+      id: idAllocator.derive.userTurnItem({ messageId: command.messageId }),
+      threadId: command.threadId,
+      runId: null,
+      nodeId: null,
+      providerThreadId: null,
+      providerTurnId: null,
+      nativeItemRef: null,
+      parentItemId: null,
+      ordinal: yield* nextTurnItemOrdinal(projection),
+      status: "completed",
+      title: null,
+      startedAt: now,
+      completedAt: now,
+      updatedAt: now,
+      type: "user_message",
+      messageId: command.messageId,
+      inputIntent: "note",
+      text: command.text,
+      attachments: command.attachments,
+      ...(command.context ? { context: command.context } : {}),
+    };
+    const emitEvent = emit(events, command);
+    yield* emitEvent({
+      type: "message.updated",
+      threadId: command.threadId,
+      providerInstanceId,
+      occurredAt: now,
+      payload: message,
+    });
+    yield* emitEvent({
+      type: "turn-item.updated",
+      threadId: command.threadId,
+      providerInstanceId,
+      occurredAt: now,
+      payload: turnItem,
+    });
+    yield* emitEvent({
+      type: "thread.metadata-updated",
+      threadId: command.threadId,
+      providerInstanceId,
+      occurredAt: now,
+      payload: { ...projection.thread, updatedAt: now },
+    });
   });
 
   const dispatchThreadProjectAdoptFolder = Effect.fn(
@@ -15189,6 +15269,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         yield* recordSubagentFollowup(dispatched, events).pipe(mapDispatchError(command));
         break;
       }
+      case "message.post":
+        yield* dispatchMessagePost(command, events);
+        break;
       case "notification.delivery.accept":
         updateDelegatedCompletionOnlyRunId = yield* dispatchNotificationAccepted(command, events);
         break;

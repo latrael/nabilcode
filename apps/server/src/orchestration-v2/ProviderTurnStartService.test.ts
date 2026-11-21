@@ -13,6 +13,7 @@ import {
   ProviderSessionId,
   ProviderThreadId,
   ProviderTurnId,
+  TurnItemId,
   ProviderDriverKind,
   ProviderInstanceId,
   ProviderSetupError,
@@ -70,6 +71,7 @@ import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 import * as ThreadTitleRegenerationService from "./ThreadTitleRegenerationService.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import { historicalMessage } from "@t3tools/provider-core/server/handoffBudget";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
@@ -402,6 +404,8 @@ function makeLocalCommandHarness(input: {
   readonly fileSystem?: FileSystem.FileSystem;
   readonly previousNativeSession?: boolean;
   readonly previousMessages?: ReadonlyArray<string>;
+  /** Runless notes in the thread; a delivered one already reached this native session. */
+  readonly notes?: ReadonlyArray<{ readonly text: string; readonly delivered?: boolean }>;
   readonly logoutFailure?: string;
   readonly openFailure?: unknown;
   readonly ensureThreadFailure?: unknown;
@@ -877,6 +881,67 @@ function makeLocalCommandHarness(input: {
       ),
     };
   }
+  if (input.notes !== undefined) {
+    const noteItems = input.notes.map(
+      (note, index): OrchestrationV2ThreadProjection["turnItems"][number] => ({
+        id: TurnItemId.make(`note-item-${index}`),
+        threadId,
+        runId: null,
+        nodeId: null,
+        providerThreadId: null,
+        providerTurnId: null,
+        nativeItemRef: null,
+        parentItemId: null,
+        ordinal: index,
+        status: "completed",
+        title: null,
+        startedAt: now,
+        completedAt: now,
+        updatedAt: now,
+        createdBy: "user",
+        creationSource: "web",
+        type: "user_message",
+        messageId: MessageId.make(`note-message-${index}`),
+        inputIntent: "note",
+        text: note.text,
+        attachments: [],
+      }),
+    );
+    projection = {
+      ...projection,
+      turnItems: noteItems,
+      contextHandoffs: [
+        ...projection.contextHandoffs,
+        ...(noteItems.some((_, index) => input.notes![index]!.delivered)
+          ? [
+              {
+                id: ContextHandoffId.make("delivered-notes"),
+                transferId: null,
+                threadId,
+                targetRunId: RunId.make("earlier-run"),
+                fromProviderThreadIds: [],
+                toProviderThreadId: providerThreadId,
+                coveredRunOrdinals: { from: 1, to: 1 },
+                strategy: "delta_since_target_last_seen" as const,
+                status: "ready" as const,
+                summaryMessageId: null,
+                summaryText: "",
+                createdByProviderInstanceId: null,
+                createdAt: now,
+                updatedAt: now,
+                delivery: {
+                  nativeThreadId: "side-chat-native",
+                  status: "inline" as const,
+                  itemIds: noteItems
+                    .filter((_, index) => input.notes![index]!.delivered)
+                    .map((item) => item.id),
+                },
+              },
+            ]
+          : []),
+      ],
+    };
+  }
   const previousTurnId = ProviderTurnId.make("previous-provider-turn");
   if (input.previousTurn !== undefined) {
     const previousRunId = RunId.make("previous-failed-run");
@@ -1231,17 +1296,35 @@ function makeLocalCommandHarness(input: {
       Layer.mergeAll(
         Layer.mock(ContextHandoffService.ContextHandoffServiceV2)({
           prepareProviderHandoff: (handoff) =>
-            input.sideChat?.nativeForkFrom === undefined
-              ? Effect.die("history read must fail first")
-              : Effect.succeed({
+            input.notes !== undefined
+              ? Effect.succeed({
                   ...handoff,
-                  id: ContextHandoffId.make("side-chat-fork-context"),
+                  id: ContextHandoffId.make("unseen-notes"),
                   createdByProviderInstanceId: handoff.toProviderInstanceId,
                   status: "ready",
                   summaryMessageId: null,
-                  summaryText: "PARENT_HISTORY",
+                  summaryText: "",
                   updatedAt: handoff.createdAt,
-                }),
+                  history: {
+                    messages: handoff.items.flatMap((item) => {
+                      const message = historicalMessage(item);
+                      return message === null ? [] : [message];
+                    }),
+                    coverage: "NOTES_COVERAGE",
+                    omittedItems: 0,
+                  },
+                })
+              : input.sideChat?.nativeForkFrom === undefined
+                ? Effect.die("history read must fail first")
+                : Effect.succeed({
+                    ...handoff,
+                    id: ContextHandoffId.make("side-chat-fork-context"),
+                    createdByProviderInstanceId: handoff.toProviderInstanceId,
+                    status: "ready",
+                    summaryMessageId: null,
+                    summaryText: "PARENT_HISTORY",
+                    updatedAt: handoff.createdAt,
+                  }),
         }),
         Layer.mock(EventSink.EventSinkV2)({
           writeIfRunCurrent,
@@ -2210,6 +2293,54 @@ effectIt.effect.each([
         },
       ]);
     }),
+);
+
+effectIt.effect.each([
+  {
+    label: "hands unseen notes to the session",
+    notes: [{ text: "NOTE_ONE" }, { text: "NOTE_TWO" }],
+    freshContext: false,
+    included: ["NOTE_ONE", "NOTE_TWO"],
+  },
+  {
+    label: "skips notes the native session already received",
+    notes: [{ text: "NOTE_ONE", delivered: true }, { text: "NOTE_TWO" }],
+    freshContext: false,
+    included: ["NOTE_TWO"],
+  },
+  {
+    label: "leaves notes out of a fresh-context run",
+    notes: [{ text: "NOTE_ONE" }],
+    freshContext: true,
+    included: [],
+  },
+] as const)("$label", ({ notes, freshContext, included }) =>
+  Effect.gen(function* () {
+    const harness = makeLocalCommandHarness({
+      text: "@claude summarize",
+      sideChat: { contextRun: "delivered" },
+      notes,
+    });
+    if (freshContext) {
+      const current = harness.projection();
+      harness.setProjection({
+        ...current,
+        runs: current.runs.map((candidate) =>
+          candidate.id === RunId.make("run-native-account-command")
+            ? { ...candidate, freshContext: true }
+            : candidate,
+        ),
+      });
+    }
+
+    yield* harness.start;
+
+    const sent = harness.startTurn.mock.calls[0]?.[0].message.text ?? "";
+    for (const text of ["NOTE_ONE", "NOTE_TWO"]) {
+      expect(sent.includes(text)).toBe(included.includes(text as never));
+    }
+    expect(sent.endsWith("@claude summarize")).toBe(true);
+  }),
 );
 
 effectIt.effect.each([

@@ -110,7 +110,7 @@ it("sends a Codex follow-up on a cold Claude thread without compacting first", a
 
   const editor = page.getByTestId("composer-editor");
   await userEvent.click(editor);
-  await userEvent.type(editor, "keep going");
+  await userEvent.type(editor, "@codex keep going");
   await userEvent.keyboard("{Enter}");
 
   const messages = () =>
@@ -119,7 +119,7 @@ it("sends a Codex follow-up on a cold Claude thread without compacting first", a
         ? [{ text: command.text, instanceId: command.modelSelection?.instanceId }]
         : [],
     );
-  const sent = { text: "keep going", instanceId: CODEX_PROVIDER.instanceId };
+  const sent = { text: "@codex keep going", instanceId: CODEX_PROVIDER.instanceId };
   await vi.waitFor(() => expect(messages()).toContainEqual(sent));
   expect(messages()).toEqual([sent]);
 });
