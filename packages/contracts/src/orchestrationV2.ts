@@ -527,6 +527,8 @@ export const OrchestrationV2AppThread = Schema.Struct({
     ),
   ),
   lastTitleRegeneration: Schema.optional(Schema.NullOr(OrchestrationV2LastTitleRegeneration)),
+  /** Highest run ordinal a clean-out removed; later runs number past it so run ids never repeat. */
+  runOrdinalBase: Schema.optional(NonNegativeInt),
   rollbackRequestId: Schema.optional(CommandId),
   rollbackFailure: Schema.optional(
     Schema.NullOr(

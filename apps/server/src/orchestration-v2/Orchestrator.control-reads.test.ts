@@ -3083,7 +3083,8 @@ it.effect(
       });
       const afterFreshTurn = yield* projections.getThreadProjection(threadId);
       assert.equal(afterFreshTurn.runs.length, 1);
-      assert.equal(afterFreshTurn.runs[0]?.ordinal, 1);
+      assert.equal(afterFreshTurn.runs[0]?.ordinal, 2);
+      assert.notEqual(afterFreshTurn.runs[0]?.id, firstRun.id);
       assert.equal(afterFreshTurn.messages.length, 1);
       assert.equal(afterFreshTurn.messages[0]?.text, "Fresh start in #general");
     }).pipe(Effect.provide(layerTest)),

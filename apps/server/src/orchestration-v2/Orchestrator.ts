@@ -551,8 +551,15 @@ export class OrchestratorV2 extends Context.Service<OrchestratorV2, Orchestrator
 ) {}
 
 /** Run ordinals can skip values: a queued run moves past newer runs when it starts. */
-function nextRunOrdinal(projection: Pick<OrchestrationV2ThreadProjection, "runs">): number {
-  return projection.runs.reduce((max, run) => Math.max(max, run.ordinal), 0) + 1;
+function nextRunOrdinal(
+  projection: Pick<OrchestrationV2ThreadProjection, "runs" | "thread">,
+): number {
+  return (
+    projection.runs.reduce(
+      (max, run) => Math.max(max, run.ordinal),
+      projection.thread.runOrdinalBase ?? 0,
+    ) + 1
+  );
 }
 
 /**
@@ -5597,6 +5604,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           activeProviderThreadId: null,
           settledOverride: null,
           unsettledAt: null,
+          // Effect and checkpoint ids derive from run ids, so a reused ordinal collides with old ones.
+          runOrdinalBase: nextRunOrdinal(projection) - 1,
           updatedAt: now,
         },
         releasedProviderSessionIds,
